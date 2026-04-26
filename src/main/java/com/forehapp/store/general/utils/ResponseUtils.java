@@ -1,4 +1,4 @@
-﻿package com.forehapp.store.general.utils;
+package com.forehapp.store.general.utils;
 
 public class ResponseUtils {
 }

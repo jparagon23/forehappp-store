@@ -1,4 +1,0 @@
-﻿package com.forehapp.store.wishlistModule.dto;
-
-public class AddToWishlistDto {
-}

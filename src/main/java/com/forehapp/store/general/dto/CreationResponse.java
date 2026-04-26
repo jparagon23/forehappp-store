@@ -1,4 +1,4 @@
-﻿package com.forehapp.store.general.dto;
+package com.forehapp.store.general.dto;
 
 public class CreationResponse {
 }

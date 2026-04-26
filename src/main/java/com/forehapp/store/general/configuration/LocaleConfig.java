@@ -1,4 +1,4 @@
-﻿package com.forehapp.store.general.configuration;
+package com.forehapp.store.general.configuration;
 
 public class LocaleConfig {
 }

@@ -1,4 +1,4 @@
-﻿package com.forehapp.store.general.constants;
+package com.forehapp.store.general.constants;
 
 public class ErrorCodes {
 }

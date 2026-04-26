@@ -1,4 +1,4 @@
-﻿package com.forehapp.store.security.config;
+package com.forehapp.store.security.config;
 
-public class CorsConfig {
-}
+// CORS configuration is defined in WebSecurityConfig.corsConfigurationSource()
+

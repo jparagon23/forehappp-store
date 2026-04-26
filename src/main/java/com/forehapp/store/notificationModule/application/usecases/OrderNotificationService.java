@@ -1,0 +1,4 @@
+package com.forehapp.store.notificationModule.application.usecases;
+
+public class OrderNotificationService {
+}
