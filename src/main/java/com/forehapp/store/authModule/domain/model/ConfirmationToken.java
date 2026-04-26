@@ -9,7 +9,7 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "confirmation_token")
+@Table(name = "store_confirmation_token")
 @Getter @Setter
 @NoArgsConstructor
 public class ConfirmationToken {

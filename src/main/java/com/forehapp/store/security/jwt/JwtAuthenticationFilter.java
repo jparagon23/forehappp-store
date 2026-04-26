@@ -1,6 +1,6 @@
 package com.forehapp.store.security.jwt;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.forehapp.store.authModule.application.dto.LoginRequestDto;
 import com.forehapp.store.security.config.UserDetailsImpl;
 import jakarta.servlet.FilterChain;

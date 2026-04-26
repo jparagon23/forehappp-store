@@ -1,5 +1,20 @@
 package com.forehapp.store.notificationModule.domain.model;
 
 public enum NotificationType {
-    PEDIDO, STOCK, PROMOCION
+    SYSTEM_ALERT,
+    GENERAL_INFO,
+    PROMOTION,
+    ORDER_CREATED,
+    ORDER_CONFIRMED,
+    ORDER_SHIPPED,
+    ORDER_DELIVERED,
+    ORDER_CANCELLED,
+    PAYMENT_CONFIRMED,
+    PAYMENT_FAILED,
+    PAYMENT_REFUNDED,
+    ACCOUNT_VERIFIED,
+    NEW_MESSAGE,
+    LOW_STOCK_ALERT,
+    REVIEW_RECEIVED,
+    WISHLIST_AVAILABLE
 }
