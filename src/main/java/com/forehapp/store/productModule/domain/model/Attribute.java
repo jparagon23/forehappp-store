@@ -6,13 +6,13 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "categories")
+@Table(name = "attributes")
 @Getter @Setter
 @NoArgsConstructor
-public class Category {
+public class Attribute {
 
     @Id
-    @Column(name = "category_id")
+    @Column(name = "attribute_id")
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 

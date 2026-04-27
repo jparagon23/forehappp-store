@@ -6,15 +6,19 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "categories")
+@Table(name = "lines")
 @Getter @Setter
 @NoArgsConstructor
-public class Category {
+public class Line {
 
     @Id
-    @Column(name = "category_id")
+    @Column(name = "line_id")
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "brand_id", nullable = false)
+    private Brand brand;
 
     @Column(nullable = false, length = 150)
     private String description;

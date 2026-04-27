@@ -6,28 +6,26 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "products")
+@Table(name = "category_attributes",
+        uniqueConstraints = @UniqueConstraint(columnNames = {"category_id", "attribute_id"}))
 @Getter @Setter
 @NoArgsConstructor
-public class Product {
+public class CategoryAttribute {
 
     @Id
-    @Column(name = "product_id")
+    @Column(name = "category_attribute_id")
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, length = 255)
-    private String description;
-
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "brand_id", nullable = false)
-    private Brand brand;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "line_id")
-    private Line line;
+    @JoinColumn(name = "attribute_id", nullable = false)
+    private Attribute attribute;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "category_id", nullable = false)
     private Category category;
+
+    /** "T" if this attribute is required for products in this category, "F" otherwise */
+    @Column(nullable = false, length = 1)
+    private String required;
 }

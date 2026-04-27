@@ -6,16 +6,20 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "categories")
+@Table(name = "attribute_values")
 @Getter @Setter
 @NoArgsConstructor
-public class Category {
+public class AttributeValue {
 
     @Id
-    @Column(name = "category_id")
+    @Column(name = "attribute_value_id")
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, length = 150)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "attribute_id", nullable = false)
+    private Attribute attribute;
+
+    @Column(nullable = false, length = 255)
     private String description;
 }
