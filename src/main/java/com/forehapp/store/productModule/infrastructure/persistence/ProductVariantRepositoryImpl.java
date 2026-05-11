@@ -1,0 +1,22 @@
+package com.forehapp.store.productModule.infrastructure.persistence;
+
+import com.forehapp.store.productModule.domain.model.ProductVariant;
+import com.forehapp.store.productModule.domain.ports.out.IProductVariantDao;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+@Repository
+public class ProductVariantRepositoryImpl implements IProductVariantDao {
+
+    private final IProductVariantRepository jpaRepository;
+
+    public ProductVariantRepositoryImpl(IProductVariantRepository jpaRepository) {
+        this.jpaRepository = jpaRepository;
+    }
+
+    @Override
+    public Optional<ProductVariant> findByIdAndProductId(Long variantId, Long productId) {
+        return jpaRepository.findByIdAndProductId(variantId, productId);
+    }
+}

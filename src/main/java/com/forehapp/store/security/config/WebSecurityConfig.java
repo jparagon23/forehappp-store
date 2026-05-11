@@ -78,6 +78,7 @@ public class WebSecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/v1/login", "/api/v1/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/products/public/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/products/*/images").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session ->

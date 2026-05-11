@@ -1,4 +1,75 @@
 package com.forehapp.store.productModule.infrastructure.web;
 
+import com.forehapp.store.productModule.application.dto.AddInventoryRequestDto;
+import com.forehapp.store.productModule.application.dto.CreateProductRequestDto;
+import com.forehapp.store.productModule.application.dto.ProductImageResponse;
+import com.forehapp.store.productModule.application.dto.ProductResponse;
+import com.forehapp.store.productModule.domain.ports.in.IInventoryService;
+import com.forehapp.store.productModule.domain.ports.in.IProductImageService;
+import com.forehapp.store.productModule.domain.ports.in.IProductService;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/v1/products")
 public class ProductController {
+
+    private final IProductService productService;
+    private final IProductImageService productImageService;
+    private final IInventoryService inventoryService;
+
+    public ProductController(IProductService productService,
+                             IProductImageService productImageService,
+                             IInventoryService inventoryService) {
+        this.productService = productService;
+        this.productImageService = productImageService;
+        this.inventoryService = inventoryService;
+    }
+
+    @PostMapping
+    public ResponseEntity<ProductResponse> createProduct(
+            @Valid @RequestBody CreateProductRequestDto dto,
+            @AuthenticationPrincipal String userId) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(productService.createProduct(dto, Long.parseLong(userId)));
+    }
+
+    @PostMapping("/{productId}/images")
+    public ResponseEntity<ProductImageResponse> uploadImage(
+            @PathVariable Long productId,
+            @RequestParam("file") MultipartFile file,
+            @AuthenticationPrincipal String userId) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(productImageService.upload(productId, file));
+    }
+
+    @DeleteMapping("/{productId}/images/{imageId}")
+    public ResponseEntity<Void> deleteImage(
+            @PathVariable Long productId,
+            @PathVariable Long imageId,
+            @AuthenticationPrincipal String userId) {
+        productImageService.delete(productId, imageId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{productId}/images")
+    public ResponseEntity<List<ProductImageResponse>> getImages(@PathVariable Long productId) {
+        return ResponseEntity.ok(productImageService.getByProduct(productId));
+    }
+
+    @PostMapping("/{productId}/variants/{variantId}/inventory")
+    public ResponseEntity<Void> addInventory(
+            @PathVariable Long productId,
+            @PathVariable Long variantId,
+            @Valid @RequestBody AddInventoryRequestDto dto,
+            @AuthenticationPrincipal String userId) {
+        inventoryService.addInventory(productId, variantId, dto, Long.parseLong(userId));
+        return ResponseEntity.noContent().build();
+    }
 }

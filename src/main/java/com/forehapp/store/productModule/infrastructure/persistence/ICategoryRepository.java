@@ -1,4 +1,7 @@
 package com.forehapp.store.productModule.infrastructure.persistence;
 
-public interface ICategoryRepository {
+import com.forehapp.store.productModule.domain.model.Category;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface ICategoryRepository extends JpaRepository<Category, Long> {
 }

@@ -1,6 +1,6 @@
 package com.forehapp.store.orderModule.domain.model;
 
-import com.forehapp.store.userModule.domain.model.User;
+import com.forehapp.store.userModule.domain.model.StoreProfile;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -8,6 +8,8 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "orders")
@@ -21,21 +23,33 @@ public class Order {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    @JoinColumn(name = "buyer_id", nullable = false)
+    private StoreProfile buyer;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "status_id", nullable = false)
-    private OrderStatus status;
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20, nullable = false)
+    private OrderStatus status = OrderStatus.PENDING;
 
-    @Column(name = "order_date", nullable = false, columnDefinition = "TIMESTAMP")
-    private LocalDateTime orderDate;
-
-    @Column(nullable = false, precision = 15, scale = 2)
+    @Column(nullable = false, precision = 14, scale = 2)
     private BigDecimal total;
+
+    @Column(name = "shipping_address", nullable = false, length = 255)
+    private String shippingAddress;
+
+    @Column(name = "shipping_city", nullable = false, length = 100)
+    private String shippingCity;
+
+    @Column(name = "shipping_country", nullable = false, length = 100)
+    private String shippingCountry;
+
+    @Column(name = "created_at", nullable = false)
+    private LocalDateTime createdAt;
+
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<OrderSellerGroup> sellerGroups = new ArrayList<>();
 
     @PrePersist
     public void prePersist() {
-        orderDate = LocalDateTime.now();
+        createdAt = LocalDateTime.now();
     }
 }

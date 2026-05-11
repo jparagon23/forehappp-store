@@ -8,27 +8,25 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "product_images")
+@Table(name = "inventory_movements")
 @Getter @Setter
 @NoArgsConstructor
-public class ProductImage {
+public class InventoryMovement {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "product_id", nullable = false)
-    private Product product;
+    @JoinColumn(name = "variant_id", nullable = false)
+    private ProductVariant variant;
 
-    @Column(name = "s3_key", nullable = false, length = 500)
-    private String s3Key;
+    @Column(nullable = false)
+    private Integer quantity;
 
-    @Column(nullable = false, length = 1000)
-    private String url;
-
-    @Column(name = "display_order", nullable = false)
-    private Integer displayOrder = 0;
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20, nullable = false)
+    private MovementReason reason;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
