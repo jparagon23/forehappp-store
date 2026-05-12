@@ -9,6 +9,7 @@ import com.forehapp.store.productModule.domain.model.ProductImage;
 import com.forehapp.store.productModule.domain.ports.in.IProductImageService;
 import com.forehapp.store.productModule.domain.ports.out.IProductDao;
 import com.forehapp.store.productModule.domain.ports.out.IProductImageDao;
+import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -26,20 +27,24 @@ public class ProductImageServiceImpl implements IProductImageService {
     private final StorageService storageService;
     private final IProductImageDao imageDao;
     private final IProductDao productDao;
+    private final IStoreProfileDao storeProfileDao;
 
     public ProductImageServiceImpl(StorageService storageService,
                                    IProductImageDao imageDao,
-                                   IProductDao productDao) {
+                                   IProductDao productDao,
+                                   IStoreProfileDao storeProfileDao) {
         this.storageService = storageService;
         this.imageDao = imageDao;
         this.productDao = productDao;
+        this.storeProfileDao = storeProfileDao;
     }
 
     @Override
     @Transactional
-    public ProductImageResponse upload(Long productId, MultipartFile file) {
+    public ProductImageResponse upload(Long productId, MultipartFile file, Long userId) {
         validateFile(file);
-        Product product = productDao.findById(productId)
+        Long sellerId = resolveSellerId(userId);
+        Product product = productDao.findByIdAndSellerId(productId, sellerId)
                 .orElseThrow(() -> new NotFoundException("Producto no encontrado"));
 
         StorageService.UploadResult result = storageService.upload(file, "products/" + productId);
@@ -55,7 +60,11 @@ public class ProductImageServiceImpl implements IProductImageService {
 
     @Override
     @Transactional
-    public void delete(Long productId, Long imageId) {
+    public void delete(Long productId, Long imageId, Long userId) {
+        Long sellerId = resolveSellerId(userId);
+        productDao.findByIdAndSellerId(productId, sellerId)
+                .orElseThrow(() -> new NotFoundException("Producto no encontrado"));
+
         ProductImage image = imageDao.findById(imageId)
                 .orElseThrow(() -> new NotFoundException("Imagen no encontrada"));
 
@@ -65,6 +74,12 @@ public class ProductImageServiceImpl implements IProductImageService {
 
         storageService.delete(image.getS3Key());
         imageDao.delete(image);
+    }
+
+    private Long resolveSellerId(Long userId) {
+        return storeProfileDao.findByUserId(userId)
+                .orElseThrow(() -> new NotFoundException("Store profile not found"))
+                .getId();
     }
 
     @Override

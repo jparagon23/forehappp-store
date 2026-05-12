@@ -8,4 +8,5 @@ public interface IProductVariantDao {
     Optional<ProductVariant> findByIdAndProductId(Long variantId, Long productId);
     boolean existsBySku(String sku);
     ProductVariant save(ProductVariant variant);
+    void delete(ProductVariant variant);
 }

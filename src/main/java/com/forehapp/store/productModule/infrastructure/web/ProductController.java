@@ -2,8 +2,13 @@ package com.forehapp.store.productModule.infrastructure.web;
 
 import com.forehapp.store.productModule.application.dto.AddInventoryRequestDto;
 import com.forehapp.store.productModule.application.dto.CreateProductRequestDto;
+import com.forehapp.store.productModule.application.dto.CreateVariantDto;
 import com.forehapp.store.productModule.application.dto.ProductImageResponse;
 import com.forehapp.store.productModule.application.dto.ProductResponse;
+import com.forehapp.store.productModule.application.dto.ProductVariantResponse;
+import com.forehapp.store.productModule.application.dto.SellerProductDetailResponse;
+import com.forehapp.store.productModule.application.dto.UpdateProductRequestDto;
+import com.forehapp.store.productModule.application.dto.UpdateVariantDto;
 import com.forehapp.store.productModule.domain.ports.in.IInventoryService;
 import com.forehapp.store.productModule.domain.ports.in.IProductImageService;
 import com.forehapp.store.productModule.domain.ports.in.IProductService;
@@ -46,7 +51,7 @@ public class ProductController {
             @RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal String userId) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(productImageService.upload(productId, file));
+                .body(productImageService.upload(productId, file, Long.parseLong(userId)));
     }
 
     @DeleteMapping("/{productId}/images/{imageId}")
@@ -54,13 +59,36 @@ public class ProductController {
             @PathVariable Long productId,
             @PathVariable Long imageId,
             @AuthenticationPrincipal String userId) {
-        productImageService.delete(productId, imageId);
+        productImageService.delete(productId, imageId, Long.parseLong(userId));
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{productId}/images")
     public ResponseEntity<List<ProductImageResponse>> getImages(@PathVariable Long productId) {
         return ResponseEntity.ok(productImageService.getByProduct(productId));
+    }
+
+    @GetMapping("/{productId}")
+    public ResponseEntity<SellerProductDetailResponse> getProduct(
+            @PathVariable Long productId,
+            @AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(productService.getSellerProductById(productId, Long.parseLong(userId)));
+    }
+
+    @DeleteMapping("/{productId}")
+    public ResponseEntity<Void> deleteProduct(
+            @PathVariable Long productId,
+            @AuthenticationPrincipal String userId) {
+        productService.deleteProduct(productId, Long.parseLong(userId));
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{productId}")
+    public ResponseEntity<ProductResponse> updateProduct(
+            @PathVariable Long productId,
+            @Valid @RequestBody UpdateProductRequestDto dto,
+            @AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(productService.updateProduct(productId, dto, Long.parseLong(userId)));
     }
 
     @PostMapping("/{productId}/variants")
@@ -70,6 +98,24 @@ public class ProductController {
             @AuthenticationPrincipal String userId) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(productService.addVariant(productId, dto, Long.parseLong(userId)));
+    }
+
+    @DeleteMapping("/{productId}/variants/{variantId}")
+    public ResponseEntity<Void> deleteVariant(
+            @PathVariable Long productId,
+            @PathVariable Long variantId,
+            @AuthenticationPrincipal String userId) {
+        productService.deleteVariant(productId, variantId, Long.parseLong(userId));
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{productId}/variants/{variantId}")
+    public ResponseEntity<ProductVariantResponse> updateVariant(
+            @PathVariable Long productId,
+            @PathVariable Long variantId,
+            @Valid @RequestBody UpdateVariantDto dto,
+            @AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(productService.updateVariant(productId, variantId, dto, Long.parseLong(userId)));
     }
 
     @PatchMapping("/{productId}/publish")
@@ -91,6 +137,12 @@ public class ProductController {
             @PathVariable Long productId,
             @AuthenticationPrincipal String userId) {
         return ResponseEntity.ok(productService.activate(productId, Long.parseLong(userId)));
+    }
+
+    @GetMapping("/seller")
+    public ResponseEntity<List<ProductResponse>> getSellerProducts(
+            @AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(productService.getSellerProducts(Long.parseLong(userId)));
     }
 
     @PostMapping("/{productId}/variants/{variantId}/inventory")

@@ -6,7 +6,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 
 public interface IProductImageService {
-    ProductImageResponse upload(Long productId, MultipartFile file);
-    void delete(Long productId, Long imageId);
+    ProductImageResponse upload(Long productId, MultipartFile file, Long userId);
+    void delete(Long productId, Long imageId, Long userId);
     List<ProductImageResponse> getByProduct(Long productId);
 }

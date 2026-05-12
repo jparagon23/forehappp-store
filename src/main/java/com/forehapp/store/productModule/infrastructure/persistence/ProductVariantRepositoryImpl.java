@@ -29,4 +29,9 @@ public class ProductVariantRepositoryImpl implements IProductVariantDao {
     public ProductVariant save(ProductVariant variant) {
         return jpaRepository.save(variant);
     }
+
+    @Override
+    public void delete(ProductVariant variant) {
+        jpaRepository.delete(variant);
+    }
 }

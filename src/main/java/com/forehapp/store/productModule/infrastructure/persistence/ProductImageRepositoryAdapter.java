@@ -40,4 +40,9 @@ public class ProductImageRepositoryAdapter implements IProductImageDao {
     public void delete(ProductImage image) {
         jpaRepository.delete(image);
     }
+
+    @Override
+    public void deleteAllByProductId(Long productId) {
+        jpaRepository.deleteAllByProductId(productId);
+    }
 }
