@@ -19,4 +19,14 @@ public class AttributeValueRepositoryAdapter implements IAttributeValueDao {
     public List<AttributeValue> findAllByIds(List<Long> ids) {
         return jpaRepository.findByIdInWithAttribute(ids);
     }
+
+    @Override
+    public List<AttributeValue> findAllByAttributeIds(List<Long> attributeIds) {
+        return jpaRepository.findByAttributeIdIn(attributeIds);
+    }
+
+    @Override
+    public AttributeValue save(AttributeValue attributeValue) {
+        return jpaRepository.save(attributeValue);
+    }
 }

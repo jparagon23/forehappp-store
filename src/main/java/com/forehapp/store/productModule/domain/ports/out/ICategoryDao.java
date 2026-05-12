@@ -8,5 +8,9 @@ import java.util.Optional;
 
 public interface ICategoryDao {
     Optional<Category> findById(Long id);
+    List<Category> findAll();
     List<CategoryAttribute> findCategoryAttributes(Long categoryId);
+    Category save(Category category);
+    boolean existsCategoryAttribute(Long categoryId, Long attributeId);
+    CategoryAttribute saveCategoryAttribute(CategoryAttribute categoryAttribute);
 }

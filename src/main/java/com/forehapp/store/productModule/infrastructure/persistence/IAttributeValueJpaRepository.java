@@ -11,4 +11,7 @@ public interface IAttributeValueJpaRepository extends JpaRepository<AttributeVal
 
     @Query("SELECT av FROM AttributeValue av JOIN FETCH av.attribute WHERE av.id IN :ids")
     List<AttributeValue> findByIdInWithAttribute(@Param("ids") List<Long> ids);
+
+    @Query("SELECT av FROM AttributeValue av JOIN FETCH av.attribute WHERE av.attribute.id IN :attributeIds")
+    List<AttributeValue> findByAttributeIdIn(@Param("attributeIds") List<Long> attributeIds);
 }

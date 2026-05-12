@@ -26,7 +26,27 @@ public class CategoryRepositoryAdapter implements ICategoryDao {
     }
 
     @Override
+    public List<Category> findAll() {
+        return categoryRepository.findAll();
+    }
+
+    @Override
     public List<CategoryAttribute> findCategoryAttributes(Long categoryId) {
         return categoryAttributeRepository.findByCategoryIdWithAttribute(categoryId);
+    }
+
+    @Override
+    public Category save(Category category) {
+        return categoryRepository.save(category);
+    }
+
+    @Override
+    public boolean existsCategoryAttribute(Long categoryId, Long attributeId) {
+        return categoryAttributeRepository.existsByCategoryIdAndAttributeId(categoryId, attributeId);
+    }
+
+    @Override
+    public CategoryAttribute saveCategoryAttribute(CategoryAttribute categoryAttribute) {
+        return categoryAttributeRepository.save(categoryAttribute);
     }
 }

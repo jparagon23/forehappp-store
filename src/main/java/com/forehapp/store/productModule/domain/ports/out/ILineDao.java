@@ -6,4 +6,6 @@ import java.util.Optional;
 
 public interface ILineDao {
     Optional<Line> findById(Long id);
+    List<Line> findAllByBrandId(Long brandId);
+    Line save(Line line);
 }
