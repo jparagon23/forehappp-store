@@ -54,6 +54,17 @@ public class CatalogServiceImpl implements ICatalogService {
     }
 
     @Override
+    public List<LineResponse> findLinesByBrandAndCategory(Long brandId, Long categoryId) {
+        brandDao.findById(brandId)
+                .orElseThrow(() -> new NotFoundException("Brand not found"));
+        categoryDao.findById(categoryId)
+                .orElseThrow(() -> new NotFoundException("Category not found"));
+        return lineDao.findAllByBrandIdAndCategoryId(brandId, categoryId).stream()
+                .map(LineResponse::new)
+                .toList();
+    }
+
+    @Override
     public List<CategoryResponse> findAllCategories() {
         return categoryDao.findAll().stream()
                 .map(CategoryResponse::new)

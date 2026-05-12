@@ -53,8 +53,11 @@ public class AdminCatalogServiceImpl implements IAdminCatalogService {
         resolveAdmin(userId);
         Brand brand = brandDao.findById(brandId)
                 .orElseThrow(() -> new NotFoundException("Brand not found"));
+        Category category = categoryDao.findById(dto.getCategoryId())
+                .orElseThrow(() -> new NotFoundException("Category not found"));
         Line line = new Line();
         line.setBrand(brand);
+        line.setCategory(category);
         line.setDescription(dto.getName().trim());
         return new LineResponse(lineDao.save(line));
     }

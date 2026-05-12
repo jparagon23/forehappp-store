@@ -10,6 +10,7 @@ import java.util.List;
 public interface ICatalogService {
     List<BrandResponse> findAllBrands();
     List<LineResponse> findLinesByBrand(Long brandId);
+    List<LineResponse> findLinesByBrandAndCategory(Long brandId, Long categoryId);
     List<CategoryResponse> findAllCategories();
     List<CategoryAttributeResponse> findCategoryAttributes(Long categoryId);
 }

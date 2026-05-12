@@ -27,6 +27,11 @@ public class LineRepositoryAdapter implements ILineDao {
     }
 
     @Override
+    public List<Line> findAllByBrandIdAndCategoryId(Long brandId, Long categoryId) {
+        return jpaRepository.findByBrandIdAndCategoryId(brandId, categoryId);
+    }
+
+    @Override
     public Line save(Line line) {
         return jpaRepository.save(line);
     }

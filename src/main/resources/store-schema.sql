@@ -43,10 +43,15 @@ CREATE TABLE IF NOT EXISTS store_profiles (
     CONSTRAINT fk_sp_user FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
 
+CREATE TABLE IF NOT EXISTS store_roles (
+    role_name VARCHAR(20) PRIMARY KEY
+);
+
 CREATE TABLE IF NOT EXISTS store_profile_roles (
-    store_profile_id BIGINT NOT NULL,
+    store_profile_id BIGINT      NOT NULL,
     role             VARCHAR(20) NOT NULL,
-    CONSTRAINT fk_spr_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id)
+    CONSTRAINT fk_spr_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id),
+    CONSTRAINT fk_spr_role    FOREIGN KEY (role)             REFERENCES store_roles(role_name)
 );
 
 CREATE TABLE IF NOT EXISTS store_brands (
@@ -67,8 +72,10 @@ CREATE TABLE IF NOT EXISTS store_attributes (
 CREATE TABLE IF NOT EXISTS store_lines (
     line_id     BIGINT AUTO_INCREMENT PRIMARY KEY,
     brand_id    BIGINT NOT NULL,
+    category_id BIGINT NOT NULL,
     description VARCHAR(150) NOT NULL,
-    CONSTRAINT store_fk_line_brand FOREIGN KEY (brand_id) REFERENCES store_brands(brand_id)
+    CONSTRAINT store_fk_line_brand    FOREIGN KEY (brand_id)    REFERENCES store_brands(brand_id),
+    CONSTRAINT store_fk_line_category FOREIGN KEY (category_id) REFERENCES store_categories(category_id)
 );
 
 CREATE TABLE IF NOT EXISTS store_attribute_values (
