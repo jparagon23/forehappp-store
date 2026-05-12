@@ -6,7 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "attributes")
+@Table(name = "store_attributes")
 @Getter @Setter
 @NoArgsConstructor
 public class Attribute {

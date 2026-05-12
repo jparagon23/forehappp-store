@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "products")
+@Table(name = "store_products")
 @Getter @Setter
 @NoArgsConstructor
 public class Product {

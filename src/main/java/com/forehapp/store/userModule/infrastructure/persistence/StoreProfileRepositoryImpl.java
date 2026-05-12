@@ -19,4 +19,9 @@ public class StoreProfileRepositoryImpl implements IStoreProfileDao {
     public Optional<StoreProfile> findByUserId(Long userId) {
         return jpaRepository.findByUserId(userId);
     }
+
+    @Override
+    public StoreProfile save(StoreProfile storeProfile) {
+        return jpaRepository.save(storeProfile);
+    }
 }

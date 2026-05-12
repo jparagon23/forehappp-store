@@ -6,7 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "`lines`")
+@Table(name = "store_lines")
 @Getter @Setter
 @NoArgsConstructor
 public class Line {

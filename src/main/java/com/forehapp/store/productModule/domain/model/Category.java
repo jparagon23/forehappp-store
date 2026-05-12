@@ -6,7 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "categories")
+@Table(name = "store_categories")
 @Getter @Setter
 @NoArgsConstructor
 public class Category {

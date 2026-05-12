@@ -12,7 +12,10 @@ import com.forehapp.store.mail.EmailSender;
 import com.forehapp.store.security.config.UserDetailsImpl;
 import com.forehapp.store.security.jwt.JwtUtil;
 import com.forehapp.store.userModule.domain.model.Role;
+import com.forehapp.store.userModule.domain.model.StoreProfile;
+import com.forehapp.store.userModule.domain.model.StoreRole;
 import com.forehapp.store.userModule.domain.model.User;
+import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
 import com.forehapp.store.userModule.domain.ports.out.RoleRepository;
 import com.forehapp.store.userModule.domain.ports.out.UserRepository;
 import org.slf4j.Logger;
@@ -34,17 +37,20 @@ public class AuthUseCasesImpl implements RegisterUseCase, VerifyCodeUseCase, Res
     private final PasswordEncoder passwordEncoder;
     private final ConfirmationTokenService confirmationTokenService;
     private final EmailSender emailSender;
+    private final IStoreProfileDao storeProfileDao;
 
     public AuthUseCasesImpl(UserRepository userRepository,
                             RoleRepository roleRepository,
                             PasswordEncoder passwordEncoder,
                             ConfirmationTokenService confirmationTokenService,
-                            EmailSender emailSender) {
+                            EmailSender emailSender,
+                            IStoreProfileDao storeProfileDao) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.confirmationTokenService = confirmationTokenService;
         this.emailSender = emailSender;
+        this.storeProfileDao = storeProfileDao;
     }
 
     @Override
@@ -98,6 +104,12 @@ public class AuthUseCasesImpl implements RegisterUseCase, VerifyCodeUseCase, Res
         user.setUserStatus(Constants.ACTIVE_USER_STATUS);
         userRepository.save(user);
         logger.info("User {} verified and activated", user.getId());
+
+        StoreProfile profile = new StoreProfile();
+        profile.setUser(user);
+        profile.getRoles().add(StoreRole.CUSTOMER);
+        storeProfileDao.save(profile);
+        logger.info("StoreProfile created for user {} with CUSTOMER role", user.getId());
 
         UserDetailsImpl userDetails = new UserDetailsImpl(user);
         String accessToken = JwtUtil.createToken(String.valueOf(user.getId()), userDetails.getAuthorities());

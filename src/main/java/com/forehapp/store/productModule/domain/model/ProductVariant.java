@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "product_variants")
+@Table(name = "store_product_variants")
 @Getter @Setter
 @NoArgsConstructor
 public class ProductVariant {
@@ -39,7 +39,7 @@ public class ProductVariant {
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
-            name = "product_variant_attribute_values",
+            name = "store_product_variant_attribute_values",
             joinColumns = @JoinColumn(name = "variant_id"),
             inverseJoinColumns = @JoinColumn(name = "attribute_value_id")
     )

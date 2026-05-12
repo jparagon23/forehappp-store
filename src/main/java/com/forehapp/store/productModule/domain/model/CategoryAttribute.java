@@ -6,7 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "category_attributes",
+@Table(name = "store_category_attributes",
         uniqueConstraints = @UniqueConstraint(columnNames = {"category_id", "attribute_id"}))
 @Getter @Setter
 @NoArgsConstructor

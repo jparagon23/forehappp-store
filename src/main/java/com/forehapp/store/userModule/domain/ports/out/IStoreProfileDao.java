@@ -6,4 +6,5 @@ import java.util.Optional;
 
 public interface IStoreProfileDao {
     Optional<StoreProfile> findByUserId(Long userId);
+    StoreProfile save(StoreProfile storeProfile);
 }

@@ -8,7 +8,7 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "inventory_movements")
+@Table(name = "store_inventory_movements")
 @Getter @Setter
 @NoArgsConstructor
 public class InventoryMovement {

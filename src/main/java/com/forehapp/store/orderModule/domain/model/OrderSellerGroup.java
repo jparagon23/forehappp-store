@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "order_seller_groups")
+@Table(name = "store_order_seller_groups")
 @Getter @Setter
 @NoArgsConstructor
 public class OrderSellerGroup {
