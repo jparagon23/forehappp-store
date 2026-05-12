@@ -63,6 +63,36 @@ public class ProductController {
         return ResponseEntity.ok(productImageService.getByProduct(productId));
     }
 
+    @PostMapping("/{productId}/variants")
+    public ResponseEntity<ProductVariantResponse> addVariant(
+            @PathVariable Long productId,
+            @Valid @RequestBody CreateVariantDto dto,
+            @AuthenticationPrincipal String userId) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(productService.addVariant(productId, dto, Long.parseLong(userId)));
+    }
+
+    @PatchMapping("/{productId}/publish")
+    public ResponseEntity<ProductResponse> publish(
+            @PathVariable Long productId,
+            @AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(productService.publish(productId, Long.parseLong(userId)));
+    }
+
+    @PatchMapping("/{productId}/deactivate")
+    public ResponseEntity<ProductResponse> deactivate(
+            @PathVariable Long productId,
+            @AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(productService.deactivate(productId, Long.parseLong(userId)));
+    }
+
+    @PatchMapping("/{productId}/activate")
+    public ResponseEntity<ProductResponse> activate(
+            @PathVariable Long productId,
+            @AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(productService.activate(productId, Long.parseLong(userId)));
+    }
+
     @PostMapping("/{productId}/variants/{variantId}/inventory")
     public ResponseEntity<Void> addInventory(
             @PathVariable Long productId,

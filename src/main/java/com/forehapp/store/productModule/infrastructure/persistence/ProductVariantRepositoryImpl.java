@@ -19,4 +19,14 @@ public class ProductVariantRepositoryImpl implements IProductVariantDao {
     public Optional<ProductVariant> findByIdAndProductId(Long variantId, Long productId) {
         return jpaRepository.findByIdAndProductId(variantId, productId);
     }
+
+    @Override
+    public boolean existsBySku(String sku) {
+        return jpaRepository.existsBySku(sku);
+    }
+
+    @Override
+    public ProductVariant save(ProductVariant variant) {
+        return jpaRepository.save(variant);
+    }
 }

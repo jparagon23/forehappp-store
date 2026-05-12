@@ -91,11 +91,13 @@ CREATE TABLE IF NOT EXISTS category_attributes (
 CREATE TABLE IF NOT EXISTS products (
     product_id   BIGINT AUTO_INCREMENT PRIMARY KEY,
     seller_id    BIGINT NOT NULL,
-    description  VARCHAR(255) NOT NULL,
+    title        VARCHAR(255) NOT NULL,
+    description  TEXT,
     brand_id     BIGINT NOT NULL,
     line_id      BIGINT,
     category_id  BIGINT NOT NULL,
     status       VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    created_at   DATETIME NOT NULL,
     CONSTRAINT fk_prod_seller   FOREIGN KEY (seller_id)   REFERENCES store_profiles(store_profile_id),
     CONSTRAINT fk_prod_brand    FOREIGN KEY (brand_id)    REFERENCES brands(brand_id),
     CONSTRAINT fk_prod_line     FOREIGN KEY (line_id)     REFERENCES `lines`(line_id),
@@ -113,12 +115,13 @@ CREATE TABLE IF NOT EXISTS product_images (
 );
 
 CREATE TABLE IF NOT EXISTS product_variants (
-    variant_id  BIGINT AUTO_INCREMENT PRIMARY KEY,
-    product_id  BIGINT NOT NULL,
-    sku         VARCHAR(100) NOT NULL,
-    price       DECIMAL(14, 2) NOT NULL,
-    stock       INT NOT NULL DEFAULT 0,
-    created_at  DATETIME NOT NULL,
+    variant_id       BIGINT AUTO_INCREMENT PRIMARY KEY,
+    product_id       BIGINT NOT NULL,
+    sku              VARCHAR(100) NOT NULL,
+    price            DECIMAL(14, 2) NOT NULL,
+    compare_at_price DECIMAL(14, 2),
+    stock            INT NOT NULL DEFAULT 0,
+    created_at       DATETIME NOT NULL,
     CONSTRAINT uk_variant_sku UNIQUE (sku),
     CONSTRAINT fk_pv_product FOREIGN KEY (product_id) REFERENCES products(product_id)
 );

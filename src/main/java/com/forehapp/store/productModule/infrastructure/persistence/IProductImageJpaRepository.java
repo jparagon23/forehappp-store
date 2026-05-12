@@ -7,4 +7,5 @@ import java.util.List;
 
 public interface IProductImageJpaRepository extends JpaRepository<ProductImage, Long> {
     List<ProductImage> findByProduct_Id(Long productId);
+    boolean existsByProduct_Id(Long productId);
 }

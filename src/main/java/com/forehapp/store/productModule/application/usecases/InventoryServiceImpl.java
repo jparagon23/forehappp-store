@@ -3,10 +3,7 @@ package com.forehapp.store.productModule.application.usecases;
 import com.forehapp.store.general.exceptions.BadRequestException;
 import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.productModule.application.dto.AddInventoryRequestDto;
-import com.forehapp.store.productModule.domain.model.InventoryMovement;
-import com.forehapp.store.productModule.domain.model.MovementReason;
-import com.forehapp.store.productModule.domain.model.Product;
-import com.forehapp.store.productModule.domain.model.ProductVariant;
+import com.forehapp.store.productModule.domain.model.*;
 import com.forehapp.store.productModule.domain.ports.in.IInventoryService;
 import com.forehapp.store.productModule.domain.ports.out.IInventoryMovementDao;
 import com.forehapp.store.productModule.domain.ports.out.IProductDao;
@@ -76,7 +73,21 @@ public class InventoryServiceImpl implements IInventoryService {
         movement.setQuantity(dto.getQuantity());
         movement.setReason(dto.getReason());
         movementDao.save(movement);
-
         movementDao.incrementStock(variantId, dto.getQuantity());
+
+        syncProductStockStatus(product);
+    }
+
+    private void syncProductStockStatus(Product product) {
+        boolean allEmpty = product.getVariants().stream()
+                .allMatch(v -> v.getStock() == 0);
+
+        if (allEmpty && product.getStatus() == ProductStatus.ACTIVE) {
+            product.setStatus(ProductStatus.OUT_OF_STOCK);
+            productDao.save(product);
+        } else if (!allEmpty && product.getStatus() == ProductStatus.OUT_OF_STOCK) {
+            product.setStatus(ProductStatus.ACTIVE);
+            productDao.save(product);
+        }
     }
 }

@@ -32,6 +32,11 @@ public class ProductImageRepositoryAdapter implements IProductImageDao {
     }
 
     @Override
+    public boolean existsByProductId(Long productId) {
+        return jpaRepository.existsByProduct_Id(productId);
+    }
+
+    @Override
     public void delete(ProductImage image) {
         jpaRepository.delete(image);
     }

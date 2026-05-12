@@ -4,4 +4,5 @@ import com.forehapp.store.productModule.domain.model.Product;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface IProductRepository extends JpaRepository<Product, Long> {
+    Optional<Product> findByIdAndSellerId(Long id, Long sellerId);
 }

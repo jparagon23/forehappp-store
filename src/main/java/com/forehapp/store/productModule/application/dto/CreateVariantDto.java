@@ -14,15 +14,18 @@ import java.util.List;
 @Getter @Setter
 public class CreateVariantDto {
 
-    @NotBlank(message = "El SKU es requerido")
+    @NotBlank(message = "SKU is required")
     private String sku;
 
-    @NotNull(message = "El precio es requerido")
-    @DecimalMin(value = "0.0", inclusive = false, message = "El precio debe ser mayor a 0")
+    @NotNull(message = "Price is required")
+    @DecimalMin(value = "0.0", inclusive = false, message = "Price must be greater than 0")
     private BigDecimal price;
 
-    @NotNull(message = "El stock es requerido")
-    @Min(value = 0, message = "El stock no puede ser negativo")
+    @DecimalMin(value = "0.0", inclusive = false, message = "Compare-at price must be greater than 0")
+    private BigDecimal compareAtPrice;
+
+    @NotNull(message = "Stock is required")
+    @Min(value = 0, message = "Stock cannot be negative")
     private Integer stock;
 
     private List<Long> attributeValueIds = new ArrayList<>();
