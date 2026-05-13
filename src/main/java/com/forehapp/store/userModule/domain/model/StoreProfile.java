@@ -5,7 +5,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 @Entity
@@ -32,14 +34,8 @@ public class StoreProfile {
     @Column(length = 50)
     private String phone;
 
-    @Column(name = "default_address", length = 255)
-    private String defaultAddress;
-
-    @Column(name = "default_city", length = 100)
-    private String defaultCity;
-
-    @Column(name = "default_country", length = 100)
-    private String defaultCountry;
+    @OneToMany(mappedBy = "storeProfile", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<UserAddress> addresses = new ArrayList<>();
 
     @Column(name = "loyalty_points", nullable = false)
     private Integer loyaltyPoints = 0;

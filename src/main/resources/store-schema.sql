@@ -34,13 +34,23 @@ CREATE TABLE IF NOT EXISTS store_profiles (
     store_profile_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_id          BIGINT NOT NULL,
     phone            VARCHAR(50),
-    default_address  VARCHAR(255),
-    default_city     VARCHAR(100),
-    default_country  VARCHAR(100),
     loyalty_points   INT NOT NULL DEFAULT 0,
     active           TINYINT(1) NOT NULL DEFAULT 1,
     CONSTRAINT uk_store_profile_user UNIQUE (user_id),
     CONSTRAINT fk_sp_user FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+
+CREATE TABLE IF NOT EXISTS store_profile_addresses (
+    address_id       BIGINT AUTO_INCREMENT PRIMARY KEY,
+    store_profile_id BIGINT NOT NULL,
+    alias            VARCHAR(100),
+    street           VARCHAR(255) NOT NULL,
+    city             VARCHAR(100) NOT NULL,
+    state            VARCHAR(100),
+    country          VARCHAR(100) NOT NULL,
+    zip_code         VARCHAR(20),
+    is_default       TINYINT(1) NOT NULL DEFAULT 0,
+    CONSTRAINT fk_spa_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id)
 );
 
 CREATE TABLE IF NOT EXISTS store_roles (
