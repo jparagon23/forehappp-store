@@ -1,6 +1,5 @@
 package com.forehapp.store.productModule.infrastructure.web;
 
-import com.forehapp.store.productModule.application.dto.AddInventoryRequestDto;
 import com.forehapp.store.productModule.application.dto.CreateProductRequestDto;
 import com.forehapp.store.productModule.application.dto.CreateVariantDto;
 import com.forehapp.store.productModule.application.dto.ProductImageResponse;
@@ -9,7 +8,6 @@ import com.forehapp.store.productModule.application.dto.ProductVariantResponse;
 import com.forehapp.store.productModule.application.dto.SellerProductDetailResponse;
 import com.forehapp.store.productModule.application.dto.UpdateProductRequestDto;
 import com.forehapp.store.productModule.application.dto.UpdateVariantDto;
-import com.forehapp.store.productModule.domain.ports.in.IInventoryService;
 import com.forehapp.store.productModule.domain.ports.in.IProductImageService;
 import com.forehapp.store.productModule.domain.ports.in.IProductService;
 import jakarta.validation.Valid;
@@ -27,14 +25,11 @@ public class ProductController {
 
     private final IProductService productService;
     private final IProductImageService productImageService;
-    private final IInventoryService inventoryService;
 
     public ProductController(IProductService productService,
-                             IProductImageService productImageService,
-                             IInventoryService inventoryService) {
+                             IProductImageService productImageService) {
         this.productService = productService;
         this.productImageService = productImageService;
-        this.inventoryService = inventoryService;
     }
 
     @PostMapping
@@ -145,13 +140,4 @@ public class ProductController {
         return ResponseEntity.ok(productService.getSellerProducts(Long.parseLong(userId)));
     }
 
-    @PostMapping("/{productId}/variants/{variantId}/inventory")
-    public ResponseEntity<Void> addInventory(
-            @PathVariable Long productId,
-            @PathVariable Long variantId,
-            @Valid @RequestBody AddInventoryRequestDto dto,
-            @AuthenticationPrincipal String userId) {
-        inventoryService.addInventory(productId, variantId, dto, Long.parseLong(userId));
-        return ResponseEntity.noContent().build();
-    }
 }

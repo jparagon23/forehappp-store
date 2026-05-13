@@ -1,10 +1,10 @@
-package com.forehapp.store.productModule.application.usecases;
+package com.forehapp.store.inventoryModule.application.usecases;
 
 import com.forehapp.store.general.exceptions.BadRequestException;
 import com.forehapp.store.general.exceptions.NotFoundException;
-import com.forehapp.store.productModule.application.dto.AddInventoryRequestDto;
+import com.forehapp.store.inventoryModule.application.dto.AdjustInventoryRequestDto;
+import com.forehapp.store.inventoryModule.domain.ports.in.IInventoryService;
 import com.forehapp.store.productModule.domain.model.*;
-import com.forehapp.store.productModule.domain.ports.in.IInventoryService;
 import com.forehapp.store.productModule.domain.ports.out.IInventoryMovementDao;
 import com.forehapp.store.productModule.domain.ports.out.IProductDao;
 import com.forehapp.store.productModule.domain.ports.out.IProductVariantDao;
@@ -34,7 +34,7 @@ public class InventoryServiceImpl implements IInventoryService {
 
     @Override
     @Transactional
-    public void addInventory(Long productId, Long variantId, AddInventoryRequestDto dto, Long userId) {
+    public void adjustInventory(Long productId, Long variantId, AdjustInventoryRequestDto dto, Long userId) {
         if (dto.getQuantity() == 0) {
             throw new BadRequestException("Quantity must not be zero");
         }
@@ -45,17 +45,20 @@ public class InventoryServiceImpl implements IInventoryService {
             throw new BadRequestException("Only ADJUSTMENT movements can have a negative quantity");
         }
 
-        StoreProfile seller = storeProfileDao.findByUserId(userId)
+        StoreProfile profile = storeProfileDao.findByUserId(userId)
                 .orElseThrow(() -> new NotFoundException("Store profile not found"));
 
-        if (!seller.getRoles().contains(StoreRole.SELLER)) {
-            throw new BadRequestException("User does not have SELLER role");
+        boolean isAdmin = profile.getRoles().contains(StoreRole.STORE_ADMIN);
+        boolean isSeller = profile.getRoles().contains(StoreRole.SELLER);
+
+        if (!isAdmin && !isSeller) {
+            throw new BadRequestException("User does not have permission to adjust inventory");
         }
 
         Product product = productDao.findById(productId)
                 .orElseThrow(() -> new NotFoundException("Product not found"));
 
-        if (!product.getSeller().getId().equals(seller.getId())) {
+        if (isSeller && !isAdmin && !product.getSeller().getId().equals(profile.getId())) {
             throw new BadRequestException("Product does not belong to this seller");
         }
 
