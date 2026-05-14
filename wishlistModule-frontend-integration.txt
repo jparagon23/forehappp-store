@@ -1,0 +1,272 @@
+================================================================================
+  FOREHAPP STORE — WISHLIST MODULE: GUÍA DE INTEGRACIÓN FRONTEND
+================================================================================
+
+BASE URL: http://localhost:8082
+AUTENTICACIÓN: Bearer Token (JWT) en header Authorization en TODOS los endpoints
+
+  Authorization: Bearer <token>
+
+Todos los endpoints de la wishlist requieren usuario autenticado.
+Si no se envía token o es inválido → 403 Forbidden
+
+
+================================================================================
+  MODELO DE RESPUESTA PRINCIPAL — WishlistResponse
+================================================================================
+
+{
+  "wishlistId":  Long | null,       // null si nunca se ha agregado ningún producto
+  "totalItems":  3,                  // cantidad de productos en la wishlist
+  "items": [
+    {
+      "itemId":        10,           // ID del ítem (usar para eliminar)
+      "productId":     5,            // ID del producto
+      "productTitle":  "Camiseta Premium",
+      "minPrice":      75.00,        // precio mínimo entre todas las variantes del producto
+      "variantCount":  3,            // cantidad de variantes disponibles
+      "addedAt":       "2026-05-14T10:30:00"
+    }
+  ]
+}
+
+NOTAS:
+  - Los ítems NO están agrupados por vendedor (a diferencia del carrito)
+  - minPrice refleja el precio actual de la variante más barata en tiempo real
+  - variantCount indica cuántas opciones tiene el producto (talla, color, etc.)
+  - Para ver imágenes del producto usar: GET /api/v1/products/{productId}/images
+
+
+================================================================================
+  ENDPOINT 1 — OBTENER WISHLIST
+================================================================================
+
+GET /api/v1/wishlist
+Authorization: Bearer <token>
+
+RESPUESTA EXITOSA 200 OK:
+  Si tiene productos:
+  {
+    "wishlistId": 3,
+    "totalItems": 2,
+    "items": [ ... ]
+  }
+
+  Si nunca agregó productos (wishlist vacía):
+  {
+    "wishlistId": null,
+    "totalItems": 0,
+    "items": []
+  }
+
+ERRORES:
+  404 → El usuario no tiene StoreProfile registrado
+
+
+================================================================================
+  ENDPOINT 2 — AGREGAR PRODUCTO A LA WISHLIST
+================================================================================
+
+POST /api/v1/wishlist/items
+Authorization: Bearer <token>
+Content-Type: application/json
+
+REQUEST BODY:
+{
+  "productId": 5    // Long, requerido — ID del producto (no de la variante)
+}
+
+RESPUESTA EXITOSA 201 Created:
+  Retorna el WishlistResponse completo y actualizado.
+
+COMPORTAMIENTO:
+  - Si la wishlist no existe → se crea automáticamente
+  - Se agrega el PRODUCTO completo (no una variante específica)
+  - El usuario elige la variante al momento de comprar
+
+ERRORES:
+  400 → productId nulo
+  404 → Producto no encontrado
+  404 → StoreProfile no encontrado
+  409 Conflict → El producto ya está en la wishlist
+      { "message": "Product already in wishlist" }
+
+
+================================================================================
+  ENDPOINT 3 — ELIMINAR UN PRODUCTO DE LA WISHLIST
+================================================================================
+
+DELETE /api/v1/wishlist/items/{itemId}
+Authorization: Bearer <token>
+
+PATH PARAM:
+  itemId → Long, el ID del ítem (campo "itemId" en WishlistResponse.items)
+
+RESPUESTA EXITOSA 200 OK:
+  Retorna el WishlistResponse actualizado (sin el ítem eliminado).
+
+ERRORES:
+  404 → Wishlist no encontrada
+  404 → Ítem no pertenece a la wishlist del usuario
+
+
+================================================================================
+  ENDPOINT 4 — VACIAR WISHLIST COMPLETA
+================================================================================
+
+DELETE /api/v1/wishlist
+Authorization: Bearer <token>
+
+RESPUESTA EXITOSA 204 No Content
+  (sin body)
+
+COMPORTAMIENTO:
+  - Elimina TODOS los productos de la wishlist
+  - Si no hay wishlist activa → no hace nada, igual retorna 204
+
+ERRORES:
+  404 → StoreProfile no encontrado
+
+
+================================================================================
+  FLUJO TÍPICO DE INTEGRACIÓN
+================================================================================
+
+1. CARGAR WISHLIST AL INICIAR SESIÓN
+   GET /api/v1/wishlist
+   → Guardar los productIds en un Set local para verificación rápida
+   → Mostrar badge/contador con totalItems
+
+2. BOTÓN "AGREGAR A WISHLIST" EN CATÁLOGO / DETALLE DE PRODUCTO
+   Verificar si productId ya está en la wishlist local (evitar llamada innecesaria):
+     Si ya está → mostrar ícono de corazón lleno
+     Si no está → POST /api/v1/wishlist/items  { productId: X }
+
+   Manejar respuesta:
+     201 → Actualizar estado local, cambiar ícono a corazón lleno
+     409 → Producto ya estaba agregado (sincronizar estado local)
+
+3. MOSTRAR LA WISHLIST
+   Renderizar lista de productos:
+   ┌─────────────────────────────────────────────────────┐
+   │ Mi Wishlist (3 productos)                           │
+   ├─────────────────────────────────────────────────────┤
+   │ [img] Camiseta Premium                              │
+   │       Desde $75.00  ·  3 variantes disponibles      │
+   │       Agregado: 14/05/2026          [🗑] [+ Carrito] │
+   ├─────────────────────────────────────────────────────┤
+   │ [img] Zapatos Sport                                 │
+   │       Desde $120.00  ·  5 variantes disponibles     │
+   │       Agregado: 13/05/2026          [🗑] [+ Carrito] │
+   └─────────────────────────────────────────────────────┘
+
+   Para la imagen: GET /api/v1/products/{productId}/images
+   Para el detalle completo: GET /api/v1/products/public/{productId}
+
+4. MOVER PRODUCTO AL CARRITO
+   Al hacer clic en "+ Carrito":
+     a. Navegar al detalle del producto para que el usuario elija variante
+        GET /api/v1/products/public/{productId}
+     b. Usuario selecciona variante → POST /api/v1/cart/items { variantId, quantity }
+     c. Opcional: eliminar de wishlist → DELETE /api/v1/wishlist/items/{itemId}
+
+5. ELIMINAR DE WISHLIST
+   DELETE /api/v1/wishlist/items/{itemId}
+   → Actualizar lista con la respuesta (200 WishlistResponse)
+   → Actualizar badge de contador
+
+6. VACIAR WISHLIST
+   DELETE /api/v1/wishlist
+   → Mostrar wishlist vacía
+
+
+================================================================================
+  VERIFICACIÓN RÁPIDA DE ESTADO (patrón recomendado)
+================================================================================
+
+Al cargar la app, construir un Set con los productIds de la wishlist:
+
+  const wishlistProductIds = new Set(
+    wishlist.items.map(item => item.productId)
+  );
+
+  // Verificar si un producto está en wishlist (O(1)):
+  const isInWishlist = (productId) => wishlistProductIds.has(productId);
+
+Esto permite mostrar el ícono de corazón correcto en catálogo sin llamadas extra.
+
+
+================================================================================
+  REGLAS DE NEGOCIO IMPORTANTES PARA EL FRONT
+================================================================================
+
+SE AGREGAN PRODUCTOS, NO VARIANTES:
+  - La wishlist guarda el producto completo
+  - El usuario elige la variante al momento de ir al carrito
+  - Esto permite mostrar "3 variantes disponibles" como pista visual
+
+NO HAY DUPLICADOS:
+  - Intentar agregar un producto que ya está devuelve 409
+  - El front debe manejar este caso (actualizar estado local)
+
+PRECIO EN TIEMPO REAL:
+  - minPrice se calcula en cada respuesta con el precio actual de las variantes
+  - Si un vendedor cambia el precio, la próxima consulta refleja el nuevo valor
+  - Sugerencia: mostrar "Desde $XX.XX" para indicar que es el precio mínimo
+
+WISHLIST SE CREA AUTOMÁTICAMENTE:
+  - No existe endpoint para "crear" wishlist explícitamente
+  - Se crea al agregar el primer producto
+  - GET siempre responde (wishlistId null = nunca usada)
+
+UN PRODUCTO POR USUARIO:
+  - Cada usuario tiene exactamente una wishlist
+  - No hay wishlists múltiples (ej. "Regalos", "Electrónica")
+
+
+================================================================================
+  RESUMEN DE ENDPOINTS
+================================================================================
+
+  Método    Ruta                             Descripción               Respuesta
+  --------  -------------------------------  ------------------------  ------------------
+  GET       /api/v1/wishlist                 Obtener wishlist          200 WishlistResponse
+  POST      /api/v1/wishlist/items           Agregar producto          201 WishlistResponse
+  DELETE    /api/v1/wishlist/items/{itemId}  Eliminar producto         200 WishlistResponse
+  DELETE    /api/v1/wishlist                 Vaciar wishlist           204 (vacío)
+
+
+================================================================================
+  MANEJO DE ERRORES
+================================================================================
+
+  HTTP 400 Bad Request   → productId nulo o inválido
+  HTTP 403 Forbidden     → Token ausente, inválido o expirado
+  HTTP 404 Not Found     → Recurso no encontrado (producto, ítem, perfil)
+  HTTP 409 Conflict      → Producto ya está en la wishlist
+  HTTP 500               → Error interno del servidor
+
+Estructura de error:
+  {
+    "status":  409,
+    "error":   "Conflict",
+    "message": "Product already in wishlist",
+    "path":    "/api/v1/wishlist/items"
+  }
+
+
+================================================================================
+  ENDPOINTS COMPLEMENTARIOS (otros módulos)
+================================================================================
+
+  Para enriquecer la UI de wishlist usar estos endpoints existentes:
+
+  GET /api/v1/products/public/{productId}
+    → Detalle completo del producto con variantes y precios
+    → No requiere autenticación
+
+  GET /api/v1/products/{productId}/images
+    → Lista de imágenes del producto con URLs de S3
+    → No requiere autenticación
+
+================================================================================

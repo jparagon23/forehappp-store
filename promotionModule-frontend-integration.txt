@@ -1,0 +1,398 @@
+================================================================================
+  FOREHAPP STORE — PROMOTION MODULE (CUPONES): GUÍA DE INTEGRACIÓN FRONTEND
+================================================================================
+
+BASE URL: http://localhost:8082
+AUTENTICACIÓN: Bearer Token (JWT) en header Authorization
+
+  Authorization: Bearer <token>
+
+TODOS los endpoints requieren autenticación (no hay endpoints públicos).
+Si no se envía token o es inválido → 403 Forbidden
+
+
+================================================================================
+  MODELOS DE RESPUESTA
+================================================================================
+
+── CouponResponse (admin) ──────────────────────────────────────────────────────
+{
+  "couponId":        1,
+  "code":            "VERANO2026",
+  "description":     "Descuento de verano 20%",
+  "discountType":    "PORCENTAJE",    // "PORCENTAJE" | "MONTO_FIJO"
+  "discountValue":   20.00,           // 20.00 = 20% | 15000.00 = $15.000 fijo
+  "minOrderAmount":  50000.00,        // null si no tiene mínimo
+  "maxUses":         100,             // null = usos ilimitados
+  "usesCount":       37,              // usos acumulados hasta ahora
+  "maxUsesPerUser":  1,               // máximo de usos por persona
+  "validFrom":       "2026-05-01",
+  "validUntil":      "2026-06-30",    // null = sin fecha de vencimiento
+  "status":          "ACTIVA",        // "ACTIVA" | "INACTIVA"
+  "createdAt":       "2026-04-28T10:00:00"
+}
+
+── CouponValidationResponse (buyer) ────────────────────────────────────────────
+{
+  "valid":           true,
+  "couponId":        1,
+  "code":            "VERANO2026",
+  "discountType":    "PORCENTAJE",
+  "discountValue":   20.00,
+  "discountAmount":  16000.00,   // monto descontado calculado para este pedido
+  "finalAmount":     64000.00,   // total a pagar después del descuento
+  "message":         "Coupon applied successfully" | "Coupon redeemed successfully"
+}
+
+
+================================================================================
+  TIPOS DE DESCUENTO
+================================================================================
+
+  PORCENTAJE  → discountValue es el porcentaje (ej: 20.00 = 20%)
+                discountAmount = orderAmount × (discountValue / 100)
+
+  MONTO_FIJO  → discountValue es la cantidad exacta a descontar en la moneda local
+                discountAmount = min(discountValue, orderAmount)
+                (no puede descontar más que el total del pedido)
+
+
+================================================================================
+  ENDPOINT 1 — VALIDAR CUPÓN (BUYER — SIN EFECTO SECUNDARIO)
+================================================================================
+
+POST /api/v1/coupons/validate
+Authorization: Bearer <token>
+Content-Type: application/json
+
+REQUEST BODY:
+{
+  "code":        "VERANO2026",   // String, requerido — no distingue mayúsculas/minúsculas
+  "orderAmount": 80000.00        // BigDecimal, requerido — total del carrito antes del descuento
+}
+
+RESPUESTA EXITOSA 200 OK:
+{
+  "valid":          true,
+  "couponId":       1,
+  "code":           "VERANO2026",
+  "discountType":   "PORCENTAJE",
+  "discountValue":  20.00,
+  "discountAmount": 16000.00,
+  "finalAmount":    64000.00,
+  "message":        "Coupon applied successfully"
+}
+
+COMPORTAMIENTO:
+  - Solo valida, NO registra el uso ni modifica contadores
+  - Usar para mostrar el descuento en tiempo real mientras el usuario escribe el código
+  - El código se normaliza a mayúsculas automáticamente
+
+ERRORES:
+  400 → Cupón no aplica. El campo "message" indica el motivo:
+        "Coupon is not active"
+        "Coupon is not yet valid"
+        "Coupon has expired"
+        "Order amount does not meet the minimum required: 50000.00"
+        "Coupon has reached its usage limit"
+        "You have already used this coupon"
+  404 → Cupón no encontrado
+
+
+================================================================================
+  ENDPOINT 2 — CANJEAR CUPÓN (BUYER — REGISTRA EL USO)
+================================================================================
+
+POST /api/v1/coupons/redeem
+Authorization: Bearer <token>
+Content-Type: application/json
+
+REQUEST BODY:
+{
+  "code":        "VERANO2026",
+  "orderAmount": 80000.00,
+  "orderId":     123           // Long, opcional — ID de la orden creada (para trazabilidad)
+}
+
+RESPUESTA EXITOSA 201 Created:
+{
+  "valid":          true,
+  "couponId":       1,
+  "code":           "VERANO2026",
+  "discountType":   "PORCENTAJE",
+  "discountValue":  20.00,
+  "discountAmount": 16000.00,
+  "finalAmount":    64000.00,
+  "message":        "Coupon redeemed successfully"
+}
+
+COMPORTAMIENTO:
+  - Válida las mismas reglas que /validate
+  - Si todo es válido: registra el uso, incrementa el contador del cupón
+  - El proceso es atómico: si falla algo, no se registra nada
+  - Llamar UNA SOLA VEZ, justo después de crear la orden exitosamente
+
+ERRORES:
+  Los mismos 400/404 que /validate
+
+
+================================================================================
+  ENDPOINTS ADMIN — GESTIÓN DE CUPONES (SOLO STORE_ADMIN)
+================================================================================
+
+── ENDPOINT 3 — LISTAR CUPONES ─────────────────────────────────────────────────
+
+GET /api/v1/admin/coupons?page=0&size=20
+Authorization: Bearer <token> (STORE_ADMIN)
+
+RESPUESTA 200 OK — página de CouponResponse:
+{
+  "content": [ ...CouponResponse ],
+  "totalElements": 12,
+  "totalPages": 1,
+  "number": 0,
+  "size": 20
+}
+
+Ordenados por createdAt DESC (más recientes primero).
+
+── ENDPOINT 4 — OBTENER UN CUPÓN ───────────────────────────────────────────────
+
+GET /api/v1/admin/coupons/{couponId}
+Authorization: Bearer <token> (STORE_ADMIN)
+
+RESPUESTA 200 OK: CouponResponse
+
+── ENDPOINT 5 — CREAR CUPÓN ────────────────────────────────────────────────────
+
+POST /api/v1/admin/coupons
+Authorization: Bearer <token> (STORE_ADMIN)
+Content-Type: application/json
+
+REQUEST BODY:
+{
+  "code":           "BIENVENIDO10",   // requerido, máx 50 chars, se guarda en MAYÚSCULAS
+  "description":    "10% para nuevos usuarios",  // opcional, máx 255 chars
+  "discountType":   "PORCENTAJE",     // requerido: "PORCENTAJE" | "MONTO_FIJO"
+  "discountValue":  10.00,            // requerido, > 0
+  "minOrderAmount": 30000.00,         // opcional — monto mínimo del pedido para aplicar
+  "maxUses":        500,              // opcional — null = ilimitado
+  "maxUsesPerUser": 1,                // requerido, mínimo 1
+  "validFrom":      "2026-05-01",     // requerido — fecha de inicio (YYYY-MM-DD)
+  "validUntil":     "2026-12-31"      // opcional — null = sin vencimiento
+}
+
+RESPUESTA EXITOSA 201 Created: CouponResponse
+
+ERRORES:
+  400 → Campos inválidos (validación)
+  400 → validUntil es anterior a validFrom
+  409 Conflict → El código ya existe
+      { "message": "Coupon code already exists" }
+
+── ENDPOINT 6 — ACTUALIZAR CUPÓN ───────────────────────────────────────────────
+
+PATCH /api/v1/admin/coupons/{couponId}
+Authorization: Bearer <token> (STORE_ADMIN)
+Content-Type: application/json
+
+REQUEST BODY (todos los campos son opcionales — solo enviar los que cambian):
+{
+  "description":    "Nueva descripción",
+  "minOrderAmount": 20000.00,
+  "maxUses":        1000,
+  "validUntil":     "2027-01-31",
+  "status":         "INACTIVA"    // "ACTIVA" | "INACTIVA"
+}
+
+RESPUESTA 200 OK: CouponResponse actualizado
+
+NOTA: No se puede cambiar el código, tipo de descuento ni valor del descuento
+      una vez creado. Desactivar y crear uno nuevo si es necesario.
+
+── ENDPOINT 7 — DESACTIVAR CUPÓN ───────────────────────────────────────────────
+
+PATCH /api/v1/admin/coupons/{couponId}/deactivate
+Authorization: Bearer <token> (STORE_ADMIN)
+Sin body.
+
+RESPUESTA 200 OK: CouponResponse con "status": "INACTIVA"
+
+NOTA: Un cupón desactivado NO puede ser canjeado por los compradores.
+      Se puede reactivar usando PATCH /admin/coupons/{id} con { "status": "ACTIVA" }
+
+
+================================================================================
+  FLUJO TÍPICO DE INTEGRACIÓN
+================================================================================
+
+1. CAMPO "CÓDIGO DE CUPÓN" EN EL CHECKOUT
+   ┌─────────────────────────────────────────────────────┐
+   │ ¿Tienes un código de descuento?                     │
+   │ [VERANO2026          ] [Aplicar]                    │
+   │                                                     │
+   │ ✅ VERANO2026 — 20% de descuento aplicado           │
+   │    Ahorras: $16.000                                 │
+   └─────────────────────────────────────────────────────┘
+
+   Al hacer clic en "Aplicar":
+   POST /api/v1/coupons/validate { "code": "VERANO2026", "orderAmount": 80000.00 }
+
+   Si 200 → mostrar discountAmount y finalAmount en el resumen
+   Si 400 → mostrar el campo "message" como error
+   Si 404 → "Código de cupón no válido"
+
+2. RESUMEN DEL PEDIDO CON DESCUENTO APLICADO
+   ┌─────────────────────────────────────────────────────┐
+   │ Subtotal:              $80.000                      │
+   │ Cupón VERANO2026:     -$16.000  (20% descuento)    │
+   │ ─────────────────────────────────────────────────── │
+   │ Total a pagar:         $64.000                      │
+   └─────────────────────────────────────────────────────┘
+
+   Guardar en estado local: { code, discountAmount, finalAmount }
+   El servidor NO guarda el cupón en la orden — el front es responsable
+   de pasar el total correcto al crear el pago.
+
+3. FLUJO COMPLETO AL CONFIRMAR EL PEDIDO
+
+   a. El usuario confirma la compra con cupón aplicado
+   b. Crear la orden → POST /api/v1/orders (con total = finalAmount)
+      → Obtener el orderId de la respuesta
+   c. Registrar el uso del cupón → POST /api/v1/coupons/redeem
+      { "code": "VERANO2026", "orderAmount": 80000.00, "orderId": <orderId> }
+   d. Si redeem falla → mostrar advertencia pero NO bloquear la orden
+      (la orden ya fue creada, el usuario pagó el precio correcto)
+
+   IMPORTANTE: llamar /redeem DESPUÉS de crear la orden, nunca antes.
+
+4. PANEL ADMIN — GESTIÓN DE CUPONES
+   ┌─────────────────────────────────────────────────────────────────┐
+   │ Cupones de descuento                          [+ Nuevo cupón]  │
+   ├──────────────┬──────────────┬───────┬────────┬───────┬────────┤
+   │ Código       │ Descuento    │ Usos  │ Vigencia│ Estado│Acciones│
+   ├──────────────┼──────────────┼───────┼────────┼───────┼────────┤
+   │ VERANO2026   │ 20%          │ 37/100│ Jun 30 │ ACTIVA│ ✏ 🔴  │
+   │ BIENVENIDO10 │ $10.000 fijo │  5/∞  │ Dic 31 │ ACTIVA│ ✏ 🔴  │
+   │ BLACKFRIDAY  │ 30%          │200/200│ Nov 30 │INACTIVA│ ✏ 🟢 │
+   └──────────────┴──────────────┴───────┴────────┴───────┴────────┘
+
+   ✏ → editar (descripción, monto mínimo, límite usos, validUntil, estado)
+   🔴 → desactivar  (PATCH /admin/coupons/{id}/deactivate)
+   🟢 → reactivar   (PATCH /admin/coupons/{id} { "status": "ACTIVA" })
+
+5. FORMULARIO CREAR CUPÓN (admin)
+   Campos recomendados con labels claros:
+
+   Código *              [VERANO2026      ]  (se guarda en MAYÚSCULAS)
+   Descripción           [Para campaña de verano...]
+   Tipo de descuento *   ( ) Porcentaje  ( ) Monto fijo
+   Valor del descuento * [20.00          ]  (% o monto)
+   Monto mínimo          [50000.00       ]  (dejar vacío para sin mínimo)
+   Límite total de usos  [100            ]  (dejar vacío para ilimitado)
+   Usos por persona *    [1              ]
+   Válido desde *        [2026-05-01     ]
+   Válido hasta          [2026-06-30     ]  (dejar vacío para sin vencimiento)
+
+   [Cancelar]  [Crear cupón]
+
+
+================================================================================
+  MANEJO DE ESTADOS DEL CUPÓN EN EL FRONT
+================================================================================
+
+Al mostrar un cupón, interpretar "status" y fechas:
+
+  status == "ACTIVA" y dentro de fechas  → ✅ Activo y canjeable
+  status == "ACTIVA" y fuera de fechas   → ⚠️  Activo pero vencido (no canjeable)
+  status == "INACTIVA"                   → 🔴 Desactivado manualmente
+
+El campo "usesCount" indica cuántas veces se ha canjeado.
+Si maxUses != null: mostrar "usesCount / maxUses" (ej: "37 / 100")
+Si maxUses == null: mostrar "usesCount usos" (ej: "37 usos")
+
+
+================================================================================
+  REGLAS DE NEGOCIO IMPORTANTES PARA EL FRONT
+================================================================================
+
+/validate ES INFORMATIVO, /redeem ES DEFINITIVO:
+  - /validate no modifica nada — úsalo libremente para previews
+  - /redeem registra el uso — llamarlo SOLO UNA VEZ al confirmar el pedido
+  - Si se llama /redeem dos veces para el mismo usuario+cupón, el segundo falla
+    con 400 "You have already used this coupon" (si maxUsesPerUser = 1)
+
+EL DESCUENTO NO SE GUARDA EN LA ORDEN (por ahora):
+  - La integración con el total de la orden es responsabilidad del front
+  - Pasar `finalAmount` como el total al crear la orden y al iniciar el pago
+  - El /redeem sirve para trazabilidad, no para recalcular el total
+
+NORMALIZACIÓN DE CÓDIGO:
+  - Los códigos se guardan y buscan en MAYÚSCULAS
+  - "verano2026", "Verano2026" y "VERANO2026" son el mismo cupón
+  - Sugerencia: transformar a mayúsculas en el input antes de enviar
+
+CAMPO message EN ERRORES 400:
+  - Siempre leer el campo "message" de la respuesta de error para mostrar
+    al usuario el motivo exacto por el cual el cupón no aplica
+  - No usar mensajes genéricos como "Cupón inválido" — el backend ya
+    provee mensajes descriptivos
+
+VALIDACIÓN DE FECHAS EN EL FRONT:
+  - El backend valida las fechas server-side (zona horaria del servidor)
+  - No implementar lógica de fechas en el front — dejar que el backend decida
+  - Solo usar las fechas del CouponResponse para mostrar información visual
+
+
+================================================================================
+  RESUMEN DE ENDPOINTS
+================================================================================
+
+  Método  Ruta                                  Auth         Descripción
+  ──────  ────────────────────────────────────  ───────────  ──────────────────────────
+  POST    /api/v1/coupons/validate              Autenticado  Preview descuento (sin efecto)
+  POST    /api/v1/coupons/redeem                Autenticado  Registrar uso del cupón
+  GET     /api/v1/admin/coupons                 STORE_ADMIN  Listar todos los cupones
+  GET     /api/v1/admin/coupons/{couponId}      STORE_ADMIN  Detalle de un cupón
+  POST    /api/v1/admin/coupons                 STORE_ADMIN  Crear cupón
+  PATCH   /api/v1/admin/coupons/{couponId}      STORE_ADMIN  Actualizar cupón
+  PATCH   /api/v1/admin/coupons/{id}/deactivate STORE_ADMIN  Desactivar cupón
+
+
+================================================================================
+  MANEJO DE ERRORES
+================================================================================
+
+  HTTP 400 Bad Request  → Cupón no aplica (ver campo "message") o validación fallida
+  HTTP 403 Forbidden    → Token ausente/inválido o sin rol STORE_ADMIN en rutas admin
+  HTTP 404 Not Found    → Cupón no encontrado o StoreProfile no encontrado
+  HTTP 409 Conflict     → Código de cupón ya existe (al crear)
+  HTTP 500              → Error interno del servidor
+
+Estructura de error:
+  {
+    "status":  400,
+    "error":   "Bad Request",
+    "message": "You have already used this coupon",
+    "path":    "/api/v1/coupons/redeem"
+  }
+
+
+================================================================================
+  EJEMPLOS DE CUPONES A CREAR (referencia para QA/testing)
+================================================================================
+
+Cupón de porcentaje sin restricciones:
+  { "code": "TEST10", "discountType": "PORCENTAJE", "discountValue": 10,
+    "maxUsesPerUser": 1, "validFrom": "2026-01-01" }
+
+Cupón de monto fijo con mínimo:
+  { "code": "DESCUENTO5K", "discountType": "MONTO_FIJO", "discountValue": 5000,
+    "minOrderAmount": 30000, "maxUsesPerUser": 1, "validFrom": "2026-01-01" }
+
+Cupón con límite global de usos y expiración:
+  { "code": "PROMO100", "discountType": "PORCENTAJE", "discountValue": 15,
+    "maxUses": 100, "maxUsesPerUser": 1,
+    "validFrom": "2026-05-01", "validUntil": "2026-05-31" }
+
+================================================================================

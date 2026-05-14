@@ -1,0 +1,502 @@
+================================================================================
+  FOREHAPP STORE — REVIEW MODULE: GUÍA DE INTEGRACIÓN FRONTEND
+================================================================================
+
+BASE URL: http://localhost:8082
+AUTENTICACIÓN: Bearer Token (JWT) en header Authorization
+
+  Authorization: Bearer <token>
+
+ENDPOINTS PÚBLICOS (sin token): GET de reseñas y summary
+ENDPOINTS PRIVADOS (requieren token): crear, eliminar, mis reseñas, admin
+
+Si no se envía token en endpoint privado → 403 Forbidden
+
+
+================================================================================
+  MODELOS DE RESPUESTA
+================================================================================
+
+── ReviewResponse ──────────────────────────────────────────────────────────────
+{
+  "reviewId":      1,
+  "productId":     5,
+  "productTitle":  "Camiseta Premium",
+  "reviewerId":    12,
+  "reviewerName":  "Juan Pérez",
+  "rating":        4,
+  "title":         "Muy buena calidad",
+  "comment":       "El producto llegó en perfecto estado, tela suave.",
+  "status":        "PENDIENTE" | "APROBADO" | "RECHAZADO",
+  "createdAt":     "2026-05-14T10:30:00"
+}
+
+── ProductRatingSummary ────────────────────────────────────────────────────────
+{
+  "productId":      5,
+  "averageRating":  4.3,   // 0.0 si no hay reseñas aprobadas
+  "totalReviews":   17     // solo cuenta reseñas APROBADAS
+}
+
+── ReviewPageResponse ──────────────────────────────────────────────────────────
+{
+  "summary": {             // null en respuesta admin (pending reviews)
+    "productId":     5,
+    "averageRating": 4.3,
+    "totalReviews":  17
+  },
+  "reviews":      [ ...ReviewResponse ],
+  "currentPage":  0,
+  "totalPages":   3,
+  "totalElements": 17
+}
+
+
+================================================================================
+  ENDPOINT 1 — OBTENER RESEÑAS DE UN PRODUCTO (PÚBLICO)
+================================================================================
+
+GET /api/v1/products/{productId}/reviews?page=0&size=10
+No requiere autenticación
+
+QUERY PARAMS:
+  page  → int, default 0
+  size  → int, default 10
+
+RESPUESTA EXITOSA 200 OK:
+{
+  "summary": {
+    "productId":     5,
+    "averageRating": 4.3,
+    "totalReviews":  17
+  },
+  "reviews": [
+    {
+      "reviewId":     3,
+      "productId":    5,
+      "productTitle": "Camiseta Premium",
+      "reviewerId":   12,
+      "reviewerName": "Juan Pérez",
+      "rating":       5,
+      "title":        "Excelente",
+      "comment":      "Llegó rápido y en perfectas condiciones.",
+      "status":       "APROBADO",
+      "createdAt":    "2026-05-13T09:15:00"
+    }
+  ],
+  "currentPage":   0,
+  "totalPages":    2,
+  "totalElements": 17
+}
+
+NOTAS:
+  - Solo devuelve reseñas con status APROBADO
+  - Ordenadas por createdAt DESC (más recientes primero)
+  - summary siempre incluido (averageRating=0.0 y totalReviews=0 si no hay reseñas)
+
+
+================================================================================
+  ENDPOINT 2 — OBTENER SOLO EL RATING SUMMARY DE UN PRODUCTO (PÚBLICO)
+================================================================================
+
+GET /api/v1/products/{productId}/reviews/summary
+No requiere autenticación
+
+RESPUESTA EXITOSA 200 OK:
+{
+  "productId":     5,
+  "averageRating": 4.3,
+  "totalReviews":  17
+}
+
+CASOS:
+  Sin reseñas aprobadas → { "productId": 5, "averageRating": 0.0, "totalReviews": 0 }
+
+USO TÍPICO:
+  Mostrar las estrellas y el contador en la card del catálogo sin cargar
+  la lista completa de reseñas.
+
+
+================================================================================
+  ENDPOINT 3 — CREAR UNA RESEÑA (COMPRADOR AUTENTICADO)
+================================================================================
+
+POST /api/v1/products/{productId}/reviews
+Authorization: Bearer <token>
+Content-Type: application/json
+
+REQUEST BODY:
+{
+  "rating":   4,                         // Integer, requerido, entre 1 y 5
+  "title":    "Muy buena calidad",       // String, opcional, máx 100 chars
+  "comment":  "Tela suave y durable."    // String, opcional, máx 1000 chars
+}
+
+RESPUESTA EXITOSA 201 Created:
+  Retorna el ReviewResponse completo con status "PENDIENTE"
+
+COMPORTAMIENTO:
+  - La reseña queda en estado PENDIENTE hasta que un admin la apruebe o rechace
+  - El comprador verá su propia reseña como PENDIENTE en GET /reviews/my
+  - El público NO ve reseñas PENDIENTE (solo APROBADO)
+
+ERRORES:
+  400 → rating nulo o fuera de rango [1-5]
+  400 → title/comment supera longitud máxima
+  404 → Producto no encontrado
+  404 → StoreProfile no encontrado
+  409 Conflict → Ya existe una reseña para este producto
+      { "message": "You have already reviewed this product" }
+
+
+================================================================================
+  ENDPOINT 4 — ELIMINAR MI RESEÑA (COMPRADOR AUTENTICADO)
+================================================================================
+
+DELETE /api/v1/reviews/{reviewId}
+Authorization: Bearer <token>
+
+RESPUESTA EXITOSA 204 No Content (sin body)
+
+ERRORES:
+  400 → La reseña ya fue aprobada (no se puede eliminar)
+      { "message": "Cannot delete an approved review" }
+  403 → La reseña pertenece a otro usuario
+  404 → Reseña no encontrada
+
+REGLA:
+  Solo se pueden eliminar reseñas en estado PENDIENTE o RECHAZADO.
+  Una vez APROBADA, el comprador no puede borrarla.
+
+
+================================================================================
+  ENDPOINT 5 — MIS RESEÑAS (COMPRADOR AUTENTICADO)
+================================================================================
+
+GET /api/v1/reviews/my
+Authorization: Bearer <token>
+
+RESPUESTA EXITOSA 200 OK:
+  Lista de ReviewResponse con todos los estados (PENDIENTE, APROBADO, RECHAZADO)
+
+[
+  {
+    "reviewId":     3,
+    "productId":    5,
+    "productTitle": "Camiseta Premium",
+    "reviewerId":   12,
+    "reviewerName": "Juan Pérez",
+    "rating":       4,
+    "title":        "Muy buena calidad",
+    "comment":      "Llegó en perfectas condiciones.",
+    "status":       "APROBADO",
+    "createdAt":    "2026-05-13T09:15:00"
+  },
+  {
+    "reviewId":     8,
+    "productId":    11,
+    "productTitle": "Zapatos Sport",
+    "reviewerId":   12,
+    "reviewerName": "Juan Pérez",
+    "rating":       3,
+    "title":        null,
+    "comment":      "Talla correcta pero tardó en llegar.",
+    "status":       "PENDIENTE",
+    "createdAt":    "2026-05-14T08:00:00"
+  }
+]
+
+NOTAS:
+  - Devuelve todas las reseñas del usuario sin importar el status
+  - Útil para mostrar historial de reseñas en el perfil del comprador
+  - title y comment pueden ser null si no se enviaron al crear
+
+
+================================================================================
+  ENDPOINT 6 — LISTAR RESEÑAS PENDIENTES (SOLO ADMIN)
+================================================================================
+
+GET /api/v1/admin/reviews/pending?page=0&size=20
+Authorization: Bearer <token> (requiere rol STORE_ADMIN)
+
+QUERY PARAMS:
+  page  → int, default 0
+  size  → int, default 20
+
+RESPUESTA EXITOSA 200 OK:
+{
+  "summary":      null,    // no aplica en vista admin
+  "reviews":      [ ...ReviewResponse ],
+  "currentPage":  0,
+  "totalPages":   1,
+  "totalElements": 5
+}
+
+Todas las reseñas en "status": "PENDIENTE", ordenadas por createdAt ASC
+(más antiguas primero — FIFO para moderar).
+
+ERRORES:
+  403 → Token válido pero sin rol STORE_ADMIN
+  404 → StoreProfile no encontrado
+
+
+================================================================================
+  ENDPOINT 7 — APROBAR RESEÑA (SOLO ADMIN)
+================================================================================
+
+PATCH /api/v1/admin/reviews/{reviewId}/approve
+Authorization: Bearer <token> (requiere rol STORE_ADMIN)
+
+Sin body.
+
+RESPUESTA EXITOSA 200 OK:
+  Retorna el ReviewResponse con "status": "APROBADO"
+
+ERRORES:
+  400 → La reseña no está en estado PENDIENTE
+      { "message": "Review is not pending" }
+  403 → Sin rol STORE_ADMIN
+  404 → Reseña no encontrada
+
+
+================================================================================
+  ENDPOINT 8 — RECHAZAR RESEÑA (SOLO ADMIN)
+================================================================================
+
+PATCH /api/v1/admin/reviews/{reviewId}/reject
+Authorization: Bearer <token> (requiere rol STORE_ADMIN)
+
+Sin body.
+
+RESPUESTA EXITOSA 200 OK:
+  Retorna el ReviewResponse con "status": "RECHAZADO"
+
+ERRORES:
+  400 → La reseña no está en estado PENDIENTE
+  403 → Sin rol STORE_ADMIN
+  404 → Reseña no encontrada
+
+
+================================================================================
+  FLUJO TÍPICO DE INTEGRACIÓN
+================================================================================
+
+1. MOSTRAR RATING EN EL CATÁLOGO DE PRODUCTOS
+   Para cada product card, hacer:
+   GET /api/v1/products/{productId}/reviews/summary
+
+   Renderizar:
+   ┌────────────────────────────────────────┐
+   │ [img] Camiseta Premium                 │
+   │       ★★★★☆  4.3  (17 reseñas)        │
+   │       Desde $75.00                     │
+   └────────────────────────────────────────┘
+
+   Tip de rendimiento: si cargas muchos productos en el catálogo,
+   considera mostrar el summary solo al abrir el detalle del producto
+   en lugar de cargarlos todos en la lista.
+
+2. DETALLE DEL PRODUCTO — SECCIÓN DE RESEÑAS
+   Cargar al abrir el detalle:
+
+   a. GET /api/v1/products/{productId}/reviews?page=0&size=10
+      → Mostrar las reseñas APROBADAS con paginación
+      → Mostrar el summary (estrellas + promedio + total)
+
+   b. Si el usuario está autenticado:
+      GET /api/v1/reviews/my
+      → Verificar si ya reseñó este producto (buscar productId en la lista)
+        Si ya lo hizo → mostrar su reseña + estado (PENDIENTE/APROBADO/RECHAZADO)
+        Si no lo hizo → mostrar botón "Escribir reseña"
+
+   Renderizado de la sección:
+   ┌─────────────────────────────────────────────────────┐
+   │ Reseñas de clientes                                 │
+   │ ★★★★☆  4.3 de 5  ·  17 reseñas                     │
+   ├─────────────────────────────────────────────────────┤
+   │ Juan P. ★★★★★  "Excelente"                          │
+   │ "Llegó rápido y en perfectas condiciones."          │
+   │ 13/05/2026                                          │
+   ├─────────────────────────────────────────────────────┤
+   │ María G. ★★★★☆  "Buena calidad"                     │
+   │ "Tela suave, el color es tal cual en la foto."      │
+   │ 12/05/2026                                          │
+   ├─────────────────────────────────────────────────────┤
+   │ [Ver más reseñas]   Página 1 de 2                   │
+   └─────────────────────────────────────────────────────┘
+
+3. CREAR UNA RESEÑA
+   a. Usuario hace clic en "Escribir reseña"
+   b. Mostrar formulario:
+      - Selector de estrellas (1-5) — requerido
+      - Campo título (opcional, máx 100 chars)
+      - Campo comentario (opcional, máx 1000 chars)
+
+   c. POST /api/v1/products/{productId}/reviews
+      { "rating": 4, "title": "...", "comment": "..." }
+
+   d. Manejar respuesta:
+      201 → Mostrar mensaje: "Reseña enviada. Será visible una vez aprobada."
+            Cambiar botón por el estado de la reseña (PENDIENTE)
+      409 → "Ya tienes una reseña para este producto"
+      400 → Mostrar errores de validación en el formulario
+
+4. SECCIÓN "MIS RESEÑAS" EN EL PERFIL DEL COMPRADOR
+   GET /api/v1/reviews/my
+
+   Mostrar con indicador de estado:
+   ┌─────────────────────────────────────────────────────┐
+   │ Mis reseñas                                         │
+   ├─────────────────────────────────────────────────────┤
+   │ Camiseta Premium  ★★★★★                             │
+   │ "Excelente calidad"                                 │
+   │ Estado: ✅ APROBADA          14/05/2026             │
+   ├─────────────────────────────────────────────────────┤
+   │ Zapatos Sport  ★★★☆☆                                │
+   │ "Tarda un poco en llegar"                           │
+   │ Estado: ⏳ EN REVISIÓN   [🗑 Eliminar]   14/05/2026 │
+   ├─────────────────────────────────────────────────────┤
+   │ Mochila Urbana  ★★☆☆☆                               │
+   │ "Inferior a lo esperado"                            │
+   │ Estado: ❌ RECHAZADA     [🗑 Eliminar]   14/05/2026 │
+   └─────────────────────────────────────────────────────┘
+
+   Mostrar botón [Eliminar] solo cuando status == "PENDIENTE" o "RECHAZADO".
+
+5. ELIMINAR RESEÑA PROPIA
+   DELETE /api/v1/reviews/{reviewId}
+
+   Manejar:
+   204 → Quitar la reseña de la lista local
+   400 → "No puedes eliminar una reseña aprobada"
+   (Solo mostrar el botón cuando aplica para evitar este error)
+
+6. PANEL ADMIN — MODERACIÓN DE RESEÑAS
+   GET /api/v1/admin/reviews/pending?page=0&size=20
+
+   Renderizar lista con acciones:
+   ┌─────────────────────────────────────────────────────┐
+   │ MODERACIÓN DE RESEÑAS  (5 pendientes)               │
+   ├─────────────────────────────────────────────────────┤
+   │ Producto: Camiseta Premium                          │
+   │ De: Juan Pérez  ★★★★★  "Excelente"                  │
+   │ "Llegó rápido y bien empacado."                     │
+   │ Recibida: 14/05/2026                                │
+   │                  [✅ Aprobar]   [❌ Rechazar]        │
+   ├─────────────────────────────────────────────────────┤
+   │ Producto: Zapatos Sport                             │
+   │ De: María G.  ★★☆☆☆  "Decepcionante"               │
+   │ "El material no se ve igual que en las fotos."      │
+   │ Recibida: 14/05/2026                                │
+   │                  [✅ Aprobar]   [❌ Rechazar]        │
+   └─────────────────────────────────────────────────────┘
+
+   Aprobar → PATCH /api/v1/admin/reviews/{reviewId}/approve
+   Rechazar → PATCH /api/v1/admin/reviews/{reviewId}/reject
+
+   Tras la acción: quitar el ítem de la lista (ya no es PENDIENTE)
+
+
+================================================================================
+  VERIFICACIÓN RÁPIDA: ¿YA RESEÑÉ ESTE PRODUCTO?
+================================================================================
+
+Al cargar el perfil o iniciar sesión, obtener las reseñas del usuario:
+GET /api/v1/reviews/my
+
+Construir un Map local:
+  const myReviews = new Map(
+    reviews.map(r => [r.productId, r])
+  );
+
+  // Verificar si ya reseñé un producto (O(1)):
+  const myReview = (productId) => myReviews.get(productId) ?? null;
+
+Usar en el detalle del producto:
+  if (myReview(productId)) {
+    // mostrar la reseña propia con su estado
+  } else {
+    // mostrar botón "Escribir reseña"
+  }
+
+
+================================================================================
+  REGLAS DE NEGOCIO IMPORTANTES PARA EL FRONT
+================================================================================
+
+MODERACIÓN OBLIGATORIA:
+  - Toda reseña nueva queda en PENDIENTE
+  - El público (y otros compradores) solo ven reseñas APROBADAS
+  - El autor ve la suya propia en GET /reviews/my con su estado real
+
+UNA RESEÑA POR PRODUCTO POR USUARIO:
+  - Intentar crear una segunda devuelve 409
+  - El front debe verificar el estado local antes de mostrar el formulario
+
+RESEÑAS APROBADAS SON PERMANENTES PARA EL COMPRADOR:
+  - Un comprador NO puede eliminar una reseña APROBADA
+  - Solo puede eliminar PENDIENTE o RECHAZADA
+  - Mostrar el botón eliminar solo cuando status != "APROBADO"
+
+RATING Y TOTAL SON EN TIEMPO REAL:
+  - averageRating y totalReviews se calculan en cada consulta
+  - Si el admin aprueba/rechaza reseñas, el summary cambia en la próxima llamada
+
+PAGINACIÓN:
+  - Reseñas públicas: ordenadas por fecha DESC (más recientes primero)
+  - Reseñas admin (pending): ordenadas por fecha ASC (más antiguas primero, FIFO)
+  - page empieza en 0
+
+CAMPOS OPCIONALES:
+  - title y comment pueden ser null en ReviewResponse si no se enviaron
+  - Validar antes de renderizar para evitar null pointer en el front
+
+
+================================================================================
+  RESUMEN DE ENDPOINTS
+================================================================================
+
+  Método  Ruta                                      Auth         Descripción
+  ──────  ────────────────────────────────────────  ───────────  ─────────────────────
+  GET     /api/v1/products/{id}/reviews             Público      Reseñas paginadas (solo APROBADAS)
+  GET     /api/v1/products/{id}/reviews/summary     Público      Promedio y total de ratings
+  POST    /api/v1/products/{id}/reviews             Autenticado  Crear reseña (→ PENDIENTE)
+  DELETE  /api/v1/reviews/{reviewId}                Autenticado  Eliminar reseña propia (solo PENDIENTE/RECHAZADA)
+  GET     /api/v1/reviews/my                        Autenticado  Mis reseñas (todos los estados)
+  GET     /api/v1/admin/reviews/pending             STORE_ADMIN  Reseñas pendientes de moderación
+  PATCH   /api/v1/admin/reviews/{reviewId}/approve  STORE_ADMIN  Aprobar reseña
+  PATCH   /api/v1/admin/reviews/{reviewId}/reject   STORE_ADMIN  Rechazar reseña
+
+
+================================================================================
+  MANEJO DE ERRORES
+================================================================================
+
+  HTTP 400 Bad Request  → rating inválido, campos muy largos, o reseña ya aprobada
+  HTTP 403 Forbidden    → Token ausente/inválido o sin rol STORE_ADMIN en rutas admin
+  HTTP 404 Not Found    → Producto, reseña o StoreProfile no encontrado
+  HTTP 409 Conflict     → El usuario ya tiene una reseña para ese producto
+  HTTP 500              → Error interno del servidor
+
+Estructura de error:
+  {
+    "status":  409,
+    "error":   "Conflict",
+    "message": "You have already reviewed this product",
+    "path":    "/api/v1/products/5/reviews"
+  }
+
+
+================================================================================
+  ENDPOINTS COMPLEMENTARIOS (otros módulos)
+================================================================================
+
+  GET /api/v1/products/public/{productId}
+    → Detalle completo del producto con variantes y precios
+    → No requiere autenticación
+
+  GET /api/v1/products/{productId}/images
+    → Imágenes del producto con URLs de S3
+    → No requiere autenticación
+
+================================================================================

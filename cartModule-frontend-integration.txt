@@ -1,0 +1,274 @@
+================================================================================
+  FOREHAPP STORE — CART MODULE: GUÍA DE INTEGRACIÓN FRONTEND
+================================================================================
+
+BASE URL: http://localhost:8082
+AUTENTICACIÓN: Bearer Token (JWT) en header Authorization en TODOS los endpoints
+
+  Authorization: Bearer <token>
+
+Todos los endpoints del carrito requieren usuario autenticado.
+Si no se envía token o es inválido → 403 Forbidden
+
+
+================================================================================
+  MODELO DE RESPUESTA PRINCIPAL — CartResponse
+================================================================================
+
+{
+  "cartId":      Long | null,         // null si el carrito está vacío (nunca creado)
+  "status":      "ACTIVE",            // siempre ACTIVE en respuestas normales
+  "updatedAt":   "2026-05-14T10:30:00" | null,
+  "total":       150.00,              // suma total de todos los ítems al precio actual
+  "sellerGroups": [
+    {
+      "sellerId":   2,
+      "sellerName": "Juan Paragon",
+      "subtotal":   150.00,
+      "items": [
+        {
+          "itemId":        10,
+          "variantId":     5,
+          "sku":           "PROD-001-RED-M",
+          "productTitle":  "Camiseta Premium",
+          "quantity":      2,
+          "unitPrice":     75.00,       // precio ACTUAL de la variante
+          "subtotal":      150.00,      // unitPrice * quantity
+          "priceChanged":  false,       // true si el precio cambió desde que se agregó
+          "previousPrice": null         // precio original si priceChanged=true, null si no
+        }
+      ]
+    }
+  ]
+}
+
+NOTA IMPORTANTE SOBRE CAMBIO DE PRECIO:
+  - Si priceChanged = true → mostrar alerta al usuario:
+      "El precio de '<productTitle>' cambió de $<previousPrice> a $<unitPrice>"
+  - El precio que se cobra es siempre unitPrice (precio actual)
+  - previousPrice solo tiene valor cuando priceChanged = true
+
+
+================================================================================
+  ENDPOINT 1 — OBTENER CARRITO
+================================================================================
+
+GET /api/v1/cart
+Authorization: Bearer <token>
+
+RESPUESTA EXITOSA 200 OK:
+  Si tiene ítems:
+  {
+    "cartId": 3,
+    "status": "ACTIVE",
+    "updatedAt": "2026-05-14T10:30:00",
+    "total": 225.00,
+    "sellerGroups": [ ... ]
+  }
+
+  Si no tiene carrito aún (nunca agregó ítems):
+  {
+    "cartId": null,
+    "status": "ACTIVE",
+    "updatedAt": null,
+    "total": 0,
+    "sellerGroups": []
+  }
+
+ERRORES:
+  404 → El usuario no tiene StoreProfile registrado
+
+
+================================================================================
+  ENDPOINT 2 — AGREGAR ÍTEM AL CARRITO
+================================================================================
+
+POST /api/v1/cart/items
+Authorization: Bearer <token>
+Content-Type: application/json
+
+REQUEST BODY:
+{
+  "variantId": 5,     // Long, requerido — ID de la variante del producto
+  "quantity":  2      // Integer, requerido, mínimo 1
+}
+
+RESPUESTA EXITOSA 201 Created:
+  Retorna el CartResponse completo y actualizado.
+
+COMPORTAMIENTO:
+  - Si el carrito no existe → se crea automáticamente
+  - Si la variante YA está en el carrito → se SUMA la cantidad (no reemplaza)
+      Ej: ya tenías quantity=2 y envías quantity=1 → queda quantity=3
+  - Si el carrito expiró (>180 días sin actividad) → se crea uno nuevo
+
+ERRORES:
+  400 → variantId null, quantity null o quantity < 1
+  404 → Variante no encontrada
+  404 → StoreProfile no encontrado
+
+
+================================================================================
+  ENDPOINT 3 — ACTUALIZAR CANTIDAD DE UN ÍTEM
+================================================================================
+
+PATCH /api/v1/cart/items/{itemId}
+Authorization: Bearer <token>
+Content-Type: application/json
+
+PATH PARAM:
+  itemId → Long, el ID del ítem (campo "itemId" en CartItemResponse)
+
+REQUEST BODY:
+{
+  "quantity": 3     // Integer, requerido, mínimo 1
+}
+
+RESPUESTA EXITOSA 200 OK:
+  Retorna el CartResponse completo y actualizado.
+
+COMPORTAMIENTO:
+  - Reemplaza la cantidad actual con la nueva cantidad (no suma)
+  - Para eliminar un ítem usar DELETE, no quantity=0 (no está permitido)
+
+ERRORES:
+  400 → quantity null o quantity < 1
+  404 → Carrito no encontrado o expirado
+  404 → Ítem no pertenece al carrito del usuario
+
+
+================================================================================
+  ENDPOINT 4 — ELIMINAR UN ÍTEM DEL CARRITO
+================================================================================
+
+DELETE /api/v1/cart/items/{itemId}
+Authorization: Bearer <token>
+
+PATH PARAM:
+  itemId → Long, el ID del ítem (campo "itemId" en CartItemResponse)
+
+RESPUESTA EXITOSA 204 No Content
+  (sin body)
+
+ERRORES:
+  404 → Carrito no encontrado o expirado
+  404 → Ítem no pertenece al carrito del usuario
+
+
+================================================================================
+  ENDPOINT 5 — VACIAR CARRITO COMPLETO
+================================================================================
+
+DELETE /api/v1/cart
+Authorization: Bearer <token>
+
+RESPUESTA EXITOSA 204 No Content
+  (sin body)
+
+COMPORTAMIENTO:
+  - Elimina TODOS los ítems del carrito
+  - El carrito sigue existiendo en base de datos (status ACTIVE), solo queda vacío
+  - Si no hay carrito activo → no hace nada, igual retorna 204
+
+ERRORES:
+  404 → StoreProfile no encontrado
+
+
+================================================================================
+  FLUJO TÍPICO DE INTEGRACIÓN
+================================================================================
+
+1. CARGAR CARRITO AL INICIAR SESIÓN
+   GET /api/v1/cart
+   → Mostrar badge con cantidad total de ítems
+   → Si sellerGroups.length > 0 mostrar contenido, si no mostrar "carrito vacío"
+
+2. AGREGAR PRODUCTO DESDE CATÁLOGO
+   El front debe conocer el variantId de la variante seleccionada.
+   POST /api/v1/cart/items  { variantId: X, quantity: 1 }
+   → Actualizar estado del carrito con la respuesta
+   → Actualizar badge de cantidad
+
+3. MOSTRAR EL CARRITO
+   Renderizar por sellerGroups (cada grupo es un vendedor):
+   ┌─────────────────────────────────────┐
+   │ Vendedor: Juan Paragon              │
+   │  · Camiseta Premium x2  $150.00    │
+   │    ⚠ Precio cambió de $60 a $75   │  ← mostrar si priceChanged=true
+   │  Subtotal vendedor: $150.00         │
+   ├─────────────────────────────────────┤
+   │ TOTAL: $150.00                      │
+   └─────────────────────────────────────┘
+
+4. CAMBIAR CANTIDAD
+   PATCH /api/v1/cart/items/{itemId}  { quantity: nuevaCantidad }
+   → Actualizar estado con la respuesta
+
+5. ELIMINAR UN ÍTEM
+   DELETE /api/v1/cart/items/{itemId}
+   → Refrescar carrito: GET /api/v1/cart
+
+6. VACIAR CARRITO
+   DELETE /api/v1/cart
+   → Mostrar carrito vacío
+
+
+================================================================================
+  REGLAS DE NEGOCIO IMPORTANTES PARA EL FRONT
+================================================================================
+
+TTL 180 DÍAS:
+  - Si el usuario no toca el carrito en 180 días, este expira automáticamente
+  - Al intentar agregar un ítem a un carrito expirado, se crea uno nuevo vacío
+  - El front no necesita manejar esto explícitamente; el backend lo resuelve
+
+CAMBIO DE PRECIO:
+  - Si priceChanged = true en algún ítem, mostrar advertencia visible al usuario
+  - El checkout siempre usa unitPrice (precio actual)
+  - Sugerencia UI: mostrar tachado previousPrice y resaltado unitPrice
+
+AGRUPACIÓN POR VENDEDOR:
+  - Los ítems siempre vienen agrupados por seller
+  - El total global está en CartResponse.total
+  - Cada grupo tiene su subtotal en CartSellerGroupResponse.subtotal
+
+CANTIDAD AL AGREGAR:
+  - POST /items SUMA a la cantidad existente si la variante ya está en el carrito
+  - Si quieres "setear" la cantidad, usa PATCH /items/{itemId}
+
+CARRITO VACÍO:
+  - cartId = null significa que el usuario nunca ha tenido carrito
+  - sellerGroups = [] significa carrito sin ítems
+
+
+================================================================================
+  RESUMEN DE ENDPOINTS
+================================================================================
+
+  Método    Ruta                          Descripción              Respuesta
+  --------  ----------------------------  -----------------------  ----------
+  GET       /api/v1/cart                  Obtener carrito          200 CartResponse
+  POST      /api/v1/cart/items            Agregar ítem             201 CartResponse
+  PATCH     /api/v1/cart/items/{itemId}   Actualizar cantidad      200 CartResponse
+  DELETE    /api/v1/cart/items/{itemId}   Eliminar ítem            204 (vacío)
+  DELETE    /api/v1/cart                  Vaciar carrito           204 (vacío)
+
+
+================================================================================
+  MANEJO DE ERRORES GENÉRICO
+================================================================================
+
+  HTTP 400 Bad Request   → Validación fallida (campo requerido, valor inválido)
+  HTTP 403 Forbidden     → Token ausente, inválido o expirado
+  HTTP 404 Not Found     → Recurso no encontrado (variante, ítem, perfil)
+  HTTP 500               → Error interno del servidor
+
+Estructura de error:
+  {
+    "status":  404,
+    "error":   "Not Found",
+    "message": "Variant not found",
+    "path":    "/api/v1/cart/items"
+  }
+
+================================================================================
