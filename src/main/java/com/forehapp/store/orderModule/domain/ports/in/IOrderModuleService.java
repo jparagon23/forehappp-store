@@ -10,4 +10,5 @@ public interface IOrderModuleService {
     void prepareGroup(Long userId, Long groupId);
     void shipGroup(Long userId, Long groupId, String trackingNumber);
     void deliverGroup(Long userId, Long groupId);
+    void cancelGroup(Long userId, Long groupId, String reason);
 }

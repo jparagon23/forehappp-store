@@ -67,6 +67,8 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
         group.setStatus(OrderSellerGroupStatus.PREPARING);
         group.setPreparedAt(LocalDateTime.now());
         orderGroupDao.save(group);
+
+        eventPublisher.publishEvent(buildStatusEvent(group));
     }
 
     @Override
@@ -85,7 +87,7 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
         group.setShippedAt(LocalDateTime.now());
         orderGroupDao.save(group);
 
-        eventPublisher.publishEvent(buildShippedEvent(group));
+        eventPublisher.publishEvent(buildStatusEvent(group));
     }
 
     @Override
@@ -102,6 +104,29 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
         group.setStatus(OrderSellerGroupStatus.DELIVERED);
         group.setDeliveredAt(LocalDateTime.now());
         orderGroupDao.save(group);
+
+        eventPublisher.publishEvent(buildStatusEvent(group));
+    }
+
+    @Override
+    @Transactional
+    public void cancelGroup(Long userId, Long groupId, String reason) {
+        StoreProfile seller = resolveSeller(userId);
+        OrderSellerGroup group = resolveGroup(groupId, seller.getId());
+
+        if (group.getStatus() == OrderSellerGroupStatus.SHIPPED
+                || group.getStatus() == OrderSellerGroupStatus.DELIVERED
+                || group.getStatus() == OrderSellerGroupStatus.CANCELLED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Cannot cancel a group in " + group.getStatus() + " status");
+        }
+
+        group.setStatus(OrderSellerGroupStatus.CANCELLED);
+        group.setCancellationReason(reason.trim());
+        group.setCancelledAt(LocalDateTime.now());
+        orderGroupDao.save(group);
+
+        eventPublisher.publishEvent(buildStatusEvent(group));
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────
@@ -124,7 +149,7 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
         return group;
     }
 
-    private OrderStatusChangedEvent buildShippedEvent(OrderSellerGroup group) {
+    private OrderStatusChangedEvent buildStatusEvent(OrderSellerGroup group) {
         String buyerEmail = group.getOrder().getBuyer().getUser().getEmail();
         String buyerName = group.getOrder().getBuyer().getUser().getName()
                 + " " + group.getOrder().getBuyer().getUser().getLastname();
@@ -141,8 +166,9 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
                 group.getOrder().getId(),
                 buyerEmail,
                 buyerName,
-                OrderSellerGroupStatus.SHIPPED,
+                group.getStatus(),
                 group.getTrackingNumber(),
+                group.getCancellationReason(),
                 group.getOrder().getShippingAddress(),
                 group.getOrder().getShippingCity(),
                 group.getOrder().getShippingCountry(),
@@ -181,6 +207,8 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
                 group.getPreparedAt(),
                 group.getShippedAt(),
                 group.getDeliveredAt(),
+                group.getCancelledAt(),
+                group.getCancellationReason(),
                 items
         );
     }

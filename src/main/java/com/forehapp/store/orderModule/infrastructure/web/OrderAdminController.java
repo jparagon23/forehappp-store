@@ -1,6 +1,7 @@
 package com.forehapp.store.orderModule.infrastructure.web;
 
 import com.forehapp.store.orderModule.domain.ports.in.IOrderModuleService;
+import com.forehapp.store.orderModule.infrastructure.web.dto.CancelGroupRequestDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.SellerOrderGroupDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.ShipGroupRequestDto;
 import jakarta.validation.Valid;
@@ -55,6 +56,15 @@ public class OrderAdminController {
             @AuthenticationPrincipal String userId,
             @PathVariable Long groupId) {
         orderModuleService.deliverGroup(Long.parseLong(userId), groupId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{groupId}/cancel")
+    public ResponseEntity<Void> cancel(
+            @AuthenticationPrincipal String userId,
+            @PathVariable Long groupId,
+            @Valid @RequestBody CancelGroupRequestDto dto) {
+        orderModuleService.cancelGroup(Long.parseLong(userId), groupId, dto.reason());
         return ResponseEntity.noContent().build();
     }
 }

@@ -17,5 +17,7 @@ public record SellerOrderGroupDto(
         LocalDateTime preparedAt,
         LocalDateTime shippedAt,
         LocalDateTime deliveredAt,
+        LocalDateTime cancelledAt,
+        String cancellationReason,
         List<OrderItemDto> items
 ) {}

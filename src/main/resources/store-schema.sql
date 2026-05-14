@@ -206,6 +206,16 @@ PREPARE _stmt FROM @s;
 EXECUTE _stmt;
 DEALLOCATE PREPARE _stmt;
 
+SET @s = (SELECT IF(COUNT(*)=0,'ALTER TABLE store_order_seller_groups ADD COLUMN cancelled_at DATETIME','SELECT 1') FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_order_seller_groups' AND COLUMN_NAME='cancelled_at');
+PREPARE _stmt FROM @s;
+EXECUTE _stmt;
+DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*)=0,'ALTER TABLE store_order_seller_groups ADD COLUMN cancellation_reason VARCHAR(500)','SELECT 1') FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_order_seller_groups' AND COLUMN_NAME='cancellation_reason');
+PREPARE _stmt FROM @s;
+EXECUTE _stmt;
+DEALLOCATE PREPARE _stmt;
+
 CREATE TABLE IF NOT EXISTS store_order_items (
     item_id    BIGINT AUTO_INCREMENT PRIMARY KEY,
     group_id   BIGINT NOT NULL,

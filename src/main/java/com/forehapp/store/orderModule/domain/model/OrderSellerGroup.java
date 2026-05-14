@@ -50,6 +50,12 @@ public class OrderSellerGroup {
     @Column(name = "delivered_at")
     private LocalDateTime deliveredAt;
 
+    @Column(name = "cancelled_at")
+    private LocalDateTime cancelledAt;
+
+    @Column(name = "cancellation_reason", length = 500)
+    private String cancellationReason;
+
     @BatchSize(size = 30)
     @OneToMany(mappedBy = "sellerGroup", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderItem> items = new ArrayList<>();
