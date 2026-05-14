@@ -53,6 +53,10 @@ public class OrderMapper {
                 sellerName,
                 group.getStatus().name(),
                 group.getSubtotal(),
+                group.getTrackingNumber(),
+                group.getPreparedAt(),
+                group.getShippedAt(),
+                group.getDeliveredAt(),
                 items
         );
     }

@@ -4,10 +4,13 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
-public record OrderSellerGroupDto(
+public record SellerOrderGroupDto(
         Long groupId,
-        Long sellerId,
-        String sellerName,
+        Long orderId,
+        String buyerName,
+        String shippingAddress,
+        String shippingCity,
+        String shippingCountry,
         String status,
         BigDecimal subtotal,
         String trackingNumber,

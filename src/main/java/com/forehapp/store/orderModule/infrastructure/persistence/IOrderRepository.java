@@ -14,9 +14,6 @@ public interface IOrderRepository extends JpaRepository<Order, Long> {
            "LEFT JOIN FETCH o.sellerGroups sg " +
            "LEFT JOIN FETCH sg.seller sel " +
            "LEFT JOIN FETCH sel.user " +
-           "LEFT JOIN FETCH sg.items i " +
-           "LEFT JOIN FETCH i.variant v " +
-           "LEFT JOIN FETCH v.product p " +
            "WHERE o.id = :orderId")
     Optional<Order> findByIdWithGroups(@Param("orderId") Long orderId);
 

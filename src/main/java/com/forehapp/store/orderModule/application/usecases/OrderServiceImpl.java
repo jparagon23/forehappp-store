@@ -14,6 +14,7 @@ import com.forehapp.store.orderModule.domain.ports.in.IOrderService;
 import com.forehapp.store.orderModule.domain.ports.out.IOrderDao;
 import com.forehapp.store.orderModule.infrastructure.web.dto.CreateOrderRequestDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.OrderResponse;
+import com.forehapp.store.orderModule.infrastructure.web.dto.OrderSummaryDto;
 import com.forehapp.store.paymentModule.domain.ports.in.IPaymentService;
 import com.forehapp.store.productModule.domain.model.ProductVariant;
 import com.forehapp.store.productModule.domain.ports.out.IProductVariantDao;
@@ -216,6 +217,15 @@ public class OrderServiceImpl implements IOrderService {
                 order.getCreatedAt(),
                 sellerGroups
         );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<OrderSummaryDto> getMyOrders(Long userId) {
+        StoreProfile buyer = resolveProfile(userId);
+        return orderDao.findAllByBuyerIdOrderByCreatedAtDesc(buyer.getId()).stream()
+                .map(orderMapper::toSummary)
+                .toList();
     }
 
     private StoreProfile resolveProfile(Long userId) {

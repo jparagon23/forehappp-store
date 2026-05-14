@@ -4,8 +4,11 @@ import com.mercadopago.client.payment.PaymentClient;
 import com.mercadopago.resources.payment.Payment;
 import com.forehapp.store.orderModule.domain.events.OrderPaidEvent;
 import com.forehapp.store.orderModule.domain.model.Order;
+import com.forehapp.store.orderModule.domain.model.OrderSellerGroup;
+import com.forehapp.store.orderModule.domain.model.OrderSellerGroupStatus;
 import com.forehapp.store.orderModule.domain.model.OrderStatus;
 import com.forehapp.store.orderModule.domain.ports.out.IOrderDao;
+import com.forehapp.store.orderModule.domain.ports.out.IOrderGroupDao;
 import com.forehapp.store.paymentModule.domain.model.PaymentStatus;
 import com.forehapp.store.paymentModule.domain.ports.in.IPaymentModuleService;
 import com.forehapp.store.paymentModule.infrastructure.persistence.IPaymentRepository;
@@ -22,13 +25,16 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
 
     private final IPaymentRepository paymentRepository;
     private final IOrderDao orderDao;
+    private final IOrderGroupDao orderGroupDao;
     private final ApplicationEventPublisher eventPublisher;
 
     public PaymentModuleServiceImpl(IPaymentRepository paymentRepository,
                                     IOrderDao orderDao,
+                                    IOrderGroupDao orderGroupDao,
                                     ApplicationEventPublisher eventPublisher) {
         this.paymentRepository = paymentRepository;
         this.orderDao = orderDao;
+        this.orderGroupDao = orderGroupDao;
         this.eventPublisher = eventPublisher;
     }
 
@@ -87,6 +93,8 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
                     orderDao.save(order);
                     log.info("[Webhook] Order {} marked as PAID", orderId);
 
+                    transitionGroupsToPreparing(orderId);
+
                     String buyerEmail = order.getBuyer().getUser().getEmail();
                     String buyerName  = order.getBuyer().getUser().getName() + " " + order.getBuyer().getUser().getLastname();
                     eventPublisher.publishEvent(new OrderPaidEvent(
@@ -111,6 +119,18 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
                 }
             }
             default -> log.info("[Webhook] Ignored MP status={} for orderId={}", mpStatus, orderId);
+        }
+    }
+
+    private void transitionGroupsToPreparing(Long orderId) {
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        for (OrderSellerGroup group : orderGroupDao.findAllByOrderId(orderId)) {
+            if (group.getStatus() == OrderSellerGroupStatus.PENDING) {
+                group.setStatus(OrderSellerGroupStatus.PREPARING);
+                group.setPreparedAt(now);
+                orderGroupDao.save(group);
+                log.info("[Webhook] Group {} transitioned to PREPARING", group.getId());
+            }
         }
     }
 }
