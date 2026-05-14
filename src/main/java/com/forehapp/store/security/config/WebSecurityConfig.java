@@ -81,8 +81,13 @@ public class WebSecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/v1/login", "/api/v1/auth/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhook").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/products/public/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/products/*/images").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/categories").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/categories/*/attributes").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/brands").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/brands/*/lines").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session ->

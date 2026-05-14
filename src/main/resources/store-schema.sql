@@ -173,14 +173,48 @@ CREATE TABLE IF NOT EXISTS store_orders (
 );
 
 CREATE TABLE IF NOT EXISTS store_order_seller_groups (
-    group_id   BIGINT AUTO_INCREMENT PRIMARY KEY,
-    order_id   BIGINT NOT NULL,
-    seller_id  BIGINT NOT NULL,
-    status     VARCHAR(20) NOT NULL DEFAULT 'PENDING',
-    subtotal   DECIMAL(14,2) NOT NULL,
+    group_id        BIGINT AUTO_INCREMENT PRIMARY KEY,
+    order_id        BIGINT NOT NULL,
+    seller_id       BIGINT NOT NULL,
+    status          VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    subtotal        DECIMAL(14,2) NOT NULL,
+    tracking_number VARCHAR(100),
+    prepared_at     DATETIME,
+    shipped_at      DATETIME,
+    delivered_at    DATETIME,
     CONSTRAINT store_fk_osg_order  FOREIGN KEY (order_id)  REFERENCES store_orders(order_id),
     CONSTRAINT store_fk_osg_seller FOREIGN KEY (seller_id) REFERENCES store_profiles(store_profile_id)
 );
+
+SET @s = (SELECT IF(COUNT(*)=0,'ALTER TABLE store_order_seller_groups ADD COLUMN tracking_number VARCHAR(100)','SELECT 1') FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_order_seller_groups' AND COLUMN_NAME='tracking_number');
+PREPARE _stmt FROM @s;
+EXECUTE _stmt;
+DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*)=0,'ALTER TABLE store_order_seller_groups ADD COLUMN prepared_at DATETIME','SELECT 1') FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_order_seller_groups' AND COLUMN_NAME='prepared_at');
+PREPARE _stmt FROM @s;
+EXECUTE _stmt;
+DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*)=0,'ALTER TABLE store_order_seller_groups ADD COLUMN shipped_at DATETIME','SELECT 1') FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_order_seller_groups' AND COLUMN_NAME='shipped_at');
+PREPARE _stmt FROM @s;
+EXECUTE _stmt;
+DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*)=0,'ALTER TABLE store_order_seller_groups ADD COLUMN delivered_at DATETIME','SELECT 1') FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_order_seller_groups' AND COLUMN_NAME='delivered_at');
+PREPARE _stmt FROM @s;
+EXECUTE _stmt;
+DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*)=0,'ALTER TABLE store_order_seller_groups ADD COLUMN cancelled_at DATETIME','SELECT 1') FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_order_seller_groups' AND COLUMN_NAME='cancelled_at');
+PREPARE _stmt FROM @s;
+EXECUTE _stmt;
+DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*)=0,'ALTER TABLE store_order_seller_groups ADD COLUMN cancellation_reason VARCHAR(500)','SELECT 1') FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_order_seller_groups' AND COLUMN_NAME='cancellation_reason');
+PREPARE _stmt FROM @s;
+EXECUTE _stmt;
+DEALLOCATE PREPARE _stmt;
 
 CREATE TABLE IF NOT EXISTS store_order_items (
     item_id    BIGINT AUTO_INCREMENT PRIMARY KEY,
