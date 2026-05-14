@@ -3,7 +3,10 @@ package com.forehapp.store.inventoryModule.application.usecases;
 import com.forehapp.store.general.exceptions.BadRequestException;
 import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.inventoryModule.application.dto.AdjustInventoryRequestDto;
+import com.forehapp.store.inventoryModule.application.dto.InventoryMovementResponse;
 import com.forehapp.store.inventoryModule.domain.ports.in.IInventoryService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import com.forehapp.store.productModule.domain.model.*;
 import com.forehapp.store.productModule.domain.ports.out.IInventoryMovementDao;
 import com.forehapp.store.productModule.domain.ports.out.IProductDao;
@@ -79,6 +82,43 @@ public class InventoryServiceImpl implements IInventoryService {
         movementDao.incrementStock(variantId, dto.getQuantity());
 
         syncProductStockStatus(product);
+    }
+
+    @Override
+    public Page<InventoryMovementResponse> getMovements(Long productId, Long variantId,
+                                                         MovementReason reason, Pageable pageable,
+                                                         Long userId) {
+        StoreProfile profile = storeProfileDao.findByUserId(userId)
+                .orElseThrow(() -> new NotFoundException("Store profile not found"));
+
+        boolean isAdmin = profile.getRoles().contains(StoreRole.STORE_ADMIN);
+        boolean isSeller = profile.getRoles().contains(StoreRole.SELLER);
+
+        if (!isAdmin && !isSeller) {
+            throw new BadRequestException("User does not have permission to view inventory movements");
+        }
+
+        Product product = productDao.findById(productId)
+                .orElseThrow(() -> new NotFoundException("Product not found"));
+
+        if (isSeller && !isAdmin && !product.getSeller().getId().equals(profile.getId())) {
+            throw new BadRequestException("Product does not belong to this seller");
+        }
+
+        variantDao.findByIdAndProductId(variantId, productId)
+                .orElseThrow(() -> new NotFoundException("Variant not found for this product"));
+
+        return movementDao.findByVariant(variantId, reason, pageable)
+                .map(this::toResponse);
+    }
+
+    private InventoryMovementResponse toResponse(InventoryMovement movement) {
+        InventoryMovementResponse response = new InventoryMovementResponse();
+        response.setId(movement.getId());
+        response.setQuantity(movement.getQuantity());
+        response.setReason(movement.getReason());
+        response.setCreatedAt(movement.getCreatedAt());
+        return response;
     }
 
     private void syncProductStockStatus(Product product) {

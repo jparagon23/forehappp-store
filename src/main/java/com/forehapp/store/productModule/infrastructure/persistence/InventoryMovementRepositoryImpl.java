@@ -1,7 +1,10 @@
 package com.forehapp.store.productModule.infrastructure.persistence;
 
 import com.forehapp.store.productModule.domain.model.InventoryMovement;
+import com.forehapp.store.productModule.domain.model.MovementReason;
 import com.forehapp.store.productModule.domain.ports.out.IInventoryMovementDao;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -21,5 +24,10 @@ public class InventoryMovementRepositoryImpl implements IInventoryMovementDao {
     @Override
     public void incrementStock(Long variantId, int delta) {
         jpaRepository.incrementStock(variantId, delta);
+    }
+
+    @Override
+    public Page<InventoryMovement> findByVariant(Long variantId, MovementReason reason, Pageable pageable) {
+        return jpaRepository.findByVariant(variantId, reason, pageable);
     }
 }
