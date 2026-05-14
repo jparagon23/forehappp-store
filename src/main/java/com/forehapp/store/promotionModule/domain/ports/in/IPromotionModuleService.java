@@ -9,6 +9,7 @@ public interface IPromotionModuleService {
     CouponResponse createCoupon(Long userId, CreateCouponRequestDto dto);
     CouponResponse updateCoupon(Long userId, Long couponId, UpdateCouponRequestDto dto);
     CouponResponse deactivateCoupon(Long userId, Long couponId);
-    Page<CouponResponse> listCoupons(Long userId, int page, int size);
+    Page<CouponResponse> listMyCoupons(Long userId, int page, int size);
     CouponResponse getCoupon(Long userId, Long couponId);
+    Page<CouponResponse> listAllCoupons(Long userId, int page, int size);
 }

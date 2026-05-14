@@ -1,5 +1,6 @@
 package com.forehapp.store.promotionModule.domain.model;
 
+import com.forehapp.store.userModule.domain.model.StoreProfile;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -19,6 +20,10 @@ public class Coupon {
     @Column(name = "coupon_id")
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "seller_id", nullable = false)
+    private StoreProfile seller;
 
     @Column(nullable = false, length = 50, unique = true)
     private String code;

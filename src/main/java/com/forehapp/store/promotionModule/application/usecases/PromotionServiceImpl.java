@@ -38,7 +38,7 @@ public class PromotionServiceImpl implements IPromotionService {
         Coupon coupon = couponDao.findByCode(dto.code().toUpperCase())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Coupon not found"));
 
-        String error = checkCouponRules(coupon, dto.orderAmount(), profile.getId());
+        String error = checkCouponRules(coupon, dto.sellerId(), dto.orderAmount(), profile.getId());
         if (error != null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error);
         }
@@ -65,7 +65,7 @@ public class PromotionServiceImpl implements IPromotionService {
         Coupon coupon = couponDao.findByCode(dto.code().toUpperCase())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Coupon not found"));
 
-        String error = checkCouponRules(coupon, dto.orderAmount(), profile.getId());
+        String error = checkCouponRules(coupon, dto.sellerId(), dto.orderAmount(), profile.getId());
         if (error != null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error);
         }
@@ -95,7 +95,10 @@ public class PromotionServiceImpl implements IPromotionService {
         );
     }
 
-    private String checkCouponRules(Coupon coupon, BigDecimal orderAmount, Long profileId) {
+    private String checkCouponRules(Coupon coupon, Long sellerId, BigDecimal orderAmount, Long profileId) {
+        if (!coupon.getSeller().getId().equals(sellerId)) {
+            return "Coupon is not valid for this seller";
+        }
         if (coupon.getStatus() != PromotionStatus.ACTIVA) {
             return "Coupon is not active";
         }

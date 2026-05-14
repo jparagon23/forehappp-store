@@ -37,6 +37,11 @@ public class PromotionRepositoryImpl implements ICouponDao {
     }
 
     @Override
+    public Page<Coupon> findBySellerId(Long sellerId, Pageable pageable) {
+        return couponRepository.findBySellerId(sellerId, pageable);
+    }
+
+    @Override
     public Coupon save(Coupon coupon) {
         return couponRepository.save(coupon);
     }

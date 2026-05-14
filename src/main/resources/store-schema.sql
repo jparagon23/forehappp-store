@@ -283,6 +283,7 @@ CREATE TABLE IF NOT EXISTS store_product_reviews (
 
 CREATE TABLE IF NOT EXISTS store_coupons (
     coupon_id         BIGINT AUTO_INCREMENT PRIMARY KEY,
+    seller_id         BIGINT NOT NULL,
     code              VARCHAR(50) NOT NULL,
     description       VARCHAR(255),
     discount_type     VARCHAR(20) NOT NULL,
@@ -295,7 +296,8 @@ CREATE TABLE IF NOT EXISTS store_coupons (
     valid_until       DATE,
     status            VARCHAR(20) NOT NULL DEFAULT 'ACTIVA',
     created_at        DATETIME NOT NULL,
-    CONSTRAINT uk_coupon_code UNIQUE (code)
+    CONSTRAINT uk_coupon_code UNIQUE (code),
+    CONSTRAINT fk_coupon_seller FOREIGN KEY (seller_id) REFERENCES store_profiles(store_profile_id)
 );
 
 CREATE TABLE IF NOT EXISTS store_coupon_redemptions (
