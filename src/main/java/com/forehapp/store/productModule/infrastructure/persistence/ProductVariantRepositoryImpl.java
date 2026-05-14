@@ -21,6 +21,11 @@ public class ProductVariantRepositoryImpl implements IProductVariantDao {
     }
 
     @Override
+    public Optional<ProductVariant> findByIdForUpdate(Long variantId) {
+        return jpaRepository.findByIdForUpdate(variantId);
+    }
+
+    @Override
     public Optional<ProductVariant> findByIdAndProductId(Long variantId, Long productId) {
         return jpaRepository.findByIdAndProductId(variantId, productId);
     }
