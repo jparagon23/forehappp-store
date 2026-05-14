@@ -1,4 +1,3 @@
 package com.forehapp.store.promotionModule.infrastructure.web.dto;
 
-public class PromotionResponse {
-}
+// DTOs are in promotionModule.application.dto — see CouponResponse there

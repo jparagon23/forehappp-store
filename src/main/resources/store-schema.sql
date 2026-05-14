@@ -280,3 +280,31 @@ CREATE TABLE IF NOT EXISTS store_product_reviews (
     CONSTRAINT fk_review_product FOREIGN KEY (product_id)       REFERENCES store_products(product_id),
     CONSTRAINT fk_review_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id)
 );
+
+CREATE TABLE IF NOT EXISTS store_coupons (
+    coupon_id         BIGINT AUTO_INCREMENT PRIMARY KEY,
+    code              VARCHAR(50) NOT NULL,
+    description       VARCHAR(255),
+    discount_type     VARCHAR(20) NOT NULL,
+    discount_value    DECIMAL(14,2) NOT NULL,
+    min_order_amount  DECIMAL(14,2),
+    max_uses          INT,
+    uses_count        INT NOT NULL DEFAULT 0,
+    max_uses_per_user INT NOT NULL DEFAULT 1,
+    valid_from        DATE NOT NULL,
+    valid_until       DATE,
+    status            VARCHAR(20) NOT NULL DEFAULT 'ACTIVA',
+    created_at        DATETIME NOT NULL,
+    CONSTRAINT uk_coupon_code UNIQUE (code)
+);
+
+CREATE TABLE IF NOT EXISTS store_coupon_redemptions (
+    redemption_id    BIGINT AUTO_INCREMENT PRIMARY KEY,
+    coupon_id        BIGINT NOT NULL,
+    store_profile_id BIGINT NOT NULL,
+    order_id         BIGINT,
+    discount_applied DECIMAL(14,2) NOT NULL,
+    used_at          DATETIME NOT NULL,
+    CONSTRAINT fk_cr_coupon  FOREIGN KEY (coupon_id)        REFERENCES store_coupons(coupon_id),
+    CONSTRAINT fk_cr_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id)
+);
