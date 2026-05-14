@@ -10,25 +10,32 @@ AUTENTICACIÓN: Bearer Token (JWT) en header Authorization
 TODOS los endpoints requieren autenticación (no hay endpoints públicos).
 Si no se envía token o es inválido → 403 Forbidden
 
+IMPORTANTE — CUPONES SCOPED POR SELLER:
+  Cada cupón pertenece a un seller específico.
+  Un cupón de Seller A NO aplica a productos de Seller B.
+  El front DEBE enviar el sellerId del grupo correspondiente al validar/canjear.
+
 
 ================================================================================
   MODELOS DE RESPUESTA
 ================================================================================
 
-── CouponResponse (admin) ──────────────────────────────────────────────────────
+── CouponResponse ──────────────────────────────────────────────────────────────
 {
   "couponId":        1,
-  "code":            "VERANO2026",
-  "description":     "Descuento de verano 20%",
-  "discountType":    "PORCENTAJE",    // "PORCENTAJE" | "MONTO_FIJO"
-  "discountValue":   20.00,           // 20.00 = 20% | 15000.00 = $15.000 fijo
-  "minOrderAmount":  50000.00,        // null si no tiene mínimo
-  "maxUses":         100,             // null = usos ilimitados
-  "usesCount":       37,              // usos acumulados hasta ahora
-  "maxUsesPerUser":  1,               // máximo de usos por persona
+  "sellerId":        7,                  // ID del seller dueño del cupón
+  "sellerName":      "Tienda Sport",     // Nombre del seller
+  "code":            "SPORT20",
+  "description":     "20% en toda la tienda Sport",
+  "discountType":    "PORCENTAJE",       // "PORCENTAJE" | "MONTO_FIJO"
+  "discountValue":   20.00,             // 20.00 = 20% | 15000.00 = $15.000 fijo
+  "minOrderAmount":  50000.00,          // null si no tiene mínimo
+  "maxUses":         100,               // null = usos ilimitados
+  "usesCount":       37,                // usos acumulados hasta ahora
+  "maxUsesPerUser":  1,                 // máximo de usos por persona
   "validFrom":       "2026-05-01",
-  "validUntil":      "2026-06-30",    // null = sin fecha de vencimiento
-  "status":          "ACTIVA",        // "ACTIVA" | "INACTIVA"
+  "validUntil":      "2026-06-30",      // null = sin fecha de vencimiento
+  "status":          "ACTIVA",          // "ACTIVA" | "INACTIVA"
   "createdAt":       "2026-04-28T10:00:00"
 }
 
@@ -36,11 +43,11 @@ Si no se envía token o es inválido → 403 Forbidden
 {
   "valid":           true,
   "couponId":        1,
-  "code":            "VERANO2026",
+  "code":            "SPORT20",
   "discountType":    "PORCENTAJE",
   "discountValue":   20.00,
-  "discountAmount":  16000.00,   // monto descontado calculado para este pedido
-  "finalAmount":     64000.00,   // total a pagar después del descuento
+  "discountAmount":  16000.00,   // monto descontado calculado para este grupo
+  "finalAmount":     64000.00,   // subtotal del grupo después del descuento
   "message":         "Coupon applied successfully" | "Coupon redeemed successfully"
 }
 
@@ -54,7 +61,7 @@ Si no se envía token o es inválido → 403 Forbidden
 
   MONTO_FIJO  → discountValue es la cantidad exacta a descontar en la moneda local
                 discountAmount = min(discountValue, orderAmount)
-                (no puede descontar más que el total del pedido)
+                (no puede descontar más que el subtotal del grupo)
 
 
 ================================================================================
@@ -67,15 +74,16 @@ Content-Type: application/json
 
 REQUEST BODY:
 {
-  "code":        "VERANO2026",   // String, requerido — no distingue mayúsculas/minúsculas
-  "orderAmount": 80000.00        // BigDecimal, requerido — total del carrito antes del descuento
+  "code":        "SPORT20",    // String, requerido — no distingue mayúsculas/minúsculas
+  "sellerId":    7,            // Long, requerido — ID del seller del grupo en el carrito
+  "orderAmount": 80000.00      // BigDecimal, requerido — subtotal del grupo de ese seller
 }
 
 RESPUESTA EXITOSA 200 OK:
 {
   "valid":          true,
   "couponId":       1,
-  "code":           "VERANO2026",
+  "code":           "SPORT20",
   "discountType":   "PORCENTAJE",
   "discountValue":  20.00,
   "discountAmount": 16000.00,
@@ -85,11 +93,13 @@ RESPUESTA EXITOSA 200 OK:
 
 COMPORTAMIENTO:
   - Solo valida, NO registra el uso ni modifica contadores
+  - Verifica que el cupón pertenezca al seller indicado en sellerId
   - Usar para mostrar el descuento en tiempo real mientras el usuario escribe el código
   - El código se normaliza a mayúsculas automáticamente
 
 ERRORES:
   400 → Cupón no aplica. El campo "message" indica el motivo:
+        "Coupon is not valid for this seller"
         "Coupon is not active"
         "Coupon is not yet valid"
         "Coupon has expired"
@@ -109,16 +119,17 @@ Content-Type: application/json
 
 REQUEST BODY:
 {
-  "code":        "VERANO2026",
+  "code":        "SPORT20",
+  "sellerId":    7,            // Long, requerido — mismo sellerId que en /validate
   "orderAmount": 80000.00,
-  "orderId":     123           // Long, opcional — ID de la orden creada (para trazabilidad)
+  "orderId":     123           // Long, opcional — ID de la orden creada (trazabilidad)
 }
 
 RESPUESTA EXITOSA 201 Created:
 {
   "valid":          true,
   "couponId":       1,
-  "code":           "VERANO2026",
+  "code":           "SPORT20",
   "discountType":   "PORCENTAJE",
   "discountValue":  20.00,
   "discountAmount": 16000.00,
@@ -127,7 +138,7 @@ RESPUESTA EXITOSA 201 Created:
 }
 
 COMPORTAMIENTO:
-  - Válida las mismas reglas que /validate
+  - Valida las mismas reglas que /validate (incluyendo sellerId)
   - Si todo es válido: registra el uso, incrementa el contador del cupón
   - El proceso es atómico: si falla algo, no se registra nada
   - Llamar UNA SOLA VEZ, justo después de crear la orden exitosamente
@@ -137,63 +148,69 @@ ERRORES:
 
 
 ================================================================================
-  ENDPOINTS ADMIN — GESTIÓN DE CUPONES (SOLO STORE_ADMIN)
+  ENDPOINTS SELLER — GESTIÓN DE CUPONES PROPIOS (SOLO SELLER)
 ================================================================================
 
-── ENDPOINT 3 — LISTAR CUPONES ─────────────────────────────────────────────────
+El seller solo puede crear, ver y gestionar sus propios cupones.
+Requiere rol SELLER en el JWT.
 
-GET /api/v1/admin/coupons?page=0&size=20
-Authorization: Bearer <token> (STORE_ADMIN)
+── ENDPOINT 3 — CREAR CUPÓN (SELLER) ──────────────────────────────────────────
+
+POST /api/v1/seller/coupons
+Authorization: Bearer <token> (SELLER)
+Content-Type: application/json
+
+REQUEST BODY:
+{
+  "code":           "SPORT20",         // requerido, máx 50 chars, se guarda en MAYÚSCULAS
+  "description":    "20% en mi tienda", // opcional, máx 255 chars
+  "discountType":   "PORCENTAJE",      // requerido: "PORCENTAJE" | "MONTO_FIJO"
+  "discountValue":  20.00,             // requerido, > 0
+  "minOrderAmount": 50000.00,          // opcional — monto mínimo del grupo para aplicar
+  "maxUses":        100,               // opcional — null = ilimitado
+  "maxUsesPerUser": 1,                 // requerido, mínimo 1
+  "validFrom":      "2026-05-01",      // requerido (YYYY-MM-DD)
+  "validUntil":     "2026-06-30"       // opcional — null = sin vencimiento
+}
+
+RESPUESTA EXITOSA 201 Created: CouponResponse con sellerId = el propio seller
+
+ERRORES:
+  400 → Campos inválidos o validUntil anterior a validFrom
+  403 → Sin rol SELLER
+  409 → El código ya existe en la plataforma
+
+── ENDPOINT 4 — MIS CUPONES (SELLER) ──────────────────────────────────────────
+
+GET /api/v1/seller/coupons?page=0&size=20
+Authorization: Bearer <token> (SELLER)
 
 RESPUESTA 200 OK — página de CouponResponse:
 {
   "content": [ ...CouponResponse ],
-  "totalElements": 12,
+  "totalElements": 5,
   "totalPages": 1,
   "number": 0,
   "size": 20
 }
 
-Ordenados por createdAt DESC (más recientes primero).
+Solo devuelve los cupones creados por el seller autenticado.
+Ordenados por createdAt DESC.
 
-── ENDPOINT 4 — OBTENER UN CUPÓN ───────────────────────────────────────────────
+── ENDPOINT 5 — DETALLE DE MI CUPÓN (SELLER) ───────────────────────────────────
 
-GET /api/v1/admin/coupons/{couponId}
-Authorization: Bearer <token> (STORE_ADMIN)
+GET /api/v1/seller/coupons/{couponId}
+Authorization: Bearer <token> (SELLER)
 
 RESPUESTA 200 OK: CouponResponse
-
-── ENDPOINT 5 — CREAR CUPÓN ────────────────────────────────────────────────────
-
-POST /api/v1/admin/coupons
-Authorization: Bearer <token> (STORE_ADMIN)
-Content-Type: application/json
-
-REQUEST BODY:
-{
-  "code":           "BIENVENIDO10",   // requerido, máx 50 chars, se guarda en MAYÚSCULAS
-  "description":    "10% para nuevos usuarios",  // opcional, máx 255 chars
-  "discountType":   "PORCENTAJE",     // requerido: "PORCENTAJE" | "MONTO_FIJO"
-  "discountValue":  10.00,            // requerido, > 0
-  "minOrderAmount": 30000.00,         // opcional — monto mínimo del pedido para aplicar
-  "maxUses":        500,              // opcional — null = ilimitado
-  "maxUsesPerUser": 1,                // requerido, mínimo 1
-  "validFrom":      "2026-05-01",     // requerido — fecha de inicio (YYYY-MM-DD)
-  "validUntil":     "2026-12-31"      // opcional — null = sin vencimiento
-}
-
-RESPUESTA EXITOSA 201 Created: CouponResponse
-
 ERRORES:
-  400 → Campos inválidos (validación)
-  400 → validUntil es anterior a validFrom
-  409 Conflict → El código ya existe
-      { "message": "Coupon code already exists" }
+  403 → El cupón pertenece a otro seller
+  404 → Cupón no encontrado
 
-── ENDPOINT 6 — ACTUALIZAR CUPÓN ───────────────────────────────────────────────
+── ENDPOINT 6 — ACTUALIZAR CUPÓN (SELLER) ──────────────────────────────────────
 
-PATCH /api/v1/admin/coupons/{couponId}
-Authorization: Bearer <token> (STORE_ADMIN)
+PATCH /api/v1/seller/coupons/{couponId}
+Authorization: Bearer <token> (SELLER)
 Content-Type: application/json
 
 REQUEST BODY (todos los campos son opcionales — solo enviar los que cambian):
@@ -207,19 +224,42 @@ REQUEST BODY (todos los campos son opcionales — solo enviar los que cambian):
 
 RESPUESTA 200 OK: CouponResponse actualizado
 
-NOTA: No se puede cambiar el código, tipo de descuento ni valor del descuento
-      una vez creado. Desactivar y crear uno nuevo si es necesario.
+NOTAS:
+  - No se puede cambiar el código, tipo ni valor del descuento
+  - Solo el seller dueño puede actualizar (403 si es otro seller)
 
-── ENDPOINT 7 — DESACTIVAR CUPÓN ───────────────────────────────────────────────
+── ENDPOINT 7 — DESACTIVAR CUPÓN (SELLER) ──────────────────────────────────────
 
-PATCH /api/v1/admin/coupons/{couponId}/deactivate
-Authorization: Bearer <token> (STORE_ADMIN)
+PATCH /api/v1/seller/coupons/{couponId}/deactivate
+Authorization: Bearer <token> (SELLER)
 Sin body.
 
 RESPUESTA 200 OK: CouponResponse con "status": "INACTIVA"
 
 NOTA: Un cupón desactivado NO puede ser canjeado por los compradores.
-      Se puede reactivar usando PATCH /admin/coupons/{id} con { "status": "ACTIVA" }
+      Se puede reactivar usando PATCH con { "status": "ACTIVA" }
+
+
+================================================================================
+  ENDPOINT ADMIN — SUPERVISIÓN DE CUPONES (SOLO STORE_ADMIN)
+================================================================================
+
+── LISTAR TODOS LOS CUPONES (READ-ONLY) ────────────────────────────────────────
+
+GET /api/v1/admin/coupons?page=0&size=20
+Authorization: Bearer <token> (STORE_ADMIN)
+
+RESPUESTA 200 OK — página de CouponResponse (todos los sellers):
+{
+  "content": [ ...CouponResponse ],
+  "totalElements": 47,
+  "totalPages": 3,
+  "number": 0,
+  "size": 20
+}
+
+Incluye cupones de todos los sellers. Ordenados por createdAt DESC.
+El admin tiene visibilidad total pero no puede crear ni modificar cupones.
 
 
 ================================================================================
@@ -227,68 +267,93 @@ NOTA: Un cupón desactivado NO puede ser canjeado por los compradores.
 ================================================================================
 
 1. CAMPO "CÓDIGO DE CUPÓN" EN EL CHECKOUT
-   ┌─────────────────────────────────────────────────────┐
-   │ ¿Tienes un código de descuento?                     │
-   │ [VERANO2026          ] [Aplicar]                    │
-   │                                                     │
-   │ ✅ VERANO2026 — 20% de descuento aplicado           │
-   │    Ahorras: $16.000                                 │
-   └─────────────────────────────────────────────────────┘
+   El carrito puede tener grupos de distintos sellers.
+   Cada grupo puede tener su propio campo de cupón.
 
-   Al hacer clic en "Aplicar":
-   POST /api/v1/coupons/validate { "code": "VERANO2026", "orderAmount": 80000.00 }
+   ┌─────────────────────────────────────────────────────────────┐
+   │ TIENDA SPORT (seller_id: 7)               Subtotal: $80.000 │
+   │ - Zapatillas Nike  x1  $55.000                              │
+   │ - Medias deportivas x2  $25.000                             │
+   │                                                             │
+   │ ¿Tienes un cupón de esta tienda?                            │
+   │ [SPORT20            ] [Aplicar]                             │
+   │ ✅ SPORT20 — 20% descuento → Ahorras $16.000               │
+   │                                          Total: $64.000     │
+   ├─────────────────────────────────────────────────────────────┤
+   │ TIENDA CASA (seller_id: 12)               Subtotal: $45.000 │
+   │ - Lámpara de pie  x1  $45.000                              │
+   │                                                             │
+   │ ¿Tienes un cupón de esta tienda?                            │
+   │ [                   ] [Aplicar]                             │
+   └─────────────────────────────────────────────────────────────┘
 
-   Si 200 → mostrar discountAmount y finalAmount en el resumen
+   Al hacer clic en "Aplicar" para el grupo del seller 7:
+   POST /api/v1/coupons/validate
+   {
+     "code":        "SPORT20",
+     "sellerId":    7,
+     "orderAmount": 80000.00   // subtotal del grupo de ese seller
+   }
+
+   Si 200 → mostrar discountAmount y finalAmount para ese grupo
    Si 400 → mostrar el campo "message" como error
    Si 404 → "Código de cupón no válido"
 
 2. RESUMEN DEL PEDIDO CON DESCUENTO APLICADO
    ┌─────────────────────────────────────────────────────┐
+   │ TIENDA SPORT                                        │
    │ Subtotal:              $80.000                      │
-   │ Cupón VERANO2026:     -$16.000  (20% descuento)    │
+   │ Cupón SPORT20:        -$16.000  (20% descuento)    │
+   │ Total este seller:     $64.000                      │
+   │                                                     │
+   │ TIENDA CASA                                         │
+   │ Total este seller:     $45.000                      │
    │ ─────────────────────────────────────────────────── │
-   │ Total a pagar:         $64.000                      │
+   │ TOTAL A PAGAR:        $109.000                      │
    └─────────────────────────────────────────────────────┘
 
-   Guardar en estado local: { code, discountAmount, finalAmount }
-   El servidor NO guarda el cupón en la orden — el front es responsable
-   de pasar el total correcto al crear el pago.
+   Guardar por grupo: { sellerId, code, discountAmount, finalAmount }
 
 3. FLUJO COMPLETO AL CONFIRMAR EL PEDIDO
 
-   a. El usuario confirma la compra con cupón aplicado
-   b. Crear la orden → POST /api/v1/orders (con total = finalAmount)
+   a. El usuario confirma la compra con cupones aplicados por grupo
+   b. Crear la orden → POST /api/v1/orders (con los totales ya con descuento)
       → Obtener el orderId de la respuesta
-   c. Registrar el uso del cupón → POST /api/v1/coupons/redeem
-      { "code": "VERANO2026", "orderAmount": 80000.00, "orderId": <orderId> }
+   c. Para cada grupo que tenga cupón aplicado, registrar el uso:
+      POST /api/v1/coupons/redeem
+      {
+        "code":        "SPORT20",
+        "sellerId":    7,
+        "orderAmount": 80000.00,
+        "orderId":     <orderId>
+      }
    d. Si redeem falla → mostrar advertencia pero NO bloquear la orden
-      (la orden ya fue creada, el usuario pagó el precio correcto)
 
    IMPORTANTE: llamar /redeem DESPUÉS de crear la orden, nunca antes.
 
-4. PANEL ADMIN — GESTIÓN DE CUPONES
+4. PANEL SELLER — GESTIÓN DE MIS CUPONES
    ┌─────────────────────────────────────────────────────────────────┐
-   │ Cupones de descuento                          [+ Nuevo cupón]  │
-   ├──────────────┬──────────────┬───────┬────────┬───────┬────────┤
+   │ Mis cupones de descuento                      [+ Nuevo cupón]  │
+   ├──────────────┬──────────────┬───────┬─────────┬───────┬───────┤
    │ Código       │ Descuento    │ Usos  │ Vigencia│ Estado│Acciones│
-   ├──────────────┼──────────────┼───────┼────────┼───────┼────────┤
-   │ VERANO2026   │ 20%          │ 37/100│ Jun 30 │ ACTIVA│ ✏ 🔴  │
-   │ BIENVENIDO10 │ $10.000 fijo │  5/∞  │ Dic 31 │ ACTIVA│ ✏ 🔴  │
-   │ BLACKFRIDAY  │ 30%          │200/200│ Nov 30 │INACTIVA│ ✏ 🟢 │
-   └──────────────┴──────────────┴───────┴────────┴───────┴────────┘
+   ├──────────────┼──────────────┼───────┼─────────┼───────┼───────┤
+   │ SPORT20      │ 20%          │ 37/100│ Jun 30  │ ACTIVA│ ✏ 🔴  │
+   │ NUEVOCLIENTE │ $5.000 fijo  │  8/∞  │ Dic 31  │ ACTIVA│ ✏ 🔴  │
+   │ FLASH30      │ 30%          │ 50/50 │ May 31  │INACTIVA│ ✏ 🟢 │
+   └──────────────┴──────────────┴───────┴─────────┴───────┴───────┘
 
    ✏ → editar (descripción, monto mínimo, límite usos, validUntil, estado)
-   🔴 → desactivar  (PATCH /admin/coupons/{id}/deactivate)
-   🟢 → reactivar   (PATCH /admin/coupons/{id} { "status": "ACTIVA" })
+   🔴 → desactivar  (PATCH /seller/coupons/{id}/deactivate)
+   🟢 → reactivar   (PATCH /seller/coupons/{id} { "status": "ACTIVA" })
 
-5. FORMULARIO CREAR CUPÓN (admin)
+5. FORMULARIO CREAR CUPÓN (seller)
    Campos recomendados con labels claros:
 
-   Código *              [VERANO2026      ]  (se guarda en MAYÚSCULAS)
-   Descripción           [Para campaña de verano...]
+   Código *              [SPORT20         ]  (se guarda en MAYÚSCULAS)
+   Descripción           [20% en toda mi tienda...]
    Tipo de descuento *   ( ) Porcentaje  ( ) Monto fijo
    Valor del descuento * [20.00          ]  (% o monto)
-   Monto mínimo          [50000.00       ]  (dejar vacío para sin mínimo)
+   Monto mínimo del grupo [50000.00      ]  (dejar vacío para sin mínimo)
    Límite total de usos  [100            ]  (dejar vacío para ilimitado)
    Usos por persona *    [1              ]
    Válido desde *        [2026-05-01     ]
@@ -316,65 +381,65 @@ Si maxUses == null: mostrar "usesCount usos" (ej: "37 usos")
   REGLAS DE NEGOCIO IMPORTANTES PARA EL FRONT
 ================================================================================
 
+CUPONES SON POR SELLER:
+  - Cada cupón tiene un seller dueño
+  - Un cupón de Seller A NO aplica al grupo de Seller B
+  - El back rechaza con 400 "Coupon is not valid for this seller"
+  - El front debe enviar el sellerId correcto (el del grupo, no del comprador)
+
+orderAmount ES EL SUBTOTAL DEL GRUPO, NO DEL PEDIDO TOTAL:
+  - Si el carrito tiene grupos de varios sellers, cada grupo tiene su propio subtotal
+  - El cupón aplica solo sobre el subtotal del grupo del seller dueño del cupón
+  - Nunca enviar el total completo del pedido como orderAmount
+
 /validate ES INFORMATIVO, /redeem ES DEFINITIVO:
   - /validate no modifica nada — úsalo libremente para previews
   - /redeem registra el uso — llamarlo SOLO UNA VEZ al confirmar el pedido
   - Si se llama /redeem dos veces para el mismo usuario+cupón, el segundo falla
     con 400 "You have already used this coupon" (si maxUsesPerUser = 1)
 
-EL DESCUENTO NO SE GUARDA EN LA ORDEN (por ahora):
-  - La integración con el total de la orden es responsabilidad del front
-  - Pasar `finalAmount` como el total al crear la orden y al iniciar el pago
-  - El /redeem sirve para trazabilidad, no para recalcular el total
-
 NORMALIZACIÓN DE CÓDIGO:
   - Los códigos se guardan y buscan en MAYÚSCULAS
-  - "verano2026", "Verano2026" y "VERANO2026" son el mismo cupón
+  - "sport20", "Sport20" y "SPORT20" son el mismo cupón
   - Sugerencia: transformar a mayúsculas en el input antes de enviar
 
 CAMPO message EN ERRORES 400:
   - Siempre leer el campo "message" de la respuesta de error para mostrar
     al usuario el motivo exacto por el cual el cupón no aplica
-  - No usar mensajes genéricos como "Cupón inválido" — el backend ya
-    provee mensajes descriptivos
-
-VALIDACIÓN DE FECHAS EN EL FRONT:
-  - El backend valida las fechas server-side (zona horaria del servidor)
-  - No implementar lógica de fechas en el front — dejar que el backend decida
-  - Solo usar las fechas del CouponResponse para mostrar información visual
 
 
 ================================================================================
   RESUMEN DE ENDPOINTS
 ================================================================================
 
-  Método  Ruta                                  Auth         Descripción
-  ──────  ────────────────────────────────────  ───────────  ──────────────────────────
-  POST    /api/v1/coupons/validate              Autenticado  Preview descuento (sin efecto)
-  POST    /api/v1/coupons/redeem                Autenticado  Registrar uso del cupón
-  GET     /api/v1/admin/coupons                 STORE_ADMIN  Listar todos los cupones
-  GET     /api/v1/admin/coupons/{couponId}      STORE_ADMIN  Detalle de un cupón
-  POST    /api/v1/admin/coupons                 STORE_ADMIN  Crear cupón
-  PATCH   /api/v1/admin/coupons/{couponId}      STORE_ADMIN  Actualizar cupón
-  PATCH   /api/v1/admin/coupons/{id}/deactivate STORE_ADMIN  Desactivar cupón
+  Método  Ruta                                    Auth         Descripción
+  ──────  ──────────────────────────────────────  ───────────  ──────────────────────────────────
+  POST    /api/v1/coupons/validate                Autenticado  Preview descuento (sin efecto)
+  POST    /api/v1/coupons/redeem                  Autenticado  Registrar uso del cupón
+  POST    /api/v1/seller/coupons                  SELLER       Crear cupón propio
+  GET     /api/v1/seller/coupons                  SELLER       Listar mis cupones
+  GET     /api/v1/seller/coupons/{couponId}       SELLER       Detalle de mi cupón
+  PATCH   /api/v1/seller/coupons/{couponId}       SELLER       Actualizar mi cupón
+  PATCH   /api/v1/seller/coupons/{id}/deactivate  SELLER       Desactivar mi cupón
+  GET     /api/v1/admin/coupons                   STORE_ADMIN  Ver todos los cupones (read-only)
 
 
 ================================================================================
   MANEJO DE ERRORES
 ================================================================================
 
-  HTTP 400 Bad Request  → Cupón no aplica (ver campo "message") o validación fallida
-  HTTP 403 Forbidden    → Token ausente/inválido o sin rol STORE_ADMIN en rutas admin
-  HTTP 404 Not Found    → Cupón no encontrado o StoreProfile no encontrado
-  HTTP 409 Conflict     → Código de cupón ya existe (al crear)
+  HTTP 400 Bad Request  → Cupón no aplica (ver "message"), seller incorrecto, o validación fallida
+  HTTP 403 Forbidden    → Token ausente/inválido, sin rol SELLER o cupón de otro seller
+  HTTP 404 Not Found    → Cupón o StoreProfile no encontrado
+  HTTP 409 Conflict     → Código de cupón ya existe en la plataforma
   HTTP 500              → Error interno del servidor
 
 Estructura de error:
   {
     "status":  400,
     "error":   "Bad Request",
-    "message": "You have already used this coupon",
-    "path":    "/api/v1/coupons/redeem"
+    "message": "Coupon is not valid for this seller",
+    "path":    "/api/v1/coupons/validate"
   }
 
 
@@ -383,6 +448,7 @@ Estructura de error:
 ================================================================================
 
 Cupón de porcentaje sin restricciones:
+  POST /api/v1/seller/coupons (como seller)
   { "code": "TEST10", "discountType": "PORCENTAJE", "discountValue": 10,
     "maxUsesPerUser": 1, "validFrom": "2026-01-01" }
 
@@ -394,5 +460,9 @@ Cupón con límite global de usos y expiración:
   { "code": "PROMO100", "discountType": "PORCENTAJE", "discountValue": 15,
     "maxUses": 100, "maxUsesPerUser": 1,
     "validFrom": "2026-05-01", "validUntil": "2026-05-31" }
+
+Validar como buyer (con sellerId):
+  POST /api/v1/coupons/validate
+  { "code": "TEST10", "sellerId": 7, "orderAmount": 50000.00 }
 
 ================================================================================

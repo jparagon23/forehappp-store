@@ -1,0 +1,507 @@
+================================================================================
+  FOREHAPP STORE — RETURN MODULE (DEVOLUCIONES): GUÍA DE INTEGRACIÓN FRONTEND
+================================================================================
+
+BASE URL: http://localhost:8082
+AUTENTICACIÓN: Bearer Token (JWT) en header Authorization
+
+  Authorization: Bearer <token>
+
+TODOS los endpoints requieren autenticación.
+Si no se envía token o es inválido → 403 Forbidden
+
+
+================================================================================
+  MODELOS DE RESPUESTA
+================================================================================
+
+── ReturnResponse ──────────────────────────────────────────────────────────────
+{
+  "returnId":      1,
+  "orderGroupId":  15,                 // ID del grupo del seller al que pertenece
+  "orderId":       8,                  // ID de la orden padre
+  "buyerName":     "Juan Pérez",
+  "returnType":    "DEVOLUCION",       // "DEVOLUCION" | "REEMBOLSO_PARCIAL" | "REEMBOLSO_COMPLETO"
+  "reason":        "El producto llegó dañado.",
+  "refundAmount":  55000.00,           // null hasta que el admin apruebe
+  "adminNotes":    "Reembolso aprobado, proceder.",  // null hasta que el admin actúe
+  "status":        "PENDIENTE",        // "PENDIENTE" | "APROBADA" | "RECHAZADA" | "REEMBOLSADA"
+  "createdAt":     "2026-05-14T10:30:00",
+  "updatedAt":     "2026-05-14T12:00:00",  // null si nunca se actualizó
+  "items": [
+    {
+      "orderItemId":      42,
+      "productTitle":     "Zapatillas Nike Air",
+      "variantSku":       "NIK-AIR-42-BLK",
+      "quantityOrdered":  2,
+      "quantityToReturn": 1,
+      "unitPrice":        55000.00,
+      "subtotal":         55000.00    // unitPrice × quantityToReturn
+    }
+  ]
+}
+
+── Ciclo de vida del status ────────────────────────────────────────────────────
+
+  PENDIENTE ──── Admin aprueba ──→ APROBADA ──── Admin marca reembolsado ──→ REEMBOLSADA
+      │
+      └────────── Admin rechaza ──→ RECHAZADA
+
+
+================================================================================
+  TIPOS DE DEVOLUCIÓN
+================================================================================
+
+  DEVOLUCION         → El comprador quiere devolver el producto físicamente
+  REEMBOLSO_PARCIAL  → Solo reembolso de una parte del monto (ej: solo algunos ítems)
+  REEMBOLSO_COMPLETO → Reembolso total del grupo del seller
+
+
+================================================================================
+  ENDPOINT 1 — CREAR SOLICITUD DE DEVOLUCIÓN (COMPRADOR)
+================================================================================
+
+POST /api/v1/returns
+Authorization: Bearer <token>
+Content-Type: application/json
+
+REQUEST BODY:
+{
+  "orderGroupId": 15,                  // Long, requerido — grupo del seller
+  "returnType":   "DEVOLUCION",        // requerido: "DEVOLUCION" | "REEMBOLSO_PARCIAL" | "REEMBOLSO_COMPLETO"
+  "reason":       "El producto llegó dañado, caja rota y producto rayado.",  // requerido, máx 1000 chars
+  "items": [
+    {
+      "orderItemId":      42,          // Long, requerido — ID del item de la orden
+      "quantityToReturn": 1            // Integer, requerido, mínimo 1
+    }
+  ]
+}
+
+RESPUESTA EXITOSA 201 Created:
+  Retorna el ReturnResponse completo con status "PENDIENTE"
+
+VALIDACIONES:
+  - El grupo de la orden debe pertenecer al comprador autenticado
+  - El grupo debe estar en estado DELIVERED (solo se devuelven órdenes entregadas)
+  - Solo puede haber UNA solicitud de devolución por grupo
+  - Los orderItemId deben pertenecer al grupo indicado
+  - quantityToReturn no puede superar la cantidad originalmente pedida
+
+ERRORES:
+  400 → El grupo no está en estado DELIVERED
+      { "message": "Returns can only be requested for delivered orders" }
+  400 → quantityToReturn excede la cantidad pedida
+      { "message": "Cannot return more than the ordered quantity for item 42" }
+  400 → Un item no pertenece al grupo
+      { "message": "Item 42 does not belong to this order group" }
+  400 → Validación de campos (reason en blanco, items vacíos, etc.)
+  403 → El grupo no pertenece al comprador autenticado
+  404 → Grupo de orden no encontrado
+  409 Conflict → Ya existe una devolución para este grupo
+      { "message": "A return request already exists for this order group" }
+
+
+================================================================================
+  ENDPOINT 2 — MIS DEVOLUCIONES (COMPRADOR)
+================================================================================
+
+GET /api/v1/returns/my
+Authorization: Bearer <token>
+
+RESPUESTA EXITOSA 200 OK:
+  Lista de ReturnResponse, ordenadas por createdAt DESC
+
+[
+  {
+    "returnId":      2,
+    "orderGroupId":  15,
+    "orderId":       8,
+    "buyerName":     "Juan Pérez",
+    "returnType":    "DEVOLUCION",
+    "reason":        "El producto llegó dañado.",
+    "refundAmount":  55000.00,
+    "adminNotes":    "Aprobado, favor enviar el producto.",
+    "status":        "APROBADA",
+    "createdAt":     "2026-05-12T09:00:00",
+    "updatedAt":     "2026-05-13T11:00:00",
+    "items": [ ... ]
+  },
+  {
+    "returnId":      1,
+    "orderGroupId":  10,
+    "orderId":       5,
+    "buyerName":     "Juan Pérez",
+    "returnType":    "REEMBOLSO_COMPLETO",
+    "reason":        "No era lo que esperaba.",
+    "refundAmount":  null,
+    "adminNotes":    null,
+    "status":        "PENDIENTE",
+    "createdAt":     "2026-05-14T08:00:00",
+    "updatedAt":     null,
+    "items": [ ... ]
+  }
+]
+
+NOTAS:
+  - Incluye devoluciones en todos los estados
+  - refundAmount y adminNotes son null hasta que el admin actúe
+
+
+================================================================================
+  ENDPOINT 3 — DETALLE DE UNA DEVOLUCIÓN (COMPRADOR)
+================================================================================
+
+GET /api/v1/returns/{returnId}
+Authorization: Bearer <token>
+
+RESPUESTA EXITOSA 200 OK: ReturnResponse completo
+
+ERRORES:
+  403 → La devolución no pertenece al comprador autenticado
+  404 → Devolución no encontrada
+
+
+================================================================================
+  ENDPOINT 4 — LISTAR DEVOLUCIONES PENDIENTES (SOLO ADMIN)
+================================================================================
+
+GET /api/v1/admin/returns/pending?page=0&size=20
+Authorization: Bearer <token> (requiere rol STORE_ADMIN)
+
+QUERY PARAMS:
+  page  → int, default 0
+  size  → int, default 20
+
+RESPUESTA EXITOSA 200 OK — Spring Page con ReturnResponse:
+{
+  "content": [ ...ReturnResponse ],
+  "totalElements": 8,
+  "totalPages": 1,
+  "number": 0,
+  "size": 20
+}
+
+Todas con status "PENDIENTE", ordenadas por createdAt ASC
+(más antiguas primero — FIFO para procesar).
+
+ERRORES:
+  403 → Sin rol STORE_ADMIN
+
+
+================================================================================
+  ENDPOINT 5 — APROBAR DEVOLUCIÓN (SOLO ADMIN)
+================================================================================
+
+PATCH /api/v1/admin/returns/{returnId}/approve
+Authorization: Bearer <token> (requiere rol STORE_ADMIN)
+Content-Type: application/json
+
+REQUEST BODY:
+{
+  "refundAmount": 55000.00,        // BigDecimal, requerido, > 0 — monto a reembolsar
+  "adminNotes":   "Aprobado, enviar producto a dirección X."  // String, opcional, máx 1000 chars
+}
+
+RESPUESTA EXITOSA 200 OK:
+  ReturnResponse con status "APROBADA", refundAmount y adminNotes actualizados
+
+ERRORES:
+  400 → La devolución no está en estado PENDIENTE
+      { "message": "Only pending returns can be processed" }
+  400 → refundAmount nulo o <= 0
+  403 → Sin rol STORE_ADMIN
+  404 → Devolución no encontrada
+
+
+================================================================================
+  ENDPOINT 6 — RECHAZAR DEVOLUCIÓN (SOLO ADMIN)
+================================================================================
+
+PATCH /api/v1/admin/returns/{returnId}/reject
+Authorization: Bearer <token> (requiere rol STORE_ADMIN)
+Content-Type: application/json
+
+REQUEST BODY:
+{
+  "adminNotes": "La solicitud no cumple con la política de devoluciones."  // requerido, máx 1000 chars
+}
+
+RESPUESTA EXITOSA 200 OK:
+  ReturnResponse con status "RECHAZADA" y adminNotes
+
+ERRORES:
+  400 → La devolución no está en estado PENDIENTE
+  400 → adminNotes en blanco (requerido para rechazos — el comprador debe saber el motivo)
+  403 → Sin rol STORE_ADMIN
+  404 → Devolución no encontrada
+
+
+================================================================================
+  ENDPOINT 7 — MARCAR COMO REEMBOLSADA (SOLO ADMIN)
+================================================================================
+
+PATCH /api/v1/admin/returns/{returnId}/refunded
+Authorization: Bearer <token> (requiere rol STORE_ADMIN)
+Sin body.
+
+RESPUESTA EXITOSA 200 OK:
+  ReturnResponse con status "REEMBOLSADA"
+
+COMPORTAMIENTO:
+  Solo puede ejecutarse sobre devoluciones en estado APROBADA.
+  Representa que el reembolso fue procesado efectivamente (pago devuelto).
+
+ERRORES:
+  400 → La devolución no está en estado APROBADA
+      { "message": "Only approved returns can be marked as refunded" }
+  403 → Sin rol STORE_ADMIN
+  404 → Devolución no encontrada
+
+
+================================================================================
+  FLUJO TÍPICO DE INTEGRACIÓN
+================================================================================
+
+1. BOTÓN "SOLICITAR DEVOLUCIÓN" EN EL HISTORIAL DE ÓRDENES
+
+   El botón debe mostrarse SOLO cuando el grupo del seller cumple:
+   ✅ group.status == "DELIVERED"
+   ✅ No existe ya una devolución para ese grupo
+
+   Para saber si ya existe una devolución, al cargar "Mis devoluciones":
+   GET /api/v1/returns/my
+   Construir un Set de orderGroupIds con devolución existente:
+     const returnedGroups = new Set(returns.map(r => r.orderGroupId));
+
+   En la vista de detalle de orden:
+     if (group.status === "DELIVERED" && !returnedGroups.has(group.id)) {
+       // mostrar botón "Solicitar devolución"
+     } else if (returnedGroups.has(group.id)) {
+       // mostrar estado de la devolución existente
+     }
+
+2. FORMULARIO DE SOLICITUD DE DEVOLUCIÓN
+
+   ┌─────────────────────────────────────────────────────────┐
+   │ Solicitar devolución — Tienda Sport                     │
+   ├─────────────────────────────────────────────────────────┤
+   │ Tipo de solicitud *                                     │
+   │ ( ) Devolver el producto físicamente                    │
+   │ ( ) Reembolso parcial (solo algunos ítems)              │
+   │ (•) Reembolso completo                                  │
+   │                                                         │
+   │ Motivo * ______________________________________________ │
+   │ El producto llegó dañado, la caja tenía golpes...       │
+   │                                                         │
+   │ Ítems a devolver:                                       │
+   │ [✓] Zapatillas Nike Air x2  ($55.000 c/u)               │
+   │     Cantidad a devolver: [1]                            │
+   │ [✓] Medias deportivas x3   ($8.000 c/u)                 │
+   │     Cantidad a devolver: [3]                            │
+   │                                                         │
+   │              [Cancelar]  [Enviar solicitud]             │
+   └─────────────────────────────────────────────────────────┘
+
+   POST /api/v1/returns
+   {
+     "orderGroupId": 15,
+     "returnType":   "REEMBOLSO_COMPLETO",
+     "reason":       "El producto llegó dañado...",
+     "items": [
+       { "orderItemId": 42, "quantityToReturn": 1 },
+       { "orderItemId": 43, "quantityToReturn": 3 }
+     ]
+   }
+
+   Respuesta:
+   201 → "Tu solicitud fue enviada. Te notificaremos la resolución."
+   409 → "Ya existe una solicitud para este pedido"
+   400 → Mostrar errores de validación
+
+3. SECCIÓN "MIS DEVOLUCIONES" EN EL PERFIL DEL COMPRADOR
+
+   GET /api/v1/returns/my
+
+   ┌─────────────────────────────────────────────────────────┐
+   │ Mis devoluciones                                        │
+   ├─────────────────────────────────────────────────────────┤
+   │ Orden #8 — Tienda Sport                                 │
+   │ Zapatillas Nike Air x1  |  Medias x3                   │
+   │ Tipo: Reembolso completo                                │
+   │ Estado: ✅ APROBADA   Reembolso: $71.000               │
+   │ Nota: "Aprobado, enviar producto a..."                  │
+   │ Solicitada: 12/05/2026                                  │
+   ├─────────────────────────────────────────────────────────┤
+   │ Orden #5 — Tienda Casa                                  │
+   │ Lámpara de pie x1                                       │
+   │ Tipo: Devolución                                        │
+   │ Estado: ⏳ PENDIENTE — En revisión                      │
+   │ Solicitada: 14/05/2026                                  │
+   ├─────────────────────────────────────────────────────────┤
+   │ Orden #3 — Tienda Moda                                  │
+   │ Vestido azul x1                                         │
+   │ Tipo: Reembolso parcial                                 │
+   │ Estado: ❌ RECHAZADA                                     │
+   │ Nota: "No cumple política: uso evidente del producto"   │
+   │ Solicitada: 10/05/2026                                  │
+   └─────────────────────────────────────────────────────────┘
+
+   Indicadores visuales por status:
+     PENDIENTE   → ⏳ "En revisión"
+     APROBADA    → ✅ "Aprobada" + mostrar refundAmount
+     RECHAZADA   → ❌ "Rechazada" + mostrar adminNotes
+     REEMBOLSADA → 💰 "Reembolso procesado" + mostrar refundAmount
+
+4. PANEL ADMIN — GESTIÓN DE DEVOLUCIONES
+
+   GET /api/v1/admin/returns/pending?page=0&size=20
+
+   ┌─────────────────────────────────────────────────────────────┐
+   │ DEVOLUCIONES PENDIENTES  (8 solicitudes)                    │
+   ├─────────────────────────────────────────────────────────────┤
+   │ #1  Orden #5  — Comprador: Ana García                       │
+   │ Tipo: DEVOLUCION    Solicitada: 12/05/2026                  │
+   │ Motivo: "El talle no coincide con la guía"                  │
+   │ Ítems:                                                      │
+   │   - Vestido azul  SKU: VES-AZ-M  x1  $45.000               │
+   │   Subtotal: $45.000                                         │
+   │                                                             │
+   │ Monto a reembolsar: [$45.000.00          ]                  │
+   │ Notas para el cliente: [_________________]                  │
+   │                    [✅ Aprobar]  [❌ Rechazar]              │
+   ├─────────────────────────────────────────────────────────────┤
+   │ #2  Orden #8  — Comprador: Juan Pérez                       │
+   │ Tipo: REEMBOLSO_COMPLETO    Solicitada: 14/05/2026          │
+   │ Motivo: "Producto llegó dañado, caja rota"                  │
+   │ Ítems:                                                      │
+   │   - Zapatillas Nike  SKU: NIK-AIR-42  x1  $55.000          │
+   │   - Medias Sport     SKU: MED-SPT-U   x3  $24.000          │
+   │   Subtotal: $79.000                                         │
+   │                                                             │
+   │ Monto a reembolsar: [$79.000.00          ]                  │
+   │ Notas para el cliente: [_________________]                  │
+   │                    [✅ Aprobar]  [❌ Rechazar]              │
+   └─────────────────────────────────────────────────────────────┘
+
+   Aprobar → PATCH /api/v1/admin/returns/{id}/approve
+             { "refundAmount": 79000.00, "adminNotes": "..." }
+
+   Rechazar → PATCH /api/v1/admin/returns/{id}/reject
+              { "adminNotes": "Motivo del rechazo — requerido" }
+
+5. MARCAR REEMBOLSO COMO PROCESADO (ADMIN)
+
+   Después de procesar el pago de vuelta al comprador (Stripe, transferencia, etc.):
+   PATCH /api/v1/admin/returns/{returnId}/refunded
+
+   Esto cambia el status a REEMBOLSADA — el comprador lo verá en sus devoluciones.
+
+   ┌─────────────────────────────────────────────────────────┐
+   │ DEVOLUCIONES APROBADAS — pendientes de reembolso        │
+   ├─────────────────────────────────────────────────────────┤
+   │ #1  Juan Pérez  —  $79.000  —  Orden #8                 │
+   │ Aprobada: 13/05/2026                                    │
+   │                         [💰 Marcar como reembolsada]    │
+   └─────────────────────────────────────────────────────────┘
+
+
+================================================================================
+  REGLAS DE NEGOCIO IMPORTANTES PARA EL FRONT
+================================================================================
+
+PRERREQUISITO PARA SOLICITAR DEVOLUCIÓN:
+  - El grupo del seller DEBE estar en estado DELIVERED
+  - No debe existir ya una solicitud para ese grupo (409 si ya existe)
+  - Solo el comprador dueño de la orden puede solicitar devolución
+
+UNA DEVOLUCIÓN POR GRUPO:
+  - Una vez enviada la solicitud, no se puede crear otra para el mismo grupo
+  - El comprador tampoco puede modificar ni cancelar la solicitud enviada
+  - Si la rechaza el admin, el comprador ve el motivo en adminNotes
+
+CANTIDADES:
+  - El comprador puede pedir la devolución de solo algunos ítems del grupo
+  - quantityToReturn ≤ quantityOrdered (el back lo valida)
+  - El monto a reembolsar lo determina el ADMIN al aprobar, no el front
+
+FLUJO DE ESTADOS (solo avanza, nunca retrocede):
+  PENDIENTE → APROBADA → REEMBOLSADA
+  PENDIENTE → RECHAZADA
+  No es posible aprobar una RECHAZADA ni rechazar una APROBADA
+
+EL ADMIN FIJA EL MONTO:
+  - El campo refundAmount no existe al crear, lo pone el admin al aprobar
+  - Puede ser distinto al subtotal calculado (ej: reembolso parcial)
+  - El subtotal de cada item (unitPrice × quantityToReturn) es referencial
+
+adminNotes ES PARA EL COMPRADOR:
+  - Al rechazar: explicar el motivo (requerido)
+  - Al aprobar: instrucciones o confirmación (opcional)
+  - El front debe mostrarlo visiblemente al comprador
+
+PAGINACIÓN EN ADMIN:
+  - El endpoint /admin/returns/pending devuelve paginación estilo Spring Page
+  - Usar "content", "totalElements", "totalPages", "number" para renderizar
+
+
+================================================================================
+  CÁLCULO DE SUBTOTAL EN EL FRONT (REFERENCIAL)
+================================================================================
+
+Para mostrar el monto estimado que el comprador espera recuperar:
+
+  items.reduce((total, item) => {
+    return total + (item.unitPrice * item.quantityToReturn);
+  }, 0);
+
+IMPORTANTE: esto es solo referencial. El monto real lo decide el admin
+al aprobar (campo refundAmount).
+
+
+================================================================================
+  RESUMEN DE ENDPOINTS
+================================================================================
+
+  Método  Ruta                                       Auth         Descripción
+  ──────  ─────────────────────────────────────────  ───────────  ──────────────────────────────────────
+  POST    /api/v1/returns                            Autenticado  Crear solicitud de devolución
+  GET     /api/v1/returns/my                         Autenticado  Mis devoluciones (todos los estados)
+  GET     /api/v1/returns/{returnId}                 Autenticado  Detalle de una devolución propia
+  GET     /api/v1/admin/returns/pending              STORE_ADMIN  Devoluciones pendientes (paginado)
+  PATCH   /api/v1/admin/returns/{returnId}/approve   STORE_ADMIN  Aprobar devolución con monto
+  PATCH   /api/v1/admin/returns/{returnId}/reject    STORE_ADMIN  Rechazar devolución con motivo
+  PATCH   /api/v1/admin/returns/{returnId}/refunded  STORE_ADMIN  Marcar reembolso como procesado
+
+
+================================================================================
+  MANEJO DE ERRORES
+================================================================================
+
+  HTTP 400 Bad Request  → Validaciones fallidas, estado incorrecto, cantidades excedidas
+  HTTP 403 Forbidden    → Token ausente/inválido, sin rol STORE_ADMIN, o devolución ajena
+  HTTP 404 Not Found    → Devolución, grupo de orden o StoreProfile no encontrado
+  HTTP 409 Conflict     → Ya existe una devolución para ese grupo de orden
+  HTTP 500              → Error interno del servidor
+
+Estructura de error:
+  {
+    "status":  409,
+    "error":   "Conflict",
+    "message": "A return request already exists for this order group",
+    "path":    "/api/v1/returns"
+  }
+
+
+================================================================================
+  ENDPOINTS COMPLEMENTARIOS (otros módulos)
+================================================================================
+
+  GET /api/v1/orders/{orderId}
+    → Detalle de la orden con todos sus grupos y sus ítems
+    → Usar para obtener los orderItemId necesarios al crear la devolución
+
+  GET /api/v1/returns/my
+    → Usar para saber qué grupos ya tienen devolución antes de mostrar el botón
+
+================================================================================

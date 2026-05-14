@@ -136,7 +136,8 @@ RESPUESTA EXITOSA 201 Created:
   Retorna el ReviewResponse completo con status "PENDIENTE"
 
 COMPORTAMIENTO:
-  - La reseña queda en estado PENDIENTE hasta que un admin la apruebe o rechace
+  - La reseña queda en estado PENDIENTE hasta que un admin la apruebe/rechace
+    o hasta que transcurra 1 día sin acción (ver Auto-aprobación más abajo)
   - El comprador verá su propia reseña como PENDIENTE en GET /reviews/my
   - El público NO ve reseñas PENDIENTE (solo APROBADO)
 
@@ -166,7 +167,7 @@ ERRORES:
 
 REGLA:
   Solo se pueden eliminar reseñas en estado PENDIENTE o RECHAZADO.
-  Una vez APROBADA, el comprador no puede borrarla.
+  Una vez APROBADA (por admin o por auto-aprobación), el comprador no puede borrarla.
 
 
 ================================================================================
@@ -278,6 +279,32 @@ ERRORES:
 
 
 ================================================================================
+  AUTO-APROBACIÓN DE RESEÑAS
+================================================================================
+
+El sistema aprueba automáticamente las reseñas que llevan más de 24 horas
+en estado PENDIENTE sin que un admin haya actuado.
+
+COMPORTAMIENTO:
+  - Un job corre cada hora en el servidor
+  - Busca reseñas con status=PENDIENTE y createdAt < ahora - 1 día
+  - Las cambia a APROBADO en bloque (sin intervención del admin)
+
+IMPLICACIONES PARA EL FRONT:
+  - Una reseña PENDIENTE puede aparecer como APROBADO en la próxima consulta
+    si pasaron más de 24 horas — esto es esperado y correcto
+  - El comprador NO puede eliminar la reseña una vez auto-aprobada
+    (mismo comportamiento que si la aprobara el admin)
+  - Para el front NO hay diferencia entre "aprobada por admin" y "auto-aprobada"
+    — ambas tienen status "APROBADO"
+
+RECOMENDACIÓN UX:
+  Al mostrar una reseña PENDIENTE del usuario, indicar:
+  "Será visible en el plazo de 24 horas."
+  en lugar de "Será visible cuando un admin la apruebe."
+
+
+================================================================================
   FLUJO TÍPICO DE INTEGRACIÓN
 ================================================================================
 
@@ -289,7 +316,7 @@ ERRORES:
    ┌────────────────────────────────────────┐
    │ [img] Camiseta Premium                 │
    │       ★★★★☆  4.3  (17 reseñas)        │
-   │       Desde $75.00                     │
+   │       Desde $75.000                    │
    └────────────────────────────────────────┘
 
    Tip de rendimiento: si cargas muchos productos en el catálogo,
@@ -336,7 +363,7 @@ ERRORES:
       { "rating": 4, "title": "...", "comment": "..." }
 
    d. Manejar respuesta:
-      201 → Mostrar mensaje: "Reseña enviada. Será visible una vez aprobada."
+      201 → Mostrar mensaje: "Reseña enviada. Será visible en las próximas 24 horas."
             Cambiar botón por el estado de la reseña (PENDIENTE)
       409 → "Ya tienes una reseña para este producto"
       400 → Mostrar errores de validación en el formulario
@@ -355,6 +382,7 @@ ERRORES:
    │ Zapatos Sport  ★★★☆☆                                │
    │ "Tarda un poco en llegar"                           │
    │ Estado: ⏳ EN REVISIÓN   [🗑 Eliminar]   14/05/2026 │
+   │          Visible en las próximas 24 horas           │
    ├─────────────────────────────────────────────────────┤
    │ Mochila Urbana  ★★☆☆☆                               │
    │ "Inferior a lo esperado"                            │
@@ -381,13 +409,13 @@ ERRORES:
    │ Producto: Camiseta Premium                          │
    │ De: Juan Pérez  ★★★★★  "Excelente"                  │
    │ "Llegó rápido y bien empacado."                     │
-   │ Recibida: 14/05/2026                                │
+   │ Recibida: 14/05/2026   ⚠️ Auto-aprueba en < 24h    │
    │                  [✅ Aprobar]   [❌ Rechazar]        │
    ├─────────────────────────────────────────────────────┤
    │ Producto: Zapatos Sport                             │
    │ De: María G.  ★★☆☆☆  "Decepcionante"               │
    │ "El material no se ve igual que en las fotos."      │
-   │ Recibida: 14/05/2026                                │
+   │ Recibida: 13/05/2026   🔴 Auto-aprobación inminente │
    │                  [✅ Aprobar]   [❌ Rechazar]        │
    └─────────────────────────────────────────────────────┘
 
@@ -395,6 +423,10 @@ ERRORES:
    Rechazar → PATCH /api/v1/admin/reviews/{reviewId}/reject
 
    Tras la acción: quitar el ítem de la lista (ya no es PENDIENTE)
+
+   NOTA: Si el admin no actúa en 24h desde createdAt, el sistema
+   aprueba la reseña automáticamente. El panel puede mostrar
+   indicadores de urgencia según el tiempo restante.
 
 
 ================================================================================
@@ -424,8 +456,10 @@ Usar en el detalle del producto:
   REGLAS DE NEGOCIO IMPORTANTES PARA EL FRONT
 ================================================================================
 
-MODERACIÓN OBLIGATORIA:
+MODERACIÓN CON AUTO-APROBACIÓN:
   - Toda reseña nueva queda en PENDIENTE
+  - El admin puede aprobar o rechazar manualmente
+  - Si transcurren 24 horas sin acción, el sistema la aprueba automáticamente
   - El público (y otros compradores) solo ven reseñas APROBADAS
   - El autor ve la suya propia en GET /reviews/my con su estado real
 
@@ -434,13 +468,14 @@ UNA RESEÑA POR PRODUCTO POR USUARIO:
   - El front debe verificar el estado local antes de mostrar el formulario
 
 RESEÑAS APROBADAS SON PERMANENTES PARA EL COMPRADOR:
-  - Un comprador NO puede eliminar una reseña APROBADA
+  - Un comprador NO puede eliminar una reseña APROBADA (manual o auto)
   - Solo puede eliminar PENDIENTE o RECHAZADA
   - Mostrar el botón eliminar solo cuando status != "APROBADO"
 
 RATING Y TOTAL SON EN TIEMPO REAL:
   - averageRating y totalReviews se calculan en cada consulta
-  - Si el admin aprueba/rechaza reseñas, el summary cambia en la próxima llamada
+  - Si el admin aprueba/rechaza reseñas, o el job auto-aprueba,
+    el summary cambia en la próxima llamada al endpoint
 
 PAGINACIÓN:
   - Reseñas públicas: ordenadas por fecha DESC (más recientes primero)
@@ -457,14 +492,14 @@ CAMPOS OPCIONALES:
 ================================================================================
 
   Método  Ruta                                      Auth         Descripción
-  ──────  ────────────────────────────────────────  ───────────  ─────────────────────
+  ──────  ────────────────────────────────────────  ───────────  ─────────────────────────────────────
   GET     /api/v1/products/{id}/reviews             Público      Reseñas paginadas (solo APROBADAS)
   GET     /api/v1/products/{id}/reviews/summary     Público      Promedio y total de ratings
   POST    /api/v1/products/{id}/reviews             Autenticado  Crear reseña (→ PENDIENTE)
   DELETE  /api/v1/reviews/{reviewId}                Autenticado  Eliminar reseña propia (solo PENDIENTE/RECHAZADA)
   GET     /api/v1/reviews/my                        Autenticado  Mis reseñas (todos los estados)
   GET     /api/v1/admin/reviews/pending             STORE_ADMIN  Reseñas pendientes de moderación
-  PATCH   /api/v1/admin/reviews/{reviewId}/approve  STORE_ADMIN  Aprobar reseña
+  PATCH   /api/v1/admin/reviews/{reviewId}/approve  STORE_ADMIN  Aprobar reseña manualmente
   PATCH   /api/v1/admin/reviews/{reviewId}/reject   STORE_ADMIN  Rechazar reseña
 
 
