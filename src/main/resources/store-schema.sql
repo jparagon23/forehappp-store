@@ -332,5 +332,5 @@ CREATE TABLE IF NOT EXISTS store_return_items (
     order_item_id       BIGINT NOT NULL,
     quantity_to_return  INT NOT NULL,
     CONSTRAINT fk_ri_return     FOREIGN KEY (return_id)     REFERENCES store_return_requests(return_id),
-    CONSTRAINT fk_ri_order_item FOREIGN KEY (order_item_id) REFERENCES store_order_items(order_item_id)
+    CONSTRAINT fk_ri_order_item FOREIGN KEY (order_item_id) REFERENCES store_order_items(item_id)
 );

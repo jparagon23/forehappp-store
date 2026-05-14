@@ -22,7 +22,7 @@ public interface IReturnRepository extends JpaRepository<ReturnRequest, Long> {
     @Query("SELECT r FROM ReturnRequest r JOIN FETCH r.orderGroup g JOIN FETCH g.order o JOIN FETCH o.buyer b JOIN FETCH b.user JOIN FETCH r.buyer rb JOIN FETCH rb.user LEFT JOIN FETCH r.items i LEFT JOIN FETCH i.orderItem oi LEFT JOIN FETCH oi.variant v LEFT JOIN FETCH v.product WHERE r.buyer.id = :buyerId ORDER BY r.createdAt DESC")
     List<ReturnRequest> findByBuyerId(@Param("buyerId") Long buyerId);
 
-    @Query(value = "SELECT r FROM ReturnRequest r JOIN FETCH r.orderGroup g JOIN FETCH g.order o JOIN FETCH o.buyer b JOIN FETCH b.user JOIN FETCH r.buyer rb JOIN FETCH rb.user LEFT JOIN FETCH r.items i LEFT JOIN FETCH i.orderItem oi LEFT JOIN FETCH oi.variant v LEFT JOIN FETCH v.product WHERE r.status = :status",
+    @Query(value = "SELECT r FROM ReturnRequest r JOIN FETCH r.orderGroup g JOIN FETCH g.order o JOIN FETCH o.buyer b JOIN FETCH b.user JOIN FETCH r.buyer rb JOIN FETCH rb.user WHERE r.status = :status",
            countQuery = "SELECT COUNT(r) FROM ReturnRequest r WHERE r.status = :status")
     Page<ReturnRequest> findByStatus(@Param("status") ReturnStatus status, Pageable pageable);
 }
