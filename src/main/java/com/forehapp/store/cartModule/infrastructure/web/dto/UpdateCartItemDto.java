@@ -1,4 +1,2 @@
 package com.forehapp.store.cartModule.infrastructure.web.dto;
-
-public class UpdateCartItemDto {
-}
+// Moved to com.forehapp.store.cartModule.application.dto

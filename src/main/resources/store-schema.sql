@@ -181,3 +181,24 @@ CREATE TABLE IF NOT EXISTS store_order_items (
     CONSTRAINT store_fk_oi_group   FOREIGN KEY (group_id)   REFERENCES store_order_seller_groups(group_id),
     CONSTRAINT store_fk_oi_variant FOREIGN KEY (variant_id) REFERENCES store_product_variants(variant_id)
 );
+
+CREATE TABLE IF NOT EXISTS store_carts (
+    cart_id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+    store_profile_id BIGINT NOT NULL,
+    status           VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    creation_date    DATETIME NOT NULL,
+    updated_at       DATETIME NOT NULL,
+    CONSTRAINT fk_cart_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id)
+);
+
+CREATE TABLE IF NOT EXISTS store_cart_items (
+    cart_item_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    cart_id      BIGINT NOT NULL,
+    variant_id   BIGINT NOT NULL,
+    quantity     INT NOT NULL,
+    price_at_add DECIMAL(14, 2) NOT NULL,
+    added_date   DATETIME NOT NULL,
+    CONSTRAINT uk_cart_variant UNIQUE (cart_id, variant_id),
+    CONSTRAINT fk_ci_cart      FOREIGN KEY (cart_id)    REFERENCES store_carts(cart_id),
+    CONSTRAINT fk_ci_variant   FOREIGN KEY (variant_id) REFERENCES store_product_variants(variant_id)
+);

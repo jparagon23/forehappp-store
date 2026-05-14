@@ -1,15 +1,18 @@
 package com.forehapp.store.cartModule.domain.model;
 
-import com.forehapp.store.supplierModule.domain.model.ProductSupplier;
+import com.forehapp.store.productModule.domain.model.ProductVariant;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "cart_items")
+@Table(name = "store_cart_items", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_cart_variant", columnNames = {"cart_id", "variant_id"})
+})
 @Getter @Setter
 @NoArgsConstructor
 public class CartItem {
@@ -24,13 +27,16 @@ public class CartItem {
     private Cart cart;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "product_supplier_id", nullable = false)
-    private ProductSupplier productSupplier;
+    @JoinColumn(name = "variant_id", nullable = false)
+    private ProductVariant variant;
 
     @Column(nullable = false)
     private Integer quantity;
 
-    @Column(name = "added_date", nullable = false, columnDefinition = "TIMESTAMP")
+    @Column(name = "price_at_add", nullable = false, precision = 14, scale = 2)
+    private BigDecimal priceAtAdd;
+
+    @Column(name = "added_date", nullable = false)
     private LocalDateTime addedDate;
 
     @PrePersist
