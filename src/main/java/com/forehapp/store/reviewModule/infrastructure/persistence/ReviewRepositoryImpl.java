@@ -7,6 +7,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -52,6 +53,12 @@ public class ReviewRepositoryImpl implements IReviewDao {
     @Override
     public Long countByProductIdAndStatus(Long productId, ReviewStatus status) {
         return repository.countByProductIdAndStatus(productId, status);
+    }
+
+    @Override
+    public int autoApproveOlderThan(LocalDateTime threshold) {
+        return repository.bulkApproveOlderThan(
+                ReviewStatus.APROBADO, ReviewStatus.PENDIENTE, threshold, LocalDateTime.now());
     }
 
     @Override

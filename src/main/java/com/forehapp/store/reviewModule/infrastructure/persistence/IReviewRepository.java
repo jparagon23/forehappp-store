@@ -5,9 +5,12 @@ import com.forehapp.store.reviewModule.domain.model.ReviewStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -35,4 +38,12 @@ public interface IReviewRepository extends JpaRepository<ProductReview, Long> {
 
     @Query("SELECT COUNT(r) FROM ProductReview r WHERE r.product.id = :productId AND r.status = :status")
     Long countByProductIdAndStatus(@Param("productId") Long productId, @Param("status") ReviewStatus status);
+
+    @Modifying
+    @Transactional
+    @Query("UPDATE ProductReview r SET r.status = :approved, r.updatedAt = :now WHERE r.status = :pending AND r.createdAt < :threshold")
+    int bulkApproveOlderThan(@Param("approved") ReviewStatus approved,
+                              @Param("pending") ReviewStatus pending,
+                              @Param("threshold") LocalDateTime threshold,
+                              @Param("now") LocalDateTime now);
 }
