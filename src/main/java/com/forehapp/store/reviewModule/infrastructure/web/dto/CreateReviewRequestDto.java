@@ -1,4 +1,3 @@
 package com.forehapp.store.reviewModule.infrastructure.web.dto;
 
-public class CreateReviewRequestDto {
-}
+// DTOs are in reviewModule.application.dto — see CreateReviewRequestDto there

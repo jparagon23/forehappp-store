@@ -264,3 +264,19 @@ CREATE TABLE IF NOT EXISTS store_wishlist_items (
     CONSTRAINT fk_wi_wishlist FOREIGN KEY (wishlist_id) REFERENCES store_wishlists(wishlist_id),
     CONSTRAINT fk_wi_product  FOREIGN KEY (product_id)  REFERENCES store_products(product_id)
 );
+
+CREATE TABLE IF NOT EXISTS store_product_reviews (
+    review_id        BIGINT AUTO_INCREMENT PRIMARY KEY,
+    product_id       BIGINT NOT NULL,
+    store_profile_id BIGINT NOT NULL,
+    rating           INT NOT NULL,
+    title            VARCHAR(100),
+    comment          VARCHAR(1000),
+    status           VARCHAR(20) NOT NULL DEFAULT 'PENDIENTE',
+    created_at       DATETIME NOT NULL,
+    updated_at       DATETIME,
+    CONSTRAINT uk_review_product_profile UNIQUE (product_id, store_profile_id),
+    CONSTRAINT chk_review_rating CHECK (rating BETWEEN 1 AND 5),
+    CONSTRAINT fk_review_product FOREIGN KEY (product_id)       REFERENCES store_products(product_id),
+    CONSTRAINT fk_review_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id)
+);
