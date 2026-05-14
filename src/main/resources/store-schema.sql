@@ -308,3 +308,27 @@ CREATE TABLE IF NOT EXISTS store_coupon_redemptions (
     CONSTRAINT fk_cr_coupon  FOREIGN KEY (coupon_id)        REFERENCES store_coupons(coupon_id),
     CONSTRAINT fk_cr_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id)
 );
+
+CREATE TABLE IF NOT EXISTS store_return_requests (
+    return_id   BIGINT AUTO_INCREMENT PRIMARY KEY,
+    group_id    BIGINT NOT NULL UNIQUE,
+    buyer_id    BIGINT NOT NULL,
+    return_type VARCHAR(30) NOT NULL,
+    reason      VARCHAR(1000) NOT NULL,
+    refund_amount DECIMAL(14,2),
+    admin_notes VARCHAR(1000),
+    status      VARCHAR(20) NOT NULL DEFAULT 'PENDIENTE',
+    created_at  DATETIME NOT NULL,
+    updated_at  DATETIME,
+    CONSTRAINT fk_rr_group  FOREIGN KEY (group_id)  REFERENCES store_order_seller_groups(group_id),
+    CONSTRAINT fk_rr_buyer  FOREIGN KEY (buyer_id)  REFERENCES store_profiles(store_profile_id)
+);
+
+CREATE TABLE IF NOT EXISTS store_return_items (
+    return_item_id      BIGINT AUTO_INCREMENT PRIMARY KEY,
+    return_id           BIGINT NOT NULL,
+    order_item_id       BIGINT NOT NULL,
+    quantity_to_return  INT NOT NULL,
+    CONSTRAINT fk_ri_return     FOREIGN KEY (return_id)     REFERENCES store_return_requests(return_id),
+    CONSTRAINT fk_ri_order_item FOREIGN KEY (order_item_id) REFERENCES store_order_items(order_item_id)
+);
