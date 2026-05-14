@@ -212,3 +212,21 @@ CREATE TABLE IF NOT EXISTS store_cart_items (
     CONSTRAINT fk_ci_cart      FOREIGN KEY (cart_id)    REFERENCES store_carts(cart_id),
     CONSTRAINT fk_ci_variant   FOREIGN KEY (variant_id) REFERENCES store_product_variants(variant_id)
 );
+
+CREATE TABLE IF NOT EXISTS store_wishlists (
+    wishlist_id      BIGINT AUTO_INCREMENT PRIMARY KEY,
+    store_profile_id BIGINT NOT NULL,
+    created_at       DATETIME NOT NULL,
+    CONSTRAINT uk_wishlist_profile UNIQUE (store_profile_id),
+    CONSTRAINT fk_wl_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id)
+);
+
+CREATE TABLE IF NOT EXISTS store_wishlist_items (
+    wishlist_item_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    wishlist_id      BIGINT NOT NULL,
+    product_id       BIGINT NOT NULL,
+    added_at         DATETIME NOT NULL,
+    CONSTRAINT uk_wishlist_product UNIQUE (wishlist_id, product_id),
+    CONSTRAINT fk_wi_wishlist FOREIGN KEY (wishlist_id) REFERENCES store_wishlists(wishlist_id),
+    CONSTRAINT fk_wi_product  FOREIGN KEY (product_id)  REFERENCES store_products(product_id)
+);

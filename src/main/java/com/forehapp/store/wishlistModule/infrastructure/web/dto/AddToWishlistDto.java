@@ -1,4 +1,2 @@
 package com.forehapp.store.wishlistModule.infrastructure.web.dto;
-
-public class AddToWishlistDto {
-}
+// Moved to com.forehapp.store.wishlistModule.application.dto
