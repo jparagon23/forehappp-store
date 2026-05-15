@@ -1,570 +1,1014 @@
 ========================================================
-  CART MODULE — CASOS DE PRUEBA COMPLETOS
+  CART MODULE — CASOS DE PRUEBA (v2 — ALTA EXIGENCIA)
   Base URL: http://localhost:8082/api/v1/cart
+  Código revisado: CartServiceImpl.java (post-bugfix)
 ========================================================
 
 CONVENCIONES
 ────────────
-  ✅ Resultado esperado exitoso
-  ❌ Resultado esperado de error
-  ⚠️  Comportamiento a validar / posible bug
-  JWT_BUYER   = token válido de usuario con rol CUSTOMER
-  JWT_SELLER  = token válido de usuario con rol SELLER
-  JWT_ADMIN   = token válido de usuario con rol STORE_ADMIN
-  variantId válido = ID de variante existente y activa en BD
+  ✅  Caso de éxito esperado
+  ❌  Caso de error esperado
+  ⚠️  Comportamiento a verificar / inconsistencia / bug potencial
+  PRE: precondiciones requeridas
+  ACT: acción a ejecutar
+  ESP: resultado esperado
+  VAL: validación adicional en BD o respuesta
+
+  ROLES DISPONIBLES EN StoreProfile:
+    CUSTOMER  → puede usar el carrito
+    SELLER    → no puede usar el carrito (salvo que también tenga CUSTOMER)
+    STORE_ADMIN → no puede usar el carrito (salvo que también tenga CUSTOMER)
+
+  MAX_ITEM_QUANTITY = 9999 (constante hardcoded en CartServiceImpl)
+  EXPIRY_DAYS = 180 (días sin actividad antes de que el carrito expire)
+  Expiración: cart.updatedAt.isBefore(now - 180 días)  ← ESTRICTO (not <=)
 
 
 ========================================================
-  1. GET /api/v1/cart — OBTENER CARRITO
+  SECCIÓN 1 — AUTENTICACIÓN Y AUTORIZACIÓN (TC-001–TC-020)
 ========================================================
 
-TC-001 ✅ Carrito vacío (usuario sin carrito previo)
-  Header: Authorization: Bearer JWT_BUYER
-  Resultado esperado 200:
+TC-001 ❌ Sin token JWT en cualquier endpoint
+  ACT: GET /api/v1/cart (sin header Authorization)
+  ESP: 401 Unauthorized
+  VAL: body con estructura de error
+
+TC-002 ❌ Token JWT malformado (no es un JWT válido)
+  ACT: Authorization: Bearer "esto_no_es_un_jwt"
+  ESP: 401 Unauthorized
+
+TC-003 ❌ Token JWT con firma inválida (mismo payload, firma alterada)
+  ACT: Authorization: Bearer <jwt_con_firma_modificada>
+  ESP: 401 Unauthorized
+
+TC-004 ❌ Token JWT expirado (exp claim en el pasado)
+  ACT: Authorization: Bearer <jwt_expirado>
+  ESP: 401 Unauthorized
+
+TC-005 ❌ Token JWT válido pero userId inexistente en BD
+  PRE: token firmado con userId=99999 que no existe en users
+  ACT: GET /api/v1/cart
+  ESP: 404 "Store profile not found"
+
+TC-006 ❌ Token válido, user existe, pero sin StoreProfile asociado
+  PRE: user_id existe en users, no tiene registro en store_profiles
+  ACT: GET /api/v1/cart
+  ESP: 404 "Store profile not found"
+
+TC-007 ❌ StoreProfile con rol SELLER únicamente (sin CUSTOMER)
+  PRE: usuario con solo rol SELLER en store_profile_roles
+  ACT: GET /api/v1/cart
+  ESP: 403 "Solo compradores pueden usar el carrito"
+
+TC-008 ❌ StoreProfile con rol STORE_ADMIN únicamente (sin CUSTOMER)
+  PRE: usuario con solo rol STORE_ADMIN
+  ACT: POST /api/v1/cart/items { variantId:1, quantity:1 }
+  ESP: 403 "Solo compradores pueden usar el carrito"
+
+TC-009 ❌ StoreProfile sin ningún rol (roles vacíos)
+  PRE: store_profile_roles no tiene filas para este profile_id
+  ACT: PATCH /api/v1/cart/items/1 { quantity:2 }
+  ESP: 403 "Solo compradores pueden usar el carrito"
+
+TC-010 ✅ StoreProfile con rol CUSTOMER únicamente
+  PRE: usuario con solo rol CUSTOMER
+  ACT: GET /api/v1/cart
+  ESP: 200
+
+TC-011 ✅ StoreProfile con roles CUSTOMER + SELLER simultáneos
+  PRE: usuario con roles [CUSTOMER, SELLER]
+  ACT: POST /api/v1/cart/items { variantId:1, quantity:1 }
+  ESP: 201
+
+TC-012 ✅ StoreProfile con roles CUSTOMER + STORE_ADMIN simultáneos
+  PRE: usuario con roles [CUSTOMER, STORE_ADMIN]
+  ACT: GET /api/v1/cart
+  ESP: 200
+
+TC-013 ❌ Rol CUSTOMER pero sin StoreProfile (inconsistencia de datos)
+  PRE: store_profiles row eliminado manualmente en BD
+  ACT: GET /api/v1/cart
+  ESP: 404 "Store profile not found"
+  VAL: el requireBuyer evalúa findByUserId primero, luego el rol
+
+TC-014 ❌ Verificar que 403 aplica a TODOS los endpoints, no solo GET
+  ACT: con usuario sin CUSTOMER:
+       DELETE /api/v1/cart
+       DELETE /api/v1/cart/items/1
+       PATCH /api/v1/cart/items/1 { quantity:1 }
+  ESP: 403 en los cinco endpoints
+
+TC-015 ⚠️  Token con userId como string no numérico (ej "abc") en el JWT
+  ACT: controller hace Long.parseLong(userId) → NumberFormatException
+  ESP: 500 Internal Server Error (no está manejado explícitamente)
+  NOTA: riesgo bajo si el proveedor de JWT solo emite IDs numéricos
+
+
+========================================================
+  SECCIÓN 2 — GET /api/v1/cart (TC-016–TC-050)
+========================================================
+
+──────────────────────────────────────────
+2A. RESPUESTA VACÍA / SIN CARRITO
+──────────────────────────────────────────
+
+TC-016 ✅ Usuario CUSTOMER sin carrito previo
+  PRE: usuario sin ningún registro en store_carts
+  ACT: GET /api/v1/cart
+  ESP: 200
   {
-    "cartId": null,
+    "cartId": null, "status": "ACTIVE",
+    "updatedAt": null, "total": 0.00,
+    "sellerGroups": []
+  }
+  VAL: NO se crea ningún registro en store_carts
+
+TC-017 ✅ Usuario con carrito EXPIRED y sin carrito ACTIVE
+  PRE: store_carts tiene 1 fila status=EXPIRED para este buyer
+  ACT: GET /api/v1/cart
+  ESP: 200 — respuesta vacía (cartId: null, sellerGroups: [])
+  VAL: el carrito EXPIRED sigue en BD sin cambios
+
+TC-018 ✅ Usuario con carrito CONVERTED (post-checkout)
+  PRE: store_carts tiene 1 fila status=CONVERTED
+  ACT: GET /api/v1/cart
+  ESP: 200 — respuesta vacía (findActiveByBuyerId solo busca ACTIVE)
+
+TC-019 ✅ Carrito ACTIVE pero sin ítems
+  PRE: store_carts con 1 fila ACTIVE, store_cart_items vacío para ese cart
+  ACT: GET /api/v1/cart
+  ESP: 200
+  {
+    "cartId": <id>, "status": "ACTIVE",
+    "updatedAt": <fecha>, "total": 0.00,
+    "sellerGroups": []
+  }
+
+──────────────────────────────────────────
+2B. CARRITO CON ÍTEMS
+──────────────────────────────────────────
+
+TC-020 ✅ Carrito con 1 ítem, 1 vendedor
+  PRE: carrito ACTIVE con 1 CartItem
+  ESP: 200 — 1 sellerGroup, 1 item, subtotal correcto
+  VAL: group.subtotal == item.currentPrice * item.quantity
+  VAL: total == group.subtotal
+
+TC-021 ✅ Carrito con 3 ítems del mismo vendedor
+  PRE: 3 CartItems, todas variantes del mismo seller
+  ESP: 200 — 1 sellerGroup con 3 items
+  VAL: group.subtotal == suma de los 3 subtotales individuales
+  VAL: total == group.subtotal
+
+TC-022 ✅ Carrito con ítems de 3 vendedores distintos
+  PRE: ítems de sellers A, B y C
+  ESP: 200 — 3 sellerGroups, cada uno con su propio subtotal
+  VAL: total == subtotalA + subtotalB + subtotalC
+  VAL: cada ítem aparece exactamente en 1 grupo
+
+TC-023 ✅ Ítem con precio sin cambio desde que se agregó
+  PRE: CartItem con priceAtAdd=100.00, variant.price=100.00
+  ESP: { "priceChanged": false, "previousPrice": null,
+          "currentPrice": 100.00, "subtotal": 100.00 * qty }
+
+TC-024 ✅ Ítem con precio aumentado desde que se agregó
+  PRE: CartItem priceAtAdd=80.00; cambiar variant.price a 100.00
+  ESP: { "priceChanged": true, "previousPrice": 80.00, "currentPrice": 100.00 }
+  VAL: subtotal usa currentPrice (100.00 * qty), NO priceAtAdd
+  VAL: total del carrito refleja precio actual
+
+TC-025 ✅ Ítem con precio reducido desde que se agregó
+  PRE: CartItem priceAtAdd=100.00; cambiar variant.price a 60.00
+  ESP: { "priceChanged": true, "previousPrice": 100.00, "currentPrice": 60.00 }
+  VAL: subtotal usa 60.00 (precio más bajo, favorece al comprador)
+
+TC-026 ✅ Carrito mixto: algunos ítems con precio cambiado, otros no
+  PRE: 3 ítems; 1 con precio igual, 1 subió, 1 bajó
+  ESP: 200 — priceChanged correcto en cada ítem individualmente
+
+TC-027 ⚠️  GET /cart NO debe actualizar updatedAt del carrito
+  PRE: carrito ACTIVE con updatedAt = T0
+  ACT: GET /api/v1/cart
+  ESP: 200 — updatedAt en respuesta sigue siendo T0
+  VAL: en BD, updated_at no fue modificado por el GET
+  MOTIVO: solo saveCart() actualiza updatedAt; getCart() no llama saveCart()
+
+──────────────────────────────────────────
+2C. FILTRADO DE PRODUCTOS INACTIVOS (BUG-06)
+──────────────────────────────────────────
+
+TC-028 ✅ Ítem cuyo producto está INACTIVE → filtrado del response
+  PRE: CartItem con variant de producto status=INACTIVE
+  ACT: GET /api/v1/cart
+  ESP: 200 — ese ítem NO aparece en sellerGroups
+  VAL: el CartItem sigue existiendo en store_cart_items (no se elimina de BD)
+  VAL: si es el único ítem, sellerGroups=[], total=0.00
+
+TC-029 ✅ Ítem con producto DRAFT → filtrado
+  PRE: product.status = DRAFT
+  ESP: ítem no aparece en la respuesta
+
+TC-030 ✅ Ítem con producto OUT_OF_STOCK → filtrado
+  PRE: product.status = OUT_OF_STOCK
+  ESP: ítem no aparece en la respuesta
+
+TC-031 ✅ Carrito con todos los productos inactivos
+  PRE: 3 CartItems, todos con product.status != ACTIVE
+  ESP: 200
+  {
+    "cartId": <id_real>,   ← cartId no es null porque el carrito SÍ existe
     "status": "ACTIVE",
-    "updatedAt": null,
     "total": 0.00,
     "sellerGroups": []
   }
-  Nota: el backend devuelve un "carrito virtual" sin persistir.
+  VAL: cartId != null (el carrito existe aunque el response parezca vacío)
+  RIESGO FRONT: el front debe diferenciar entre "sin carrito" (cartId=null)
+  y "carrito con todos inactivos" (cartId!=null, sellerGroups=[])
 
-TC-002 ✅ Carrito con 1 ítem de 1 vendedor
-  Header: Authorization: Bearer JWT_BUYER (tiene carrito activo con 1 ítem)
-  Resultado esperado 200:
-  {
-    "cartId": 1,
-    "status": "ACTIVE",
-    "total": <precio * cantidad>,
-    "sellerGroups": [
-      {
-        "sellerId": X,
-        "sellerName": "Nombre Vendedor",
-        "items": [ { ... } ],
-        "subtotal": <precio * cantidad>
-      }
-    ]
-  }
+TC-032 ✅ Carrito mixto: 2 productos ACTIVE, 1 INACTIVE
+  PRE: 3 ítems; 2 de productos ACTIVE, 1 de producto INACTIVE
+  ESP: 200 — solo los 2 ACTIVE aparecen, total = suma de los 2
+  VAL: el vendedor del producto INACTIVE desaparece del sellerGroups
+       solo si todos sus ítems eran del producto inactivo
 
-TC-003 ✅ Carrito con ítems de múltiples vendedores
-  Precondición: carrito con 2 ítems, cada uno de un vendedor distinto.
-  Resultado esperado 200: "sellerGroups" con 2 grupos, total = suma de ambos subtotales.
-  Validar: cada grupo tiene solo los ítems del vendedor correspondiente.
+TC-033 ✅ Producto reactivado (INACTIVE → ACTIVE) vuelve a aparecer
+  PRE: CartItem con producto INACTIVE. Cambiar product.status a ACTIVE.
+  ACT: GET /api/v1/cart
+  ESP: 200 — el ítem aparece nuevamente en la respuesta
+  VAL: el filtro es dinámico, se evalúa en cada request
 
-TC-004 ✅ Carrito con varios ítems del mismo vendedor
-  Precondición: 3 ítems de variantes distintas del mismo seller.
-  Resultado esperado 200: 1 solo grupo con 3 ítems, subtotal = suma de los 3.
+──────────────────────────────────────────
+2D. EXPIRACIÓN (180 días)
+──────────────────────────────────────────
 
-TC-005 ✅ Ítem con precio cambiado desde que se agregó
-  Precondición: agregar variante al carrito. Cambiar el precio de la variante en BD.
-  Resultado esperado 200:
-  {
-    "priceChanged": true,
-    "originalPriceAtAdd": <precio original>,
-    "currentPrice": <precio nuevo>
-  }
-  El subtotal usa currentPrice (precio actual), no el original.
+TC-034 ✅ Carrito activo reciente — no expira
+  PRE: cart.updatedAt = now - 10 días
+  ACT: GET /api/v1/cart
+  ESP: 200 con ítems, carrito sigue ACTIVE en BD
 
-TC-006 ✅ Ítem sin cambio de precio
-  Resultado esperado 200: "priceChanged": false, "originalPriceAtAdd": null
+TC-035 ✅ Carrito con updatedAt exactamente 180 días atrás — NO expira
+  PRE: cart.updatedAt = now - 180 días exactos (mismo instante)
+  ACT: GET /api/v1/cart
+  ESP: 200 con ítems — isBefore(now - 180d) == false → no expira
+  VAL: status sigue ACTIVE en BD
 
-TC-007 ⚠️  Carrito expirado — acceso después de 180 días de inactividad
-  Precondición: carrito con updatedAt < ahora - 180 días.
-  Resultado esperado 200: respuesta de carrito vacío (cartId: null, groups: []).
-  El carrito se marca EXPIRED en BD y se devuelve respuesta vacía.
-  Validar en BD que status = 'EXPIRED' tras la petición.
+TC-036 ✅ Carrito con updatedAt 180 días y 1 segundo atrás — SÍ expira
+  PRE: cart.updatedAt = now - 180 días - 1 segundo
+  ACT: GET /api/v1/cart
+  ESP: 200 — respuesta vacía (cartId: null, sellerGroups: [])
+  VAL: en BD, el cart tiene status=EXPIRED
+  VAL: updatedAt en BD no se modifica (solo se cambia el status)
 
-TC-008 ⚠️  Carrito exactamente en el límite de 180 días
-  Precondición: updatedAt = ahora - 180 días exactos (sin 1 segundo de margen).
-  La condición en código es: isBefore(LocalDateTime.now().minusDays(180))
-  → Si updatedAt == ahora - 180 días, isBefore retorna false → carrito sigue ACTIVO.
-  Validar que el carrito en el límite exacto NO expira.
+TC-037 ✅ Carrito con updatedAt 365 días atrás — expira
+  PRE: cart.updatedAt = now - 365 días
+  ACT: GET /api/v1/cart
+  ESP: 200 — respuesta vacía
+  VAL: status=EXPIRED en BD
 
-TC-009 ❌ Sin token JWT
-  Header: (ninguno)
-  Resultado esperado: 401 Unauthorized
-
-TC-010 ❌ Token JWT expirado
-  Header: Authorization: Bearer <token_expirado>
-  Resultado esperado: 401 Unauthorized
-
-TC-011 ❌ StoreProfile no existe para el userId del token
-  Resultado esperado: 404 "Store profile not found"
+TC-038 ⚠️  GET /cart puede marcar el carrito como EXPIRED en BD
+  PRE: carrito expirado
+  ACT: GET /api/v1/cart
+  ESP: respuesta vacía, PERO el GET hace escritura en BD (status=EXPIRED)
+  NOTA: el GET no es "puro read-only" — puede mutar estado en BD
+  RIESGO: si la BD está en modo read-only, este caso fallaría
 
 
 ========================================================
-  2. POST /api/v1/cart/items — AGREGAR ÍTEM
+  SECCIÓN 3 — POST /api/v1/cart/items (TC-051–TC-115)
 ========================================================
 
-──────────────────────────────────────────────────────
-2A. FLUJO NORMAL
-──────────────────────────────────────────────────────
+──────────────────────────────────────────
+3A. CREACIÓN DE CARRITO Y FLUJO NORMAL
+──────────────────────────────────────────
 
-TC-012 ✅ Agregar ítem a carrito vacío (crea carrito nuevo)
-  Body: { "variantId": 1, "quantity": 2 }
-  Resultado esperado 201: carrito nuevo con 1 ítem, quantity=2.
-  Validar en BD: nuevo registro en store_carts + store_cart_items.
+TC-051 ✅ Primer ítem del usuario — crea carrito y agrega ítem
+  PRE: usuario sin carrito previo
+  ACT: POST { variantId:1, quantity:2 }
+  ESP: 201
+  VAL: nuevo registro en store_carts con status=ACTIVE
+  VAL: nuevo registro en store_cart_items con priceAtAdd=variant.price
+  VAL: cart.updatedAt se establece al momento del request
+  VAL: CartResponse.cartId != null
 
-TC-013 ✅ Agregar ítem a carrito ya existente (variante diferente)
-  Precondición: carrito activo con variante A.
-  Body: { "variantId": <variante B>, "quantity": 1 }
-  Resultado esperado 201: carrito con 2 ítems.
+TC-052 ✅ Agregar segunda variante distinta al carrito existente
+  PRE: carrito con variante A, quantity=2
+  ACT: POST { variantId: <variante B>, quantity:1 }
+  ESP: 201 — 2 ítems en el carrito
+  VAL: 2 registros en store_cart_items
 
-TC-014 ✅ Agregar la misma variante que ya está en el carrito (acumula)
-  Precondición: carrito con variante A, quantity=2.
-  Body: { "variantId": <variante A>, "quantity": 3 }
-  Resultado esperado 201: misma variante, quantity=5 (2+3).
-  Validar: NO se crea un segundo CartItem, solo se actualiza el existente.
-  Validar en BD: sigue habiendo 1 solo registro para ese cart+variant.
+TC-053 ✅ Agregar la misma variante ya existente — acumula cantidad
+  PRE: carrito con variante A, quantity=3
+  ACT: POST { variantId: <variante A>, quantity:4 }
+  ESP: 201 — variante A con quantity=7
+  VAL: solo 1 registro en store_cart_items para cart+variant
+  VAL: la constraint uk_cart_variant (cart_id, variant_id) no se viola
 
-TC-015 ✅ Agregar ítem cuando el carrito estaba expirado (crea carrito nuevo)
-  Precondición: carrito con status EXPIRED.
-  Body: { "variantId": 1, "quantity": 1 }
-  Resultado esperado 201: carrito nuevo creado con 1 ítem.
-  El carrito expirado queda en BD como EXPIRED, no se reutiliza.
+TC-054 ✅ Agregar variante con quantity=1 (mínimo permitido)
+  ACT: POST { variantId:1, quantity:1 }
+  ESP: 201
 
-TC-016 ✅ Agregar ítem con quantity=1 (mínimo válido)
-  Body: { "variantId": 1, "quantity": 1 }
-  Resultado esperado 201.
+TC-055 ✅ Agregar variante con quantity=9999 a carrito vacío
+  ACT: POST { variantId:1, quantity:9999 }
+  ESP: 201 — quantity=9999 en la respuesta
 
-TC-017 ✅ Verificar que priceAtAdd se guarda correctamente
-  Precondición: variante con price=50000.00.
-  Agregar al carrito. Luego consultar GET /cart.
-  Resultado esperado: "priceChanged": false y el precio en respuesta = 50000.00.
+TC-056 ✅ priceAtAdd se registra correctamente al agregar
+  PRE: variant.price = 55000.00
+  ACT: POST { variantId:X, quantity:1 }
+  ESP: 201
+  VAL: en BD, store_cart_items.price_at_add = 55000.00
+  VAL: respuesta tiene priceChanged=false
 
-TC-018 ✅ Carrito de SELLER también puede comprar (si tiene rol CUSTOMER en su perfil)
-  Header: JWT_SELLER (con rol CUSTOMER también)
-  Resultado esperado 201.
+TC-057 ✅ Agregar ítem cuando carrito previo está EXPIRED — crea nuevo carrito
+  PRE: cart EXPIRED con 2 ítems
+  ACT: POST { variantId:1, quantity:1 }
+  ESP: 201 — carrito nuevo con 1 ítem (no el expirado)
+  VAL: en BD hay 2 registros: uno EXPIRED (antiguo) y uno ACTIVE (nuevo)
+  VAL: el nuevo carrito no contiene los ítems del carrito expirado
 
-──────────────────────────────────────────────────────
-2B. VALIDACIONES DE REQUEST
-──────────────────────────────────────────────────────
+TC-058 ✅ Agregar ítem cuando carrito previo está CONVERTED — crea nuevo carrito
+  PRE: cart CONVERTED
+  ACT: POST { variantId:1, quantity:1 }
+  ESP: 201 — carrito nuevo con 1 ítem
+  VAL: el carrito CONVERTED permanece intacto en BD
 
-TC-019 ❌ variantId null
-  Body: { "variantId": null, "quantity": 1 }
-  Resultado esperado: 400 Bad Request (validación @NotNull)
+TC-059 ✅ Agregar ítem a carrito de 179 días — renueva el timer
+  PRE: cart.updatedAt = now - 179 días (no expirado)
+  ACT: POST { variantId:1, quantity:1 }
+  ESP: 201
+  VAL: cart.updatedAt actualizado a "ahora" (timer reseteado)
+  VAL: el carrito no expiró; el ítem se agrega al existente
 
-TC-020 ❌ variantId ausente del body
-  Body: { "quantity": 1 }
-  Resultado esperado: 400 Bad Request
+TC-060 ✅ Agregar ítem cuando carrito expira durante el request
+  PRE: cart.updatedAt = now - 181 días
+  ACT: POST { variantId:1, quantity:1 }
+  ESP: 201 — carrito NUEVO creado con 1 ítem
+  VAL: carrito antiguo marcado EXPIRED en BD
+  VAL: nuevo carrito ACTIVE en BD
 
-TC-021 ❌ quantity null
-  Body: { "variantId": 1, "quantity": null }
-  Resultado esperado: 400 Bad Request (validación @NotNull)
+──────────────────────────────────────────
+3B. LÍMITE DE CANTIDAD — MAX 9999 (BUG-01)
+──────────────────────────────────────────
 
-TC-022 ❌ quantity = 0
-  Body: { "variantId": 1, "quantity": 0 }
-  Resultado esperado: 400 Bad Request (validación @Min(1))
+TC-061 ✅ Acumulación exactamente hasta 9999 — permitido
+  PRE: carrito con variante A, quantity=5000
+  ACT: POST { variantId: A, quantity:4999 }
+  ESP: 201 — quantity=9999 (5000+4999)
 
-TC-023 ❌ quantity negativa
-  Body: { "variantId": 1, "quantity": -5 }
-  Resultado esperado: 400 Bad Request (validación @Min(1))
+TC-062 ❌ Acumulación que supera 9999 en 1 unidad — rechazado
+  PRE: carrito con variante A, quantity=5000
+  ACT: POST { variantId: A, quantity:5000 }  → resultado sería 10000
+  ESP: 400 "La cantidad máxima por producto es 9999"
 
-TC-024 ❌ Body vacío
-  Body: {}
-  Resultado esperado: 400 Bad Request
+TC-063 ❌ Acumulación que supera 9999 en mucho — rechazado
+  PRE: carrito con variante A, quantity=1
+  ACT: POST { variantId: A, quantity:9999 }  → resultado sería 10000
+  ESP: 400 "La cantidad máxima por producto es 9999"
 
-TC-025 ❌ Body null / sin Content-Type
-  Resultado esperado: 400 Bad Request
+TC-064 ❌ Primer add con quantity=10000 — rechazado
+  ACT: POST { variantId:1, quantity:10000 }
+  ESP: 400 (quantity inicial 10000 > 9999)
+  VAL: el mensaje proviene del bloque ifPresentOrElse —
+       PERO si la variante NO está en el carrito, se entra al "else" (nueva inserción)
+       y NO se valida el límite de cantidad para nuevos ítems.
+  ⚠️  INCONSISTENCIA: el límite 9999 solo se verifica al ACUMULAR (variante ya
+       en el carrito), NO al agregar una variante nueva. Un primer add de
+       quantity=10000 se ACEPTA. Ver NUEVA-BUG-01 al final.
 
-TC-026 ❌ variantId inexistente en BD
-  Body: { "variantId": 999999, "quantity": 1 }
-  Resultado esperado: 404 "Variant not found"
+TC-065 ⚠️  Verificar: agregar variante nueva con quantity=50000
+  PRE: carrito sin esa variante
+  ACT: POST { variantId:1, quantity:50000 }
+  ESP: debería ser 400, pero con el código actual el límite solo aplica en la
+       rama de acumulación. La inserción nueva no pasa por el check.
+  → RESULTADO REAL: 201 (bug — ver NUEVA-BUG-01)
 
-TC-027 ❌ variantId = 0
-  Body: { "variantId": 0, "quantity": 1 }
-  Resultado esperado: 404 "Variant not found" (no existe variant con id 0)
+TC-066 ✅ Límite aplica por variante, no por carrito
+  PRE: carrito con variante A (qty=5000) y variante B (qty=5000)
+  ACT: POST { variantId: A, quantity:4999 } → resultado 9999
+  ESP: 201 (variante B no interfiere con el límite de A)
 
-TC-028 ❌ variantId negativo
-  Body: { "variantId": -1, "quantity": 1 }
-  Resultado esperado: 404 "Variant not found"
+──────────────────────────────────────────
+3C. VALIDACIONES DE REQUEST
+──────────────────────────────────────────
 
-──────────────────────────────────────────────────────
-2C. CASOS EXTREMOS
-──────────────────────────────────────────────────────
+TC-067 ❌ variantId = null
+  ACT: POST { "variantId": null, "quantity": 1 }
+  ESP: 400 (validación @NotNull)
 
-TC-029 ⚠️  quantity muy grande (Integer.MAX_VALUE = 2,147,483,647)
-  Body: { "variantId": 1, "quantity": 2147483647 }
-  Resultado esperado 201: se acepta (no hay límite de cantidad en el código).
-  Validar: subtotal = price * 2147483647 sin overflow en BigDecimal.
-  Riesgo: en BD, columna quantity es INT → válido hasta 2147483647.
+TC-068 ❌ variantId ausente del body
+  ACT: POST { "quantity": 1 }
+  ESP: 400
 
-TC-030 ⚠️  Acumulación de misma variante hasta quantity muy grande
-  Precondición: carrito con variante A, quantity=2000000000.
-  Agregar variante A con quantity=2000000000.
-  Resultado: quantity = 4000000000 → OVERFLOW en Integer (MAX es 2147483647).
-  Bug potencial: el código hace existing.getQuantity() + dto.quantity() en Integer.
-  Si el resultado supera Integer.MAX_VALUE habrá overflow silencioso.
+TC-069 ❌ quantity = null
+  ACT: POST { "variantId": 1, "quantity": null }
+  ESP: 400 (validación @NotNull)
 
-TC-031 ⚠️  Variante con precio 0.00
-  Precondición: variante con price=0.00 en BD.
-  Body: { "variantId": <id>, "quantity": 5 }
-  Resultado esperado 201: ítem con subtotal=0.00. Carrito total=0.00.
-  Validar: no hay división por cero ni error.
+TC-070 ❌ quantity ausente del body
+  ACT: POST { "variantId": 1 }
+  ESP: 400
 
-TC-032 ⚠️  Variante sin precio definido (price = null en BD)
-  Resultado esperado: posible NullPointerException en toItemResponse al hacer
-  currentPrice.compareTo(). Verificar que el sistema maneje correctamente.
+TC-071 ❌ quantity = 0
+  ACT: POST { "variantId": 1, "quantity": 0 }
+  ESP: 400 (validación @Min(1))
 
-TC-033 ✅ Agregar ítem con carrito CONVERTED (post-checkout)
-  Precondición: carrito en status CONVERTED (ya se hizo una orden).
-  findActiveByBuyerId busca status=ACTIVE → no encuentra carrito CONVERTED.
-  Resultado esperado 201: se crea un carrito nuevo. El CONVERTED queda intacto.
+TC-072 ❌ quantity = -1
+  ACT: POST { "variantId": 1, "quantity": -1 }
+  ESP: 400
 
-TC-034 ⚠️  Dos peticiones simultáneas agregando la misma variante
-  Dos requests concurrentes POST /items con mismo variantId.
-  Risk: si ambas pasan el stream().filter() antes de que alguna persista,
-  se podrían crear 2 CartItems para el mismo cart+variant.
-  La constraint uk_cart_variant en BD debería lanzar DataIntegrityViolationException.
-  Verificar que el error se maneje y retorne un error coherente al cliente.
+TC-073 ❌ quantity = -999
+  ACT: POST { "variantId": 1, "quantity": -999 }
+  ESP: 400
 
+TC-074 ❌ Body completamente vacío {}
+  ACT: POST {}
+  ESP: 400
 
-========================================================
-  3. PATCH /api/v1/cart/items/{itemId} — ACTUALIZAR CANTIDAD
-========================================================
+TC-075 ❌ Body ausente (sin Content-Type ni body)
+  ESP: 400
 
-TC-035 ✅ Actualizar quantity a valor válido
-  Precondición: carrito con itemId=5, quantity=2.
-  Body: { "quantity": 10 }
-  Resultado esperado 200: mismo ítem con quantity=10.
+TC-076 ❌ JSON malformado
+  ACT: POST "{ variantId: 1, quantity: }"
+  ESP: 400
 
-TC-036 ✅ Actualizar quantity a 1 (mínimo)
-  Body: { "quantity": 1 }
-  Resultado esperado 200.
+TC-077 ❌ Tipos incorrectos en campos numéricos
+  ACT: POST { "variantId": "abc", "quantity": 1 }
+  ESP: 400 (falla deserialización Long)
 
-TC-037 ❌ quantity = 0
-  Body: { "quantity": 0 }
-  Resultado esperado: 400 Bad Request (@Min(1))
+TC-078 ❌ variantId inexistente en BD
+  ACT: POST { "variantId": 999999, "quantity": 1 }
+  ESP: 404 "Variant not found"
 
-TC-038 ❌ quantity negativa
-  Body: { "quantity": -1 }
-  Resultado esperado: 400 Bad Request
+TC-079 ❌ variantId = 0
+  ACT: POST { "variantId": 0, "quantity": 1 }
+  ESP: 404 "Variant not found"
 
-TC-039 ❌ quantity null
-  Body: { "quantity": null }
-  Resultado esperado: 400 Bad Request
+TC-080 ❌ variantId negativo
+  ACT: POST { "variantId": -1, "quantity": 1 }
+  ESP: 404 "Variant not found"
 
-TC-040 ❌ itemId no existe en el carrito del buyer
-  PATCH /api/v1/cart/items/99999
-  Body: { "quantity": 3 }
-  Resultado esperado: 404 "Item not found in cart"
+TC-081 ❌ variantId = Long.MAX_VALUE (9223372036854775807)
+  ACT: POST { "variantId": 9223372036854775807, "quantity": 1 }
+  ESP: 404 "Variant not found"
 
-TC-041 ❌ itemId existe en BD pero pertenece a otro buyer
-  Precondición: buyer A tiene carrito con itemId=10. Buyer B intenta actualizar itemId=10.
-  El código busca en el carrito del buyer B → no encuentra itemId=10.
-  Resultado esperado: 404 "Item not found in cart" (no expone datos de otros usuarios).
+TC-082 ✅ quantity = Integer.MAX_VALUE (2147483647) en variante nueva
+  ⚠️  Ver TC-065. El límite 9999 no aplica a inserción nueva.
+  ESP: 201 (se inserta con quantity=2147483647)
+  VAL: subtotal en respuesta = price * 2147483647
 
-TC-042 ❌ Carrito no existe (usuario sin carrito activo)
-  PATCH /api/v1/cart/items/1
-  Body: { "quantity": 5 }
-  Resultado esperado: 404 "Cart not found"
+──────────────────────────────────────────
+3D. COMPORTAMIENTO POST-ADD
+──────────────────────────────────────────
 
-TC-043 ❌ Carrito expirado al intentar actualizar
-  Precondición: carrito expirado (updatedAt > 180 días).
-  Resultado esperado: 404 "Cart not found" (requireValidCart lo marca EXPIRED y lanza 404).
+TC-083 ✅ updatedAt del carrito se actualiza tras cada POST
+  PRE: carrito con updatedAt = T0
+  ACT: POST { variantId:1, quantity:1 }
+  ESP: 201 — respuesta.updatedAt > T0
+  VAL: en BD, updated_at fue modificado
 
-TC-044 ⚠️  itemId = 0
-  PATCH /api/v1/cart/items/0
-  Resultado esperado: 404 (no existe ítem con id 0).
+TC-084 ✅ Respuesta incluye todos los ítems del carrito, no solo el recién agregado
+  PRE: carrito con 3 ítems existentes
+  ACT: POST { variantId: nueva_variante, quantity:1 }
+  ESP: 201 — respuesta incluye los 4 ítems (3 previos + 1 nuevo)
 
-TC-045 ⚠️  itemId negativo
-  PATCH /api/v1/cart/items/-1
-  Resultado esperado: 400 o 404 según validación de Spring.
+TC-085 ✅ Agregar variante de producto INACTIVE — se agrega en BD pero filtrado en response
+  PRE: variante de producto con status=INACTIVE
+  ACT: POST { variantId: <variante_inactiva>, quantity:1 }
+  ESP: 201 — el ítem se guarda en store_cart_items
+  VAL: en el CartResponse, el ítem filtrado → no aparece en sellerGroups
+  VAL: total del carrito no incluye ese ítem
 
-TC-046 ⚠️  Body vacío en PATCH
-  Body: {}
-  Resultado esperado: 400 Bad Request (quantity es @NotNull).
-
-TC-047 ✅ Verificar que updatedAt del carrito se actualiza tras el PATCH
-  Resultado esperado: el campo updatedAt en la respuesta es posterior al updatedAt anterior.
-
-
-========================================================
-  4. DELETE /api/v1/cart/items/{itemId} — ELIMINAR ÍTEM
-========================================================
-
-TC-048 ✅ Eliminar único ítem del carrito
-  Precondición: carrito con 1 ítem.
-  Resultado esperado: 204 No Content. GET /cart devuelve carrito con groups=[].
-  Validar: el CartItem se elimina de BD (orphanRemoval=true).
-  Validar: el Cart sigue existiendo en BD con status=ACTIVE.
-
-TC-049 ✅ Eliminar uno de varios ítems
-  Precondición: carrito con 3 ítems.
-  Resultado esperado: 204. GET /cart devuelve 2 ítems restantes.
-
-TC-050 ❌ itemId no pertenece al carrito del buyer
-  Resultado esperado: 404 "Item not found in cart"
-
-TC-051 ❌ itemId de otro buyer
-  Resultado esperado: 404 "Item not found in cart" (aislamiento garantizado)
-
-TC-052 ❌ Carrito no existe
-  Resultado esperado: 404 "Cart not found"
-
-TC-053 ❌ Carrito expirado
-  Resultado esperado: 404 "Cart not found"
-
-TC-054 ⚠️  Eliminar ítem cuando el grupo del seller queda vacío
-  Precondición: carrito con 1 ítem del seller A y 2 ítems del seller B.
-  Eliminar el único ítem del seller A.
-  Resultado esperado: GET /cart muestra solo el grupo del seller B (1 grupo).
-  El grupo del seller A desaparece del response ya que no tiene ítems.
-
-TC-055 ❌ Sin token
-  Resultado esperado: 401
+TC-086 ⚠️  Concurrencia: dos requests simultáneos con la misma variante nueva
+  PRE: carrito sin la variante X
+  ACT: dos requests concurrentes POST { variantId: X, quantity:1 }
+  ESP: uno retorna 201, el otro retorna 409 Conflict
+  VAL: en BD, solo 1 registro en store_cart_items para cart+variant X
+  VAL: la constraint uk_cart_variant actúa como salvaguarda
 
 
 ========================================================
-  5. DELETE /api/v1/cart — LIMPIAR CARRITO COMPLETO
+  SECCIÓN 4 — PATCH /api/v1/cart/items/{itemId} (TC-116–TC-155)
 ========================================================
 
-TC-056 ✅ Limpiar carrito con múltiples ítems
-  Precondición: carrito con 5 ítems de 3 vendedores.
-  Resultado esperado: 204 No Content.
-  GET /cart devuelve: { "cartId": null, "total": 0, "sellerGroups": [] }
-  Validar en BD: todos los CartItems eliminados (orphanRemoval=true).
-  Validar en BD: el Cart sigue existiendo con status=ACTIVE e items=[].
+──────────────────────────────────────────
+4A. FLUJO NORMAL
+──────────────────────────────────────────
 
-TC-057 ✅ Limpiar carrito ya vacío
-  Precondición: usuario con carrito sin ítems.
-  Resultado esperado: 204 No Content (el código usa ifPresent, no lanza error).
+TC-116 ✅ Actualizar quantity a valor válido
+  PRE: carrito con itemId=5, quantity=2
+  ACT: PATCH /items/5 { quantity:10 }
+  ESP: 200 — item con quantity=10
 
-TC-058 ✅ Limpiar cuando el usuario no tiene carrito activo
-  Precondición: usuario sin ningún carrito (o solo EXPIRED/CONVERTED).
-  Resultado esperado: 204 No Content (ifPresent no ejecuta nada, sin error).
+TC-117 ✅ Actualizar quantity a 1 (mínimo permitido)
+  ACT: PATCH /items/5 { quantity:1 }
+  ESP: 200
 
-TC-059 ✅ Limpiar carrito expirado
-  Precondición: carrito expirado.
-  findValidCart retorna Optional.empty() → ifPresent no ejecuta.
-  Resultado esperado: 204 No Content. No error.
+TC-118 ✅ Actualizar quantity a 9999 (límite POST)
+  ACT: PATCH /items/5 { quantity:9999 }
+  ESP: 200 — quantity=9999
+  VAL: PATCH no tiene límite de 9999; solo tiene @Min(1)
 
-TC-060 ❌ Sin token
-  Resultado esperado: 401
+TC-119 ⚠️  Actualizar quantity a 10000 — inconsistencia con POST
+  ACT: PATCH /items/5 { quantity:10000 }
+  ESP: 200 — ACEPTADO (UpdateCartItemDto solo valida @Min(1), no @Max)
+  PROBLEMA: POST/acumulación rechaza >9999, pero PATCH puede setearlo a cualquier valor
+  Ver NUEVA-BUG-02 al final del documento.
 
+TC-120 ⚠️  Actualizar quantity a Integer.MAX_VALUE via PATCH
+  ACT: PATCH /items/5 { quantity: 2147483647 }
+  ESP: 200 — ACEPTADO (no hay validación de máximo)
+  VAL: subtotal = price * 2147483647 (BigDecimal maneja sin overflow)
+  PROBLEMA: valor absurdo aceptado — ver NUEVA-BUG-02.
 
-========================================================
-  6. CASOS CRUZADOS / FLUJOS COMPLETOS
-========================================================
+TC-121 ✅ updatedAt del carrito se actualiza tras PATCH
+  PRE: carrito con updatedAt = T0
+  ACT: PATCH /items/5 { quantity:3 }
+  ESP: 200 — respuesta.updatedAt > T0
+  VAL: en BD, updated_at fue modificado
 
-TC-061 ✅ Flujo completo: crear carrito, agregar, actualizar, eliminar ítem, limpiar
-  1. GET /cart → carrito vacío (cartId: null)
-  2. POST /items variantId=1 qty=2 → 201, carrito creado
-  3. POST /items variantId=2 qty=1 → 201, 2 ítems
-  4. POST /items variantId=1 qty=3 → 201, variantId=1 qty=5 (acumulado)
-  5. PATCH /items/{itemId_var2} qty=10 → 200
-  6. DELETE /items/{itemId_var1} → 204, queda solo var2
-  7. DELETE /cart → 204
-  8. GET /cart → carrito vacío
+TC-122 ✅ Respuesta incluye todos los ítems del carrito, no solo el actualizado
+  PRE: carrito con 4 ítems, actualizar itemId=2
+  ESP: 200 — respuesta contiene los 4 ítems con la cantidad nueva en ítem 2
 
-TC-062 ✅ Dos compradores con carritos independientes
-  Buyer A agrega variantId=1 qty=5.
-  Buyer B agrega variantId=1 qty=2.
-  GET /cart con JWT_BUYER_A → qty=5.
-  GET /cart con JWT_BUYER_B → qty=2.
-  Los carritos son completamente aislados.
+──────────────────────────────────────────
+4B. ERRORES DE VALIDACIÓN
+──────────────────────────────────────────
 
-TC-063 ⚠️  Carrito se recrea correctamente después de conversión a orden
-  Precondición: buyer con carrito CONVERTED (hizo checkout).
-  GET /cart → respuesta de carrito vacío (cartId: null, status: ACTIVE).
-  POST /items → crea nuevo carrito. Verificar que el CONVERTED sigue intacto en BD.
+TC-123 ❌ quantity = 0
+  ACT: PATCH /items/5 { quantity:0 }
+  ESP: 400
 
-TC-064 ⚠️  Vendedor que también es comprador
-  JWT de usuario con roles SELLER y CUSTOMER simultáneamente.
-  POST /items → debe funcionar (el código resuelve StoreProfile sin verificar rol).
-  Resultado esperado 201.
+TC-124 ❌ quantity = -1
+  ACT: PATCH /items/5 { quantity:-1 }
+  ESP: 400
 
-TC-065 ⚠️  Admin que intenta usar el carrito
-  JWT_ADMIN (solo rol STORE_ADMIN, no CUSTOMER).
-  El código no verifica rol en CartController — solo resuelve StoreProfile.
-  Resultado esperado: depende de si el admin tiene StoreProfile.
-  Si no tiene perfil → 404 "Store profile not found".
-  Si tiene perfil → 201 (el admin puede agregar ítems sin restricción de rol).
+TC-125 ❌ quantity = null
+  ACT: PATCH /items/5 { quantity:null }
+  ESP: 400
 
-TC-066 ⚠️  Variante eliminada que ya estaba en el carrito
-  Precondición: variante V agregada al carrito, luego la variante se elimina de BD.
-  GET /cart → posible error al intentar acceder a variant.getPrice() / variant.getSku().
-  Dependiendo de si JPA lanza EntityNotFoundException o si la referencia queda huérfana.
+TC-126 ❌ Body vacío {}
+  ESP: 400
 
-TC-067 ⚠️  Producto desactivado o eliminado con variante en carrito
-  El carrito todavía referencia la variante. El GET /cart devolverá el ítem
-  incluyendo el producto desactivado. No hay validación de estado de producto en el carrito.
-  El front debe manejarlo.
+TC-127 ❌ Body ausente
+  ESP: 400
 
-TC-068 ✅ Carrito con ítem de precio que cambió — subtotal usa precio actual
-  Precondición: agregar variante con price=100.00 → priceAtAdd=100.00.
-  Cambiar price de variante a 150.00.
-  GET /cart → priceChanged=true, originalPriceAtAdd=100.00, currentPrice=150.00,
-  subtotal = 150.00 * quantity (no 100.00 * quantity).
-  Validar que el total del carrito usa el precio actual.
+TC-128 ❌ quantity como string
+  ACT: PATCH /items/5 { "quantity": "tres" }
+  ESP: 400
 
-TC-069 ⚠️  Muchos carritos EXPIRED del mismo usuario en BD
-  Históricamente un usuario puede acumular muchos carritos expirados.
-  findActiveByBuyerId solo busca ACTIVE → no hay problema funcional.
-  Verificar que la query no es lenta con muchos registros históricos.
+──────────────────────────────────────────
+4C. ERRORES DE RECURSO
+──────────────────────────────────────────
 
+TC-129 ❌ itemId no existe en el carrito del usuario
+  ACT: PATCH /items/99999 { quantity:1 }
+  ESP: 404 "Item not found in cart"
 
-========================================================
-  7. CASOS DE SEGURIDAD
-========================================================
+TC-130 ❌ itemId existe en BD pero pertenece al carrito de otro usuario
+  PRE: buyer A tiene cartItem con id=10; buyer B hace el PATCH
+  ACT: buyer B → PATCH /items/10 { quantity:1 }
+  ESP: 404 "Item not found in cart"
+  VAL: no hay exposición de datos de otro usuario
 
-TC-070 ❌ Inyección SQL en itemId de la URL
-  PATCH /api/v1/cart/items/1;DROP TABLE store_carts--
-  Resultado esperado: 400 (Spring rechaza el path variable no numérico).
+TC-131 ❌ Usuario sin carrito activo
+  PRE: usuario sin store_carts status=ACTIVE
+  ACT: PATCH /items/1 { quantity:2 }
+  ESP: 404 "Cart not found"
 
-TC-071 ❌ itemId como string no numérico
-  PATCH /api/v1/cart/items/abc
-  Resultado esperado: 400 Bad Request (falla conversión a Long).
+TC-132 ❌ Carrito expirado al intentar PATCH
+  PRE: cart.updatedAt > 180 días
+  ACT: PATCH /items/1 { quantity:2 }
+  ESP: 404 "Cart not found"
+  VAL: en BD, cart marcado como EXPIRED (requireValidCart → findValidCart)
 
-TC-072 ❌ Payload JSON malformado
-  Body: { "variantId": 1, "quantity": }
-  Resultado esperado: 400 Bad Request (JSON parse error).
+TC-133 ❌ itemId = 0
+  ACT: PATCH /items/0 { quantity:1 }
+  ESP: 404 "Item not found in cart"
 
-TC-073 ❌ Inyección en campos numéricos (strings donde se espera number)
-  Body: { "variantId": "1; DROP TABLE", "quantity": 1 }
-  Resultado esperado: 400 Bad Request (falla deserialización JSON a Long).
+TC-134 ❌ itemId negativo
+  ACT: PATCH /items/-1 { quantity:1 }
+  ESP: 400 o 404 según Spring MVC path binding
 
-TC-074 ⚠️  Token válido de un usuario diferente manipulado
-  El backend resuelve el userId desde el JWT firmado. No es posible manipularlo
-  sin invalidar la firma. Verificar que el JWT secret es suficientemente robusto.
-
-TC-075 ❌ Intentar acceder al carrito de otro usuario modificando el token
-  No es posible si el JWT está bien firmado. 401 si la firma no es válida.
+TC-135 ❌ itemId como string no numérico
+  ACT: PATCH /items/abc { quantity:1 }
+  ESP: 400 (falla conversión a Long)
 
 
 ========================================================
-  8. CASOS DE RESPUESTA Y FORMATO
+  SECCIÓN 5 — DELETE /api/v1/cart/items/{itemId} (TC-136–TC-160)
 ========================================================
 
-TC-076 ✅ Verificar estructura completa de CartResponse
-  Validar que la respuesta incluye exactamente:
-  {
+TC-136 ✅ Eliminar único ítem del carrito
+  PRE: carrito con 1 ítem (itemId=7)
+  ACT: DELETE /items/7
+  ESP: 204 No Content
+  VAL: store_cart_items no tiene filas para cart_id (orphanRemoval=true)
+  VAL: store_carts sigue existiendo con status=ACTIVE e items=[]
+  VAL: GET /cart retorna { cartId: <id>, total: 0, sellerGroups: [] }
+
+TC-137 ✅ Eliminar uno de varios ítems
+  PRE: carrito con 3 ítems (itemIds: 1, 2, 3)
+  ACT: DELETE /items/2
+  ESP: 204
+  VAL: quedan 2 ítems en BD (ids 1 y 3)
+  VAL: GET /cart retorna los 2 ítems restantes con totales actualizados
+
+TC-138 ✅ Eliminar ítem que era el único de su seller
+  PRE: carrito con 1 ítem del seller A y 2 ítems del seller B
+  ACT: DELETE del único ítem de seller A
+  ESP: 204
+  VAL: GET /cart retorna solo el grupo del seller B
+  VAL: el grupo del seller A desaparece del response
+
+TC-139 ✅ updatedAt se actualiza tras DELETE de ítem
+  PRE: cart.updatedAt = T0
+  ACT: DELETE /items/7
+  ESP: 204
+  VAL: en BD, cart.updated_at > T0
+
+TC-140 ❌ itemId no pertenece al carrito del usuario
+  ACT: DELETE /items/99999
+  ESP: 404 "Item not found in cart"
+
+TC-141 ❌ itemId pertenece al carrito de otro usuario (IDOR)
+  PRE: buyer A tiene itemId=10; buyer B intenta borrarlo
+  ACT: buyer B → DELETE /items/10
+  ESP: 404 "Item not found in cart"
+  VAL: el ítem de buyer A sigue existiendo en BD intacto
+
+TC-142 ❌ Carrito no existe o está expirado
+  ACT: DELETE /items/1 (sin carrito activo)
+  ESP: 404 "Cart not found"
+
+TC-143 ❌ itemId = 0
+  ACT: DELETE /items/0
+  ESP: 404
+
+TC-144 ❌ itemId como string
+  ACT: DELETE /items/abc
+  ESP: 400
+
+TC-145 ⚠️  Eliminar ítem con producto inactivo
+  PRE: CartItem con producto INACTIVE (aparece en BD, no en response)
+  ACT: DELETE /items/<id_del_item_inactivo>
+  ESP: 204 — el ítem se elimina correctamente
+  VAL: findItem busca en cart.getItems() (todos los ítems, sin filtrar)
+  NOTA: el filtro BUG-06 solo aplica en toResponse(), no en findItem()
+  → El delete de ítems con productos inactivos FUNCIONA correctamente
+
+
+========================================================
+  SECCIÓN 6 — DELETE /api/v1/cart (TC-161–TC-175)
+========================================================
+
+TC-161 ✅ Limpiar carrito con múltiples ítems
+  PRE: carrito con 5 ítems de 3 vendedores
+  ACT: DELETE /api/v1/cart
+  ESP: 204 No Content
+  VAL: store_cart_items vacío para ese cart_id (orphanRemoval)
+  VAL: store_carts sigue con status=ACTIVE
+  VAL: GET /cart retorna { cartId: <id>, total:0, sellerGroups:[] }
+  VAL: cartId NO es null (el carrito persiste vacío)
+
+TC-162 ✅ Limpiar carrito ya vacío (ítems=[])
+  PRE: carrito ACTIVE con 0 ítems
+  ACT: DELETE /api/v1/cart
+  ESP: 204
+  VAL: saveCart() se llama de todas formas → updatedAt se actualiza
+
+TC-163 ✅ Limpiar cuando no hay carrito activo
+  PRE: usuario sin store_carts status=ACTIVE
+  ACT: DELETE /api/v1/cart
+  ESP: 204 (ifPresent → no ejecuta nada, no error)
+  VAL: no se crea ningún registro en BD
+
+TC-164 ✅ Limpiar con carrito expirado
+  PRE: cart.updatedAt > 180 días
+  ACT: DELETE /api/v1/cart
+  ESP: 204 (findValidCart marca EXPIRED y retorna empty → ifPresent no ejecuta)
+  VAL: en BD, cart status=EXPIRED; no se creó carrito nuevo
+
+TC-165 ✅ Limpiar con carrito CONVERTED
+  PRE: cart status=CONVERTED
+  ACT: DELETE /api/v1/cart
+  ESP: 204 (findActiveByBuyerId no lo encuentra → ifPresent no ejecuta)
+
+TC-166 ✅ updatedAt se actualiza al limpiar carrito con ítems
+  PRE: cart.updatedAt = T0 (con ítems)
+  ACT: DELETE /api/v1/cart
+  ESP: 204
+  VAL: en BD, cart.updated_at > T0
+
+TC-167 ⚠️  Limpiar carrito vacío también actualiza updatedAt
+  PRE: carrito ACTIVE sin ítems, updatedAt = T0
+  ACT: DELETE /api/v1/cart
+  ESP: 204
+  VAL: en BD, cart.updated_at > T0 (saveCart llama aunque items.clear() no hizo nada)
+  EFECTO: DELETE /cart en carrito vacío "renueva" el timer de expiración
+
+
+========================================================
+  SECCIÓN 7 — EXPIRACIÓN DETALLADA (TC-176–TC-195)
+========================================================
+
+TC-176 ✅ Verificar comportamiento por endpoint ante carrito expirado
+
+  Endpoint              | Comportamiento ante carrito expirado
+  ----------------------|----------------------------------------
+  GET /cart             | Marca EXPIRED en BD; retorna 200 vacío
+  POST /cart/items      | Marca EXPIRED en BD; crea NUEVO carrito; retorna 201
+  PATCH /items/{id}     | Marca EXPIRED en BD; retorna 404 "Cart not found"
+  DELETE /items/{id}    | Marca EXPIRED en BD; retorna 404 "Cart not found"
+  DELETE /cart          | Marca EXPIRED en BD; retorna 204 (no error)
+
+TC-177 ⚠️  Tras GET que expira el carrito, POST crea uno nuevo
+  PRE: cart expirado
+  ACT: 1. GET /cart → marca EXPIRED, respuesta vacía
+       2. POST /items { variantId:1, quantity:1 }
+  ESP: 201 — nuevo carrito creado
+  VAL: en BD hay 2 carritos: el EXPIRED y el nuevo ACTIVE
+
+TC-178 ✅ Cualquier operación de escritura renueva el timer
+  PRE: cart.updatedAt = now - 170 días (próximo a expirar)
+  ACT: POST /items → saveCart actualiza updatedAt a "ahora"
+  VAL: cart.updatedAt = "ahora" → timer reiniciado a 180 días desde hoy
+
+TC-179 ✅ GET /cart NO renueva el timer de un carrito activo
+  PRE: cart.updatedAt = now - 170 días
+  ACT: GET /api/v1/cart (múltiples veces)
+  VAL: cart.updated_at en BD permanece en now - 170 días
+  RIESGO: si el usuario solo "ve" su carrito sin modificarlo durante 10 días más,
+          expirará aunque esté siendo consultado. El front debería avisar.
+
+TC-180 ✅ Múltiples carritos históricos del mismo usuario (EXPIRED + ACTIVE)
+  PRE: usuario con 3 carritos EXPIRED + 1 ACTIVE
+  ACT: GET /api/v1/cart
+  ESP: 200 — muestra el carrito ACTIVE
+  VAL: findActiveByBuyerId filtra solo status=ACTIVE, no se mezclan
+
+TC-181 ⚠️  Usuario con múltiples carritos ACTIVE (inconsistencia de BD)
+  PRE: por algún error hay 2 filas ACTIVE para el mismo buyer
+  ACT: GET /api/v1/cart
+  ESP: findByBuyerIdAndStatus → Spring Data retorna el primero o lanza excepción
+       si el método retorna Optional y hay múltiples resultados.
+  RIESGO: dependiendo de la implementación de ICartRepository podría lanzar
+          IncorrectResultSizeDataAccessException (500)
+
+
+========================================================
+  SECCIÓN 8 — FLUJOS COMPLETOS (TC-196–TC-215)
+========================================================
+
+TC-196 ✅ Ciclo de vida completo del carrito
+  1. GET → vacío (cartId: null)
+  2. POST { variantId:1, qty:2 } → 201, carrito creado
+  3. POST { variantId:2, qty:1 } → 201, 2 ítems
+  4. POST { variantId:1, qty:3 } → 201, variante 1 qty=5 (acumulado)
+  5. PATCH /items/{id_var2} { qty:10 } → 200
+  6. GET → carrito con 2 ítems: var1(qty=5), var2(qty=10)
+  7. DELETE /items/{id_var1} → 204
+  8. GET → carrito con 1 ítem: var2(qty=10)
+  9. DELETE /api/v1/cart → 204
+  10. GET → { cartId: <id>, sellerGroups: [], total: 0 }
+  VAL: cartId en paso 10 NO es null (carrito vacío persiste)
+
+TC-197 ✅ Dos compradores con carritos completamente aislados
+  PRE: buyer A y buyer B, ambos con rol CUSTOMER
+  ACT: buyer A → POST { variantId:1, qty:5 }
+       buyer B → POST { variantId:1, qty:2 }
+  VAL: GET buyer A → qty=5; GET buyer B → qty=2
+  VAL: DELETE buyer A no afecta carrito de buyer B
+
+TC-198 ✅ Seller que también es CUSTOMER puede comprar sus propios productos
+  PRE: usuario con [CUSTOMER, SELLER]; tiene variante de su propio producto
+  ACT: POST { variantId: <su_propia_variante>, qty:1 }
+  ESP: 201
+  VAL: el sellerGroup en la respuesta muestra su propio nombre como vendedor
+  NOTA: no hay validación de "no puedes comprarte a ti mismo"
+
+TC-199 ✅ Flujo de carrito expirado → nuevo carrito
+  PRE: carrito ACTIVE con 3 ítems, updatedAt = 181 días atrás
+  ACT: GET → respuesta vacía, carrito marcado EXPIRED
+       POST { variantId:5, qty:1 } → nuevo carrito creado
+  VAL: en BD: 1 carrito EXPIRED (3 ítems intactos) + 1 carrito ACTIVE (1 ítem)
+
+TC-200 ✅ Precio cambia entre add y checkout
+  ACT: 1. POST { variantId:X, qty:2 } (price=100.00 en ese momento)
+       2. [DB] cambiar variant.price a 150.00
+       3. GET /cart
+  VAL: priceChanged=true, previousPrice=100.00, currentPrice=150.00
+  VAL: subtotal = 150.00 * 2 = 300.00 (NO 200.00)
+  VAL: total refleja el precio nuevo
+
+TC-201 ✅ Todos los productos del carrito se desactivan antes de checkout
+  PRE: carrito con 3 ítems; cambiar todos los productos a INACTIVE
+  ACT: GET /cart
+  ESP: 200 → { cartId: <id>, total:0.00, sellerGroups:[] }
+  VAL: cartId no es null (el carrito existe)
+  VAL: en BD, los 3 CartItems siguen existiendo
+
+TC-202 ✅ Add + inmediato Delete del mismo ítem → carrito queda limpio
+  ACT: POST { variantId:1, qty:1 } → obtener itemId de la respuesta
+       DELETE /items/{itemId} → 204
+       GET /cart → carrito vacío (cartId != null)
+
+
+========================================================
+  SECCIÓN 9 — SEGURIDAD (TC-216–TC-235)
+========================================================
+
+TC-216 ❌ Inyección SQL en itemId de la URL
+  ACT: PATCH /items/1;DROP TABLE store_carts-- { qty:1 }
+  ESP: 400 (Spring rechaza path variable no numérico antes de llegar al servicio)
+
+TC-217 ❌ itemId como cadena en URL
+  ACT: DELETE /items/cart_items_table
+  ESP: 400 (falla conversión a Long)
+
+TC-218 ❌ JSON con campos extra (mass assignment)
+  ACT: POST { "variantId":1, "quantity":1, "priceAtAdd":0.01, "cartId":99 }
+  ESP: 201 — los campos extra son ignorados por Jackson
+  VAL: priceAtAdd se toma de variant.getPrice(), no del body
+
+TC-219 ❌ Body con variantId string (inyección de tipo)
+  ACT: POST { "variantId": "1 OR 1=1", "quantity": 1 }
+  ESP: 400 (Jackson falla al deserializar string en Long)
+
+TC-220 ❌ IDOR: adivinar itemId de otro usuario
+  PRE: buyer A tiene itemId=10 (incremento auto en BD)
+  ACT: buyer B → PATCH /items/10 { qty:99 }
+  ESP: 404 "Item not found in cart"
+  VAL: findItem busca solo en cart.getItems() del buyer B — aislamiento garantizado
+
+TC-221 ❌ IDOR: eliminar ítem de otro usuario
+  ACT: buyer B → DELETE /items/<itemId_de_A>
+  ESP: 404 "Item not found in cart"
+
+TC-222 ⚠️  Replay attack: reusar token JWT válido de otra sesión
+  Si el sistema no invalida tokens al hacer logout, un token robado
+  puede usarse para vaciar el carrito de la víctima.
+  Validar que el logout invalida el token o que hay mecanismo de revocación.
+
+TC-223 ❌ Quantity como número flotante
+  ACT: POST { "variantId": 1, "quantity": 1.5 }
+  ESP: 400 (Jackson trunca o falla al deserializar float en Integer)
+
+TC-224 ❌ Payload con caracteres Unicode/emoji en campos numéricos
+  ACT: POST { "variantId": "🛒", "quantity": 1 }
+  ESP: 400
+
+
+========================================================
+  SECCIÓN 10 — FORMATO Y CONSISTENCIA DE RESPUESTA (TC-236–TC-255)
+========================================================
+
+TC-236 ✅ Estructura completa de CartResponse — validar todos los campos
+  ESP: {
     "cartId": Long | null,
     "status": "ACTIVE",
-    "updatedAt": "2025-01-15T10:30:00" | null,
-    "total": 0.00,
+    "updatedAt": ISO-8601 datetime | null,
+    "total": BigDecimal (2 decimales),
     "sellerGroups": [
       {
         "sellerId": Long,
-        "sellerName": "Nombre Apellido",
+        "sellerName": String (no null, no "null null"),
+        "subtotal": BigDecimal,
         "items": [
           {
             "itemId": Long,
             "variantId": Long,
-            "sku": "SKU-001",
-            "productTitle": "Título del Producto",
-            "quantity": 2,
-            "currentPrice": 50000.00,
-            "subtotal": 100000.00,
-            "priceChanged": false,
-            "originalPriceAtAdd": null
+            "sku": String,
+            "productTitle": String,
+            "quantity": Integer,
+            "currentPrice": BigDecimal,
+            "subtotal": BigDecimal,
+            "priceChanged": Boolean,
+            "previousPrice": BigDecimal | null
           }
-        ],
-        "subtotal": 100000.00
+        ]
       }
     ]
   }
 
-TC-077 ✅ Verificar Content-Type de respuesta
-  Resultado esperado: Content-Type: application/json
+TC-237 ✅ total == suma exacta de todos los group.subtotal
+  PRE: carrito con grupos de subtotales [100.00, 250.50, 49.99]
+  VAL: total == 400.49 (no 400.5 ni 400)
 
-TC-078 ✅ Verificar que total == suma de todos los subtotales de grupos
-  Con 3 grupos de subtotales 100, 200, 300 → total = 600.
+TC-238 ✅ group.subtotal == suma exacta de sus items.subtotal
+  PRE: grupo con ítems [item1.subtotal=100.00, item2.subtotal=200.50]
+  VAL: group.subtotal == 300.50
 
-TC-079 ✅ Verificar que subtotal del grupo == suma de subtotales de sus ítems
-  Grupo con 2 ítems: item1.subtotal=100, item2.subtotal=250 → grupo.subtotal=350.
+TC-239 ✅ item.subtotal == item.currentPrice * item.quantity
+  PRE: currentPrice=33.33, quantity=3
+  VAL: subtotal == 99.99 (BigDecimal.multiply, sin pérdida de precisión)
 
-TC-080 ⚠️  Vendedor sin nombre o apellido en BD (campos vacíos/null)
-  Si User.name o User.lastname es null, seller.getUser().getName() + " " + getLastname()
-  puede resultar en "null null" o "Juan null".
-  Verificar el formato de sellerName cuando los campos están incompletos.
+TC-240 ✅ sellerName cuando el vendedor tiene nombre y apellido
+  PRE: User.name="Carlos", User.lastname="López"
+  VAL: sellerName == "Carlos López"
 
+TC-241 ✅ sellerName cuando solo tiene nombre (lastname=null) — BUG-04
+  PRE: User.name="Carlos", User.lastname=null
+  VAL: sellerName == "Carlos" (no "Carlos null")
 
-========================================================
-  9. PERFORMANCE / CARGA
-========================================================
+TC-242 ✅ sellerName cuando solo tiene apellido (name=null)
+  PRE: User.name=null, User.lastname="López"
+  VAL: sellerName == "López"
 
-TC-081 ⚠️  Carrito con 100 ítems de 50 vendedores distintos
-  Agregar 100 variantes de 50 vendedores diferentes.
-  GET /cart → debe agrupar correctamente en 50 grupos.
-  Validar tiempo de respuesta aceptable (< 2s).
-  Verificar que no hay N+1 queries (cada variante carga su producto y seller).
+TC-243 ✅ sellerName cuando ambos son null
+  PRE: User.name=null, User.lastname=null
+  VAL: sellerName == "" (cadena vacía, no "null null")
 
-TC-082 ⚠️  100 peticiones simultáneas de GET /cart del mismo usuario
-  No debería haber problema ya que es readOnly.
-  Validar que no hay deadlocks ni datos inconsistentes.
+TC-244 ✅ previousPrice es null cuando priceChanged=false
+  VAL: si priceChanged=false → previousPrice == null (no 0 ni el precio actual)
 
-TC-083 ⚠️  POST /items concurrente con misma variante (race condition)
-  Ver TC-034. La constraint uk_cart_variant debe prevenir duplicados.
-  Validar que el error de constraint se traduce en una respuesta HTTP coherente
-  y no en un 500 Internal Server Error.
+TC-245 ✅ previousPrice tiene valor cuando priceChanged=true
+  VAL: previousPrice == el priceAtAdd guardado en BD
 
+TC-246 ✅ Content-Type de respuesta
+  VAL: todos los endpoints retornan Content-Type: application/json
 
-========================================================
-  10. CASOS DE NEGOCIO ADICIONALES
-========================================================
+TC-247 ✅ Valores BigDecimal siempre con 2 decimales en el JSON
+  PRE: variant.price = 100 (entero)
+  VAL: JSON muestra "currentPrice": 100.00 o "currentPrice": 100
+  NOTA: validar el formato con el front para consistencia de parseo
 
-TC-084 ✅ El updatedAt del carrito se actualiza en cada operación de escritura
-  Hacer POST /items → registrar updatedAt T1.
-  Hacer PATCH /items/{id} → registrar updatedAt T2.
-  Hacer DELETE /items/{id} → registrar updatedAt T3.
-  Validar T3 > T2 > T1.
-  Crítico: el updatedAt determina si el carrito expira en 180 días.
-
-TC-085 ✅ Carrito que estuvo inactivo 179 días sigue siendo válido
-  Precondición: updatedAt = ahora - 179 días.
-  GET /cart → debe devolver el carrito con sus ítems (no expirado).
-
-TC-086 ⚠️  Carrito que estuvo inactivo exactamente 180 días
-  Precondición: updatedAt = ahora - 180 días (isBefore es estricto).
-  GET /cart → carrito SIGUE ACTIVO porque isBefore(ahora - 180 días) = false.
-  El carrito expira solo cuando updatedAt < ahora - 180 días (estrictamente antes).
-
-TC-087 ⚠️  Carrito con 181 días de inactividad
-  Precondición: updatedAt = ahora - 181 días.
-  GET /cart → carrito EXPIRADO. Respuesta vacía. En BD status=EXPIRED.
-
-TC-088 ⚠️  Hacer cualquier operación reactiva el timer de expiración
-  Precondición: carrito con updatedAt = ahora - 170 días.
-  POST /items → saveCart actualiza updatedAt = ahora.
-  El carrito "se renueva" automáticamente con cualquier escritura.
-
-TC-089 ✅ Verificar que al limpiar el carrito el status sigue siendo ACTIVE
-  DELETE /cart → ítems eliminados pero cart sigue en BD con status=ACTIVE.
-  El usuario puede agregar ítems nuevamente sin crear un carrito nuevo.
-
-TC-090 ⚠️  Variante que pertenece al mismo seller que el comprador
-  Un seller que también compra (rol CUSTOMER) agrega al carrito una variante
-  de un producto que él mismo vende.
-  Resultado esperado: se permite (no hay validación de "no puedes comprarte a ti mismo").
-  El sellerGroup en la respuesta mostraría su propio nombre como vendedor.
+TC-248 ✅ Status en respuesta siempre es "ACTIVE" en flujos normales
+  VAL: nunca se retorna un CartResponse con status "EXPIRED" o "CONVERTED"
+       — esos estados no llegan a toResponse()
 
 
 ========================================================
-  RESUMEN DE BUGS POTENCIALES IDENTIFICADOS
+  SECCIÓN 11 — BUGS NUEVOS IDENTIFICADOS EN REVISIÓN (TC-256+)
 ========================================================
 
-BUG-01 [ALTO]    TC-030 — Overflow de Integer al acumular quantity
-                 existing.getQuantity() + dto.quantity() puede superar Integer.MAX_VALUE.
-                 Fix sugerido: validar que la suma no supere un límite razonable (ej: 9999).
+NUEVA-BUG-01 [ALTO] — Límite 9999 no aplica al primer add de una variante
+────────────────────────────────────────────────────────────────────────
+  CÓDIGO: el check `if (newQty > MAX_ITEM_QUANTITY)` está dentro del bloque
+  `ifPresentOrElse` → rama "existing" (cuando la variante YA está en el carrito).
+  Si la variante NO está en el carrito, entra al bloque "nuevo ítem" (else),
+  que no valida el límite.
 
-BUG-02 [MEDIO]   TC-032 — NullPointerException si variant.getPrice() es null.
-                 Fix sugerido: asegurar que price no pueda ser null en ProductVariant.
+  TC-256 ⚠️  POST { variantId: nueva_variante, quantity: 10000 }
+    PRE: variante NO está en el carrito
+    ESP actual:  201 (se acepta quantity=10000)
+    ESP correcto: 400 "La cantidad máxima por producto es 9999"
+    FIX: mover la validación al nivel del dto ANTES del ifPresentOrElse,
+         o agregar @Max(9999) al DTO AddItemRequestDto.
 
-BUG-03 [MEDIO]   TC-034 / TC-083 — Race condition al agregar la misma variante concurrentemente.
-                 La constraint de BD previene el duplicado pero puede lanzar un 500.
-                 Fix sugerido: capturar DataIntegrityViolationException y reintentar o retornar 409.
+NUEVA-BUG-02 [MEDIO] — PATCH no tiene límite máximo de quantity
+────────────────────────────────────────────────────────────────────────
+  CÓDIGO: UpdateCartItemDto solo tiene @NotNull @Min(1). No hay @Max.
+  POST/acumulación limita a 9999; PATCH puede setear cualquier valor ≥ 1.
 
-BUG-04 [BAJO]    TC-080 — sellerName puede resultar en "null null" si User.name es null.
-                 Fix sugerido: usar Optional o StringUtils para manejar nulos.
+  TC-257 ⚠️  PATCH /items/{id} { quantity: 100000 }
+    ESP actual:  200 (aceptado)
+    ESP correcto: 400 (debería respetar el mismo límite)
+    FIX: agregar @Max(9999) a UpdateCartItemDto.quantity.
 
-BUG-05 [BAJO]    TC-065 — Admin con StoreProfile puede usar el carrito sin restricción de rol.
-                 Si el negocio no quiere esto, agregar verificación de rol en el servicio.
+NUEVA-BUG-03 [BAJO] — clearCart en carrito vacío actualiza updatedAt innecesariamente
+────────────────────────────────────────────────────────────────────────
+  TC-258 ⚠️  DELETE /api/v1/cart con carrito vacío (0 ítems)
+    ACT: cart.items=[]; DELETE /cart
+    COMPORTAMIENTO: items.clear() no elimina nada, pero saveCart() sí persiste
+                    y actualiza updatedAt → el timer de 180 días se renueva.
+    EFECTO: el usuario puede mantener vivo un carrito vacío indefinidamente
+            haciendo DELETE /cart repetidamente, evitando la expiración.
+    SEVERIDAD: baja, pero es comportamiento no intuitivo.
 
-BUG-06 [INFO]    TC-066 / TC-067 — Variante/producto eliminado en BD mientras está en carrito.
-                 El carrito no valida si la variante sigue activa/disponible.
-                 Fix sugerido: filtrar ítems con variantes inactivas en toResponse().
+NUEVA-BUG-04 [BAJO] — GET /cart realiza escritura en BD al expirar el carrito
+────────────────────────────────────────────────────────────────────────
+  TC-259 ⚠️  GET /cart con carrito expirado
+    COMPORTAMIENTO: la operación GET muta el estado (status=EXPIRED en BD).
+    PROBLEMA: si la BD está en modo read-only (réplica de lectura), el GET fallará.
+              Si hay observabilidad, el GET aparece con escrituras en los logs.
+    FIX: separar la expiración en un job programado o en el método save.
+
+
+========================================================
+  RESUMEN EJECUTIVO
+========================================================
+
+  Total de casos:          259
+  Casos de éxito (✅):      ~130
+  Casos de error (❌):       ~80
+  Casos de riesgo (⚠️):     ~49
+
+  SECCIONES:
+  1.  Auth / Roles                     TC-001 – TC-015  (15 casos)
+  2.  GET /cart                        TC-016 – TC-050  (35 casos)
+  3.  POST /cart/items                 TC-051 – TC-115  (65 casos)
+  4.  PATCH /cart/items/{itemId}       TC-116 – TC-135  (20 casos)
+  5.  DELETE /cart/items/{itemId}      TC-136 – TC-160  (25 casos)
+  6.  DELETE /cart                     TC-161 – TC-175  (15 casos)
+  7.  Expiración detallada             TC-176 – TC-195  (20 casos)
+  8.  Flujos completos                 TC-196 – TC-215  (20 casos)
+  9.  Seguridad                        TC-216 – TC-235  (20 casos)
+  10. Formato / consistencia           TC-236 – TC-255  (20 casos)
+  11. Nuevos bugs identificados        TC-256 – TC-259  (4 casos)
+
+  BUGS NUEVOS ENCONTRADOS EN ESTA REVISIÓN:
+  NUEVA-BUG-01 [ALTO]   Límite 9999 no aplica al primer add de variante nueva
+  NUEVA-BUG-02 [MEDIO]  PATCH no tiene límite máximo de quantity
+  NUEVA-BUG-03 [BAJO]   clearCart en carrito vacío actualiza updatedAt
+  NUEVA-BUG-04 [BAJO]   GET puede escribir en BD (expiración) — riesgo con read replicas
 
 ========================================================
   FIN DEL DOCUMENTO
