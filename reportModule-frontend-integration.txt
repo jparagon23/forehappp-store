@@ -1,0 +1,240 @@
+========================================================
+  REPORT MODULE — FRONTEND INTEGRATION GUIDE
+  Base URL: http://localhost:8082
+========================================================
+
+AUTENTICACIÓN
+─────────────
+Todos los endpoints requieren JWT en el header:
+  Authorization: Bearer <token>
+
+El token incluye el user_id del usuario autenticado.
+El backend resuelve el StoreProfile y valida el rol automáticamente.
+  - Endpoints /admin/reports  → requiere rol STORE_ADMIN (403 si no lo tiene)
+  - Endpoints /seller/reports → requiere rol SELLER      (403 si no lo tiene)
+
+
+========================================================
+  SECCIÓN ADMIN — /api/v1/admin/reports
+========================================================
+
+PARÁMETROS COMUNES
+──────────────────
+Todos los endpoints admin reciben:
+  from  : fecha inicio  (formato ISO: YYYY-MM-DD)
+  to    : fecha fin     (formato ISO: YYYY-MM-DD)
+
+El rango es inclusivo en ambos extremos (from 00:00:00 — to 23:59:59).
+
+
+──────────────────────────────────────────────────────
+1. RESUMEN DEL NEGOCIO
+──────────────────────────────────────────────────────
+GET /api/v1/admin/reports/summary?from=2025-01-01&to=2025-12-31
+
+Respuesta 200:
+{
+  "totalOrders":    150,
+  "totalRevenue":   4250000.00,
+  "averageTicket":  28333.33,
+  "cancelledOrders": 12,
+  "totalReturns":   8,
+  "totalRefunded":  320000.00
+}
+
+Campos:
+  totalOrders     → órdenes con status PAID en el período
+  totalRevenue    → suma de totales de órdenes PAID
+  averageTicket   → ticket promedio de órdenes PAID
+  cancelledOrders → órdenes con status CANCELLED en el período
+  totalReturns    → devoluciones aprobadas o reembolsadas en el período
+  totalRefunded   → suma de montos reembolsados en el período
+
+UX sugerida: tarjetas KPI en el dashboard principal del admin.
+
+
+──────────────────────────────────────────────────────
+2. INGRESOS POR PERÍODO
+──────────────────────────────────────────────────────
+GET /api/v1/admin/reports/revenue?from=2025-01-01&to=2025-12-31&groupBy=DAY
+
+Query params:
+  groupBy → DAY (default) | WEEK | MONTH
+
+Respuesta 200 (array):
+[
+  { "period": "2025-01-01", "orderCount": 5, "revenue": 150000.00 },
+  { "period": "2025-01-02", "orderCount": 3, "revenue": 90000.00 },
+  ...
+]
+
+Formato de "period" según agrupación:
+  DAY   → "YYYY-MM-DD"   ej: "2025-01-15"
+  WEEK  → "YYYY-WW"      ej: "2025-03"   (año-semana ISO)
+  MONTH → "YYYY-MM"      ej: "2025-01"
+
+UX sugerida: gráfico de líneas o barras. El frontend elige el groupBy
+según el rango seleccionado (ej: si el rango es < 60 días → DAY,
+< 365 días → WEEK, mayor → MONTH).
+
+
+──────────────────────────────────────────────────────
+3. TOP PRODUCTOS
+──────────────────────────────────────────────────────
+GET /api/v1/admin/reports/top-products?from=2025-01-01&to=2025-12-31&limit=10
+
+Query params:
+  limit → número de productos a retornar (default: 10, mín: 1, máx: 50)
+
+Respuesta 200 (array, ordenado por unidades vendidas DESC):
+[
+  {
+    "productId":    1,
+    "productTitle": "Camiseta Básica",
+    "variantSku":   "CAM-BLK-M",
+    "unitsSold":    320,
+    "revenue":      4800000.00
+  },
+  ...
+]
+
+UX sugerida: tabla o podio top-N con barra de progreso relativa
+al primer puesto.
+
+
+──────────────────────────────────────────────────────
+4. VENTAS POR VENDEDOR
+──────────────────────────────────────────────────────
+GET /api/v1/admin/reports/sellers?from=2025-01-01&to=2025-12-31
+
+Respuesta 200 (array, ordenado por totalRevenue DESC):
+[
+  {
+    "sellerId":     3,
+    "sellerName":   "Carlos López",
+    "totalOrders":  45,
+    "totalRevenue": 1350000.00
+  },
+  ...
+]
+
+UX sugerida: tabla con ranking, permite ver qué vendedores generan
+más ingresos en el período seleccionado.
+
+
+========================================================
+  SECCIÓN SELLER — /api/v1/seller/reports
+========================================================
+
+El seller solo ve sus propios datos. El backend identifica al vendedor
+automáticamente desde el JWT — no se envía sellerId en la request.
+
+PARÁMETROS COMUNES
+──────────────────
+  from  : fecha inicio  (formato ISO: YYYY-MM-DD)
+  to    : fecha fin     (formato ISO: YYYY-MM-DD)
+
+
+──────────────────────────────────────────────────────
+5. MI RESUMEN
+──────────────────────────────────────────────────────
+GET /api/v1/seller/reports/summary?from=2025-01-01&to=2025-12-31
+
+Respuesta 200:
+{
+  "totalOrders":    45,
+  "totalRevenue":   1350000.00,
+  "averageTicket":  30000.00,
+  "cancelledOrders": 0,
+  "totalReturns":   3,
+  "totalRefunded":  90000.00
+}
+
+Nota: cancelledOrders siempre retorna 0 en el contexto de vendedor
+(las cancelaciones son a nivel de orden completa, no por grupo de vendedor).
+
+UX sugerida: dashboard del vendedor con KPIs de su actividad.
+
+
+──────────────────────────────────────────────────────
+6. MIS TOP PRODUCTOS
+──────────────────────────────────────────────────────
+GET /api/v1/seller/reports/top-products?from=2025-01-01&to=2025-12-31&limit=10
+
+Query params:
+  limit → número de productos a retornar (default: 10, mín: 1, máx: 50)
+
+Respuesta 200 (array, ordenado por unidades vendidas DESC):
+[
+  {
+    "productId":    7,
+    "productTitle": "Sudadera Premium",
+    "variantSku":   "SUD-GRY-L",
+    "unitsSold":    80,
+    "revenue":      2400000.00
+  },
+  ...
+]
+
+UX sugerida: sección "Mis productos más vendidos" en el panel del vendedor.
+
+
+========================================================
+  MANEJO DE ERRORES
+========================================================
+
+400 Bad Request
+  → Parámetros from/to ausentes o con formato incorrecto.
+  Mensaje de validación de Spring en el body.
+  Asegurar que el frontend envíe siempre ambas fechas en formato YYYY-MM-DD.
+
+401 Unauthorized
+  → Token ausente o expirado. Redirigir al login.
+
+403 Forbidden
+  → El usuario no tiene el rol requerido (STORE_ADMIN o SELLER).
+  Mostrar mensaje: "No tienes permisos para ver esta sección."
+
+404 Not Found
+  → El usuario no tiene un StoreProfile asociado.
+  Caso raro; redirigir al perfil para completar registro.
+
+
+========================================================
+  NOTAS DE IMPLEMENTACIÓN
+========================================================
+
+1. SELECTOR DE FECHAS
+   Siempre enviar from y to. Rangos típicos sugeridos en la UI:
+     - Hoy
+     - Últimos 7 días
+     - Últimos 30 días
+     - Este mes
+     - Mes anterior
+     - Rango personalizado
+
+2. GROUPBY AUTOMÁTICO (recomendado)
+   if (días <= 60)  → groupBy=DAY
+   if (días <= 365) → groupBy=WEEK
+   else             → groupBy=MONTH
+
+3. LIMIT
+   Parámetro opcional. Si no se envía, el backend usa 10 por defecto.
+   El backend acepta entre 1 y 50. Valores fuera de rango se normalizan
+   automáticamente (no genera error).
+
+4. DATOS VACÍOS
+   Si no hay órdenes en el período seleccionado:
+     - Escalares (summary) → retornan 0 / 0.00 (nunca null)
+     - Arrays (revenue, top-products, sellers) → retornan [] (lista vacía)
+   El frontend debe manejar el array vacío mostrando un estado vacío
+   ("No hay datos para el período seleccionado").
+
+5. MONEDA
+   Todos los valores monetarios son BigDecimal en COP (o la moneda base
+   configurada). No hay campo de moneda en la respuesta — es uniforme.
+   Formatear en el frontend con separador de miles.
+
+========================================================
+  FIN DEL DOCUMENTO
+========================================================
