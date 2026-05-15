@@ -1,5 +1,6 @@
 package com.forehapp.store.reportModule.infrastructure.persistence;
 
+import com.forehapp.store.orderModule.domain.model.OrderStatus;
 import com.forehapp.store.reportModule.application.dto.RevenuePointResponse;
 import com.forehapp.store.reportModule.application.dto.SellerSalesResponse;
 import com.forehapp.store.reportModule.application.dto.TopProductResponse;
@@ -20,17 +21,17 @@ public class ReportRepositoryImpl implements IReportDao {
     }
 
     @Override
-    public Long countOrdersByStatus(String status, LocalDateTime from, LocalDateTime to) {
+    public Long countOrdersByStatus(OrderStatus status, LocalDateTime from, LocalDateTime to) {
         return repository.countOrdersByStatus(status, from, to);
     }
 
     @Override
-    public BigDecimal sumRevenueByStatus(String status, LocalDateTime from, LocalDateTime to) {
+    public BigDecimal sumRevenueByStatus(OrderStatus status, LocalDateTime from, LocalDateTime to) {
         return repository.sumRevenueByStatus(status, from, to);
     }
 
     @Override
-    public BigDecimal avgTicketByStatus(String status, LocalDateTime from, LocalDateTime to) {
+    public BigDecimal avgTicketByStatus(OrderStatus status, LocalDateTime from, LocalDateTime to) {
         return repository.avgTicketByStatus(status, from, to);
     }
 

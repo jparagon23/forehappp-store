@@ -1,5 +1,6 @@
 package com.forehapp.store.reportModule.application.usecases;
 
+import com.forehapp.store.orderModule.domain.model.OrderStatus;
 import com.forehapp.store.reportModule.application.dto.BusinessSummaryResponse;
 import com.forehapp.store.reportModule.application.dto.RevenuePointResponse;
 import com.forehapp.store.reportModule.application.dto.SellerSalesResponse;
@@ -38,10 +39,10 @@ public class AdminReportServiceImpl implements IAdminReportService {
         LocalDateTime toDt = to.atTime(LocalTime.MAX);
 
         return new BusinessSummaryResponse(
-                reportDao.countOrdersByStatus("PAID", fromDt, toDt),
-                reportDao.sumRevenueByStatus("PAID", fromDt, toDt),
-                reportDao.avgTicketByStatus("PAID", fromDt, toDt),
-                reportDao.countOrdersByStatus("CANCELLED", fromDt, toDt),
+                reportDao.countOrdersByStatus(OrderStatus.PAID, fromDt, toDt),
+                reportDao.sumRevenueByStatus(OrderStatus.PAID, fromDt, toDt),
+                reportDao.avgTicketByStatus(OrderStatus.PAID, fromDt, toDt),
+                reportDao.countOrdersByStatus(OrderStatus.CANCELLED, fromDt, toDt),
                 reportDao.countApprovedReturns(fromDt, toDt),
                 reportDao.sumRefunded(fromDt, toDt)
         );

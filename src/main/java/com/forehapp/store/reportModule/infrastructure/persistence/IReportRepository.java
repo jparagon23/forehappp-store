@@ -1,6 +1,7 @@
 package com.forehapp.store.reportModule.infrastructure.persistence;
 
 import com.forehapp.store.orderModule.domain.model.Order;
+import com.forehapp.store.orderModule.domain.model.OrderStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -14,25 +15,30 @@ public interface IReportRepository extends JpaRepository<Order, Long> {
     // ── Admin: summary ────────────────────────────────────────────────────────
 
     @Query("SELECT COUNT(o) FROM Order o WHERE o.status = :status AND o.createdAt BETWEEN :from AND :to")
-    Long countOrdersByStatus(@Param("status") String status,
+    Long countOrdersByStatus(@Param("status") OrderStatus status,
                               @Param("from") LocalDateTime from,
                               @Param("to") LocalDateTime to);
 
     @Query("SELECT COALESCE(SUM(o.total), 0) FROM Order o WHERE o.status = :status AND o.createdAt BETWEEN :from AND :to")
-    BigDecimal sumRevenueByStatus(@Param("status") String status,
+    BigDecimal sumRevenueByStatus(@Param("status") OrderStatus status,
                                    @Param("from") LocalDateTime from,
                                    @Param("to") LocalDateTime to);
 
     @Query("SELECT COALESCE(AVG(o.total), 0) FROM Order o WHERE o.status = :status AND o.createdAt BETWEEN :from AND :to")
-    BigDecimal avgTicketByStatus(@Param("status") String status,
+    BigDecimal avgTicketByStatus(@Param("status") OrderStatus status,
                                   @Param("from") LocalDateTime from,
                                   @Param("to") LocalDateTime to);
 
-    @Query("SELECT COUNT(r) FROM ReturnRequest r WHERE r.status IN ('APROBADA', 'REEMBOLSADA') AND r.createdAt BETWEEN :from AND :to")
+    @Query("SELECT COUNT(r) FROM com.forehapp.store.returnModule.domain.model.ReturnRequest r " +
+           "WHERE r.status IN (com.forehapp.store.returnModule.domain.model.ReturnStatus.APROBADA, " +
+           "com.forehapp.store.returnModule.domain.model.ReturnStatus.REEMBOLSADA) " +
+           "AND r.createdAt BETWEEN :from AND :to")
     Long countApprovedReturns(@Param("from") LocalDateTime from,
                                @Param("to") LocalDateTime to);
 
-    @Query("SELECT COALESCE(SUM(r.refundAmount), 0) FROM ReturnRequest r WHERE r.status = 'REEMBOLSADA' AND r.createdAt BETWEEN :from AND :to")
+    @Query("SELECT COALESCE(SUM(r.refundAmount), 0) FROM com.forehapp.store.returnModule.domain.model.ReturnRequest r " +
+           "WHERE r.status = com.forehapp.store.returnModule.domain.model.ReturnStatus.REEMBOLSADA " +
+           "AND r.createdAt BETWEEN :from AND :to")
     BigDecimal sumRefunded(@Param("from") LocalDateTime from,
                             @Param("to") LocalDateTime to);
 
@@ -116,27 +122,45 @@ public interface IReportRepository extends JpaRepository<Order, Long> {
 
     // ── Seller: summary ───────────────────────────────────────────────────────
 
-    @Query("SELECT COUNT(DISTINCT g.order) FROM OrderSellerGroup g WHERE g.seller.id = :sellerId AND g.order.status = 'PAID' AND g.order.createdAt BETWEEN :from AND :to")
+    @Query("SELECT COUNT(DISTINCT g.order) FROM com.forehapp.store.orderModule.domain.model.OrderSellerGroup g " +
+           "WHERE g.seller.id = :sellerId " +
+           "AND g.order.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PAID " +
+           "AND g.order.createdAt BETWEEN :from AND :to")
     Long countSellerOrders(@Param("sellerId") Long sellerId,
                             @Param("from") LocalDateTime from,
                             @Param("to") LocalDateTime to);
 
-    @Query("SELECT COALESCE(SUM(g.subtotal), 0) FROM OrderSellerGroup g WHERE g.seller.id = :sellerId AND g.order.status = 'PAID' AND g.order.createdAt BETWEEN :from AND :to")
+    @Query("SELECT COALESCE(SUM(g.subtotal), 0) FROM com.forehapp.store.orderModule.domain.model.OrderSellerGroup g " +
+           "WHERE g.seller.id = :sellerId " +
+           "AND g.order.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PAID " +
+           "AND g.order.createdAt BETWEEN :from AND :to")
     BigDecimal sumSellerRevenue(@Param("sellerId") Long sellerId,
                                  @Param("from") LocalDateTime from,
                                  @Param("to") LocalDateTime to);
 
-    @Query("SELECT COALESCE(AVG(g.subtotal), 0) FROM OrderSellerGroup g WHERE g.seller.id = :sellerId AND g.order.status = 'PAID' AND g.order.createdAt BETWEEN :from AND :to")
+    @Query("SELECT COALESCE(AVG(g.subtotal), 0) FROM com.forehapp.store.orderModule.domain.model.OrderSellerGroup g " +
+           "WHERE g.seller.id = :sellerId " +
+           "AND g.order.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PAID " +
+           "AND g.order.createdAt BETWEEN :from AND :to")
     BigDecimal avgSellerTicket(@Param("sellerId") Long sellerId,
                                 @Param("from") LocalDateTime from,
                                 @Param("to") LocalDateTime to);
 
-    @Query("SELECT COUNT(r) FROM ReturnRequest r JOIN r.orderGroup g WHERE g.seller.id = :sellerId AND r.status IN ('APROBADA', 'REEMBOLSADA') AND r.createdAt BETWEEN :from AND :to")
+    @Query("SELECT COUNT(r) FROM com.forehapp.store.returnModule.domain.model.ReturnRequest r " +
+           "JOIN r.orderGroup g " +
+           "WHERE g.seller.id = :sellerId " +
+           "AND r.status IN (com.forehapp.store.returnModule.domain.model.ReturnStatus.APROBADA, " +
+           "com.forehapp.store.returnModule.domain.model.ReturnStatus.REEMBOLSADA) " +
+           "AND r.createdAt BETWEEN :from AND :to")
     Long countSellerReturns(@Param("sellerId") Long sellerId,
                              @Param("from") LocalDateTime from,
                              @Param("to") LocalDateTime to);
 
-    @Query("SELECT COALESCE(SUM(r.refundAmount), 0) FROM ReturnRequest r JOIN r.orderGroup g WHERE g.seller.id = :sellerId AND r.status = 'REEMBOLSADA' AND r.createdAt BETWEEN :from AND :to")
+    @Query("SELECT COALESCE(SUM(r.refundAmount), 0) FROM com.forehapp.store.returnModule.domain.model.ReturnRequest r " +
+           "JOIN r.orderGroup g " +
+           "WHERE g.seller.id = :sellerId " +
+           "AND r.status = com.forehapp.store.returnModule.domain.model.ReturnStatus.REEMBOLSADA " +
+           "AND r.createdAt BETWEEN :from AND :to")
     BigDecimal sumSellerRefunded(@Param("sellerId") Long sellerId,
                                   @Param("from") LocalDateTime from,
                                   @Param("to") LocalDateTime to);

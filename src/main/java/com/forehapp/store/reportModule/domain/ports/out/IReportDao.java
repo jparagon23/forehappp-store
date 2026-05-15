@@ -1,5 +1,6 @@
 package com.forehapp.store.reportModule.domain.ports.out;
 
+import com.forehapp.store.orderModule.domain.model.OrderStatus;
 import com.forehapp.store.reportModule.application.dto.RevenuePointResponse;
 import com.forehapp.store.reportModule.application.dto.SellerSalesResponse;
 import com.forehapp.store.reportModule.application.dto.TopProductResponse;
@@ -11,9 +12,9 @@ import java.util.List;
 public interface IReportDao {
 
     // --- Admin: summary scalars ---
-    Long countOrdersByStatus(String status, LocalDateTime from, LocalDateTime to);
-    BigDecimal sumRevenueByStatus(String status, LocalDateTime from, LocalDateTime to);
-    BigDecimal avgTicketByStatus(String status, LocalDateTime from, LocalDateTime to);
+    Long countOrdersByStatus(OrderStatus status, LocalDateTime from, LocalDateTime to);
+    BigDecimal sumRevenueByStatus(OrderStatus status, LocalDateTime from, LocalDateTime to);
+    BigDecimal avgTicketByStatus(OrderStatus status, LocalDateTime from, LocalDateTime to);
     Long countApprovedReturns(LocalDateTime from, LocalDateTime to);
     BigDecimal sumRefunded(LocalDateTime from, LocalDateTime to);
 
