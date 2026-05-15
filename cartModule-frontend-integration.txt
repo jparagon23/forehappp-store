@@ -1,6 +1,6 @@
 ================================================================================
   FOREHAPP STORE — CART MODULE: GUÍA DE INTEGRACIÓN FRONTEND
-  (actualizado tras corrección de bugs — v2)
+  (actualizado tras corrección de bugs — v3)
 ================================================================================
 
 BASE URL: http://localhost:8082
@@ -135,7 +135,7 @@ PATH PARAM:
 
 REQUEST BODY:
 {
-  "quantity": 3     // Integer, requerido, mínimo 1
+  "quantity": 3     // Integer, requerido, mínimo 1, máximo 9999
 }
 
 RESPUESTA EXITOSA 200 OK:
@@ -145,8 +145,14 @@ COMPORTAMIENTO:
   - Reemplaza la cantidad actual con la nueva cantidad (no suma)
   - Para eliminar un ítem usar DELETE, no quantity=0 (no está permitido)
 
+LÍMITE DE CANTIDAD:
+  - quantity máximo: 9999. Enviar un valor mayor retorna 400.
+  - A diferencia de POST (que valida la suma acumulada), PATCH valida el valor
+    directo enviado. Enviar quantity=10000 → 400.
+  - Recomendación UI: el input de cantidad debe tener max=9999.
+
 ERRORES:
-  400 → quantity null o quantity < 1
+  400 → quantity null, quantity < 1, o quantity > 9999
   403 → El usuario no tiene rol CUSTOMER
   404 → Carrito no encontrado o expirado
   404 → Ítem no pertenece al carrito del usuario
@@ -225,9 +231,10 @@ ERRORES:
    └─────────────────────────────────────┘
 
 5. CAMBIAR CANTIDAD
-   Validar que la nueva cantidad sea entre 1 y 9999.
+   Validar en el front que la nueva cantidad esté entre 1 y 9999.
    PATCH /api/v1/cart/items/{itemId}  { quantity: nuevaCantidad }
    → Actualizar estado con la respuesta
+   → Si 400 → mostrar "La cantidad debe estar entre 1 y 9999"
 
 6. ELIMINAR UN ÍTEM
    DELETE /api/v1/cart/items/{itemId}
@@ -248,10 +255,16 @@ ROL CUSTOMER REQUERIDO (BUG-05):
   Acción: leer el rol del usuario al iniciar sesión y condicionar la visibilidad
   del carrito en la UI. No mostrar el ícono ni las rutas de carrito para estos roles.
 
-LÍMITE DE CANTIDAD 9999 (BUG-01):
-  Cada variante puede acumularse hasta 9999 unidades en el carrito.
-  Validar en el frontend antes de enviar para evitar el viaje al servidor:
-    if (cantidadActual + nuevaCantidad > 9999) → mostrar error local.
+LÍMITE DE CANTIDAD 9999 (aplica a POST y PATCH):
+  - POST /items: quantity debe ser 1–9999 por request. Además, si la variante
+    ya está en el carrito, la suma acumulada no puede superar 9999.
+    Validar antes de enviar: if (cantidadActual + nueva > 9999) → error local.
+  - PATCH /items/{id}: quantity debe ser 1–9999. Se valida el valor directo,
+    no la suma. Validar antes de enviar: if (nuevaCantidad > 9999) → error local.
+  Mensaje de error del servidor:
+    - Acumulación POST superada: "La cantidad máxima por producto es 9999"
+    - Validación DTO (POST o PATCH): "quantity: must be less than or equal to 9999"
+  Ambos retornan HTTP 400.
 
 PRODUCTOS INACTIVOS FILTRADOS (BUG-06):
   Si un vendedor desactiva un producto mientras está en el carrito del usuario,
@@ -310,7 +323,7 @@ CARRITO VACÍO:
 ================================================================================
 
   HTTP 400 Bad Request   → Validación fallida: campo requerido, valor inválido,
-                           o cantidad acumulada supera 9999
+                           quantity < 1, quantity > 9999, o acumulación supera 9999
   HTTP 403 Forbidden     → Token ausente/inválido, o usuario sin rol CUSTOMER
   HTTP 404 Not Found     → Recurso no encontrado (variante, ítem, carrito, perfil)
   HTTP 409 Conflict      → Solicitud concurrente con la misma variante
