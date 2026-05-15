@@ -1,5 +1,6 @@
 ================================================================================
   FOREHAPP STORE — CART MODULE: GUÍA DE INTEGRACIÓN FRONTEND
+  (actualizado tras corrección de bugs — v2)
 ================================================================================
 
 BASE URL: http://localhost:8082
@@ -7,8 +8,10 @@ AUTENTICACIÓN: Bearer Token (JWT) en header Authorization en TODOS los endpoint
 
   Authorization: Bearer <token>
 
-Todos los endpoints del carrito requieren usuario autenticado.
-Si no se envía token o es inválido → 403 Forbidden
+REQUISITO DE ROL:
+  Solo usuarios con rol CUSTOMER en su StoreProfile pueden usar el carrito.
+  Sellers puros (sin rol CUSTOMER) y Admins reciben 403.
+  → El front debe ocultar el carrito para perfiles que no tengan rol CUSTOMER.
 
 
 ================================================================================
@@ -18,7 +21,7 @@ Si no se envía token o es inválido → 403 Forbidden
 {
   "cartId":      Long | null,         // null si el carrito está vacío (nunca creado)
   "status":      "ACTIVE",            // siempre ACTIVE en respuestas normales
-  "updatedAt":   "2026-05-14T10:30:00" | null,
+  "updatedAt":   "2026-05-15T10:30:00" | null,
   "total":       150.00,              // suma total de todos los ítems al precio actual
   "sellerGroups": [
     {
@@ -42,11 +45,8 @@ Si no se envía token o es inválido → 403 Forbidden
   ]
 }
 
-NOTA IMPORTANTE SOBRE CAMBIO DE PRECIO:
-  - Si priceChanged = true → mostrar alerta al usuario:
-      "El precio de '<productTitle>' cambió de $<previousPrice> a $<unitPrice>"
-  - El precio que se cobra es siempre unitPrice (precio actual)
-  - previousPrice solo tiene valor cuando priceChanged = true
+NOTA: Los ítems cuyo producto esté en estado INACTIVE, DRAFT u OUT_OF_STOCK
+son filtrados automáticamente del response. Ver sección "Productos inactivos".
 
 
 ================================================================================
@@ -61,7 +61,7 @@ RESPUESTA EXITOSA 200 OK:
   {
     "cartId": 3,
     "status": "ACTIVE",
-    "updatedAt": "2026-05-14T10:30:00",
+    "updatedAt": "2026-05-15T10:30:00",
     "total": 225.00,
     "sellerGroups": [ ... ]
   }
@@ -76,6 +76,7 @@ RESPUESTA EXITOSA 200 OK:
   }
 
 ERRORES:
+  403 → El usuario no tiene rol CUSTOMER
   404 → El usuario no tiene StoreProfile registrado
 
 
@@ -90,7 +91,7 @@ Content-Type: application/json
 REQUEST BODY:
 {
   "variantId": 5,     // Long, requerido — ID de la variante del producto
-  "quantity":  2      // Integer, requerido, mínimo 1
+  "quantity":  2      // Integer, requerido, mínimo 1, máximo 9999
 }
 
 RESPUESTA EXITOSA 201 Created:
@@ -102,10 +103,23 @@ COMPORTAMIENTO:
       Ej: ya tenías quantity=2 y envías quantity=1 → queda quantity=3
   - Si el carrito expiró (>180 días sin actividad) → se crea uno nuevo
 
+LÍMITE DE CANTIDAD (BUG-01):
+  - La cantidad máxima acumulada por variante es 9999.
+  - Si quantity existente + quantity nueva > 9999 → 400 con mensaje:
+    "La cantidad máxima por producto es 9999"
+  - Recomendación UI: limitar el input a max=9999 y validar antes de enviar.
+
 ERRORES:
-  400 → variantId null, quantity null o quantity < 1
+  400 → variantId null, quantity null, quantity < 1, o suma supera 9999
+  403 → El usuario no tiene rol CUSTOMER
   404 → Variante no encontrada
   404 → StoreProfile no encontrado
+  409 → Conflicto por solicitud concurrente (ver nota abajo)
+
+NOTA 409 Conflict (BUG-03):
+  Ocurre en el caso raro de dos requests simultáneos agregando la misma variante.
+  Mensaje: "El ítem ya existe en el carrito. Recarga e intenta de nuevo."
+  Acción recomendada UI: mostrar el mensaje y refrescar el carrito con GET /cart.
 
 
 ================================================================================
@@ -133,6 +147,7 @@ COMPORTAMIENTO:
 
 ERRORES:
   400 → quantity null o quantity < 1
+  403 → El usuario no tiene rol CUSTOMER
   404 → Carrito no encontrado o expirado
   404 → Ítem no pertenece al carrito del usuario
 
@@ -151,6 +166,7 @@ RESPUESTA EXITOSA 204 No Content
   (sin body)
 
 ERRORES:
+  403 → El usuario no tiene rol CUSTOMER
   404 → Carrito no encontrado o expirado
   404 → Ítem no pertenece al carrito del usuario
 
@@ -171,6 +187,7 @@ COMPORTAMIENTO:
   - Si no hay carrito activo → no hace nada, igual retorna 204
 
 ERRORES:
+  403 → El usuario no tiene rol CUSTOMER
   404 → StoreProfile no encontrado
 
 
@@ -178,18 +195,25 @@ ERRORES:
   FLUJO TÍPICO DE INTEGRACIÓN
 ================================================================================
 
-1. CARGAR CARRITO AL INICIAR SESIÓN
+1. AL INICIAR SESIÓN — verificar rol antes de mostrar el carrito
+   Leer el rol del usuario desde el JWT o perfil.
+   Si NO tiene rol CUSTOMER → ocultar ícono de carrito y sección de compras.
+   Si tiene rol CUSTOMER → GET /api/v1/cart para cargar el estado inicial.
+
+2. CARGAR CARRITO
    GET /api/v1/cart
    → Mostrar badge con cantidad total de ítems
-   → Si sellerGroups.length > 0 mostrar contenido, si no mostrar "carrito vacío"
+   → Verificar si hay ítems con priceChanged=true (mostrar alerta)
+   → Verificar si el carrito se vació por productos inactivos (ver sección abajo)
 
-2. AGREGAR PRODUCTO DESDE CATÁLOGO
-   El front debe conocer el variantId de la variante seleccionada.
+3. AGREGAR PRODUCTO DESDE CATÁLOGO
+   Validar en el front que la cantidad no supere 9999.
    POST /api/v1/cart/items  { variantId: X, quantity: 1 }
    → Actualizar estado del carrito con la respuesta
-   → Actualizar badge de cantidad
+   → Si 400 con "cantidad máxima" → mostrar mensaje de límite
+   → Si 409 → mostrar "Recarga e intenta de nuevo" y hacer GET /cart
 
-3. MOSTRAR EL CARRITO
+4. MOSTRAR EL CARRITO
    Renderizar por sellerGroups (cada grupo es un vendedor):
    ┌─────────────────────────────────────┐
    │ Vendedor: Juan Paragon              │
@@ -200,15 +224,16 @@ ERRORES:
    │ TOTAL: $150.00                      │
    └─────────────────────────────────────┘
 
-4. CAMBIAR CANTIDAD
+5. CAMBIAR CANTIDAD
+   Validar que la nueva cantidad sea entre 1 y 9999.
    PATCH /api/v1/cart/items/{itemId}  { quantity: nuevaCantidad }
    → Actualizar estado con la respuesta
 
-5. ELIMINAR UN ÍTEM
+6. ELIMINAR UN ÍTEM
    DELETE /api/v1/cart/items/{itemId}
    → Refrescar carrito: GET /api/v1/cart
 
-6. VACIAR CARRITO
+7. VACIAR CARRITO
    DELETE /api/v1/cart
    → Mostrar carrito vacío
 
@@ -217,28 +242,54 @@ ERRORES:
   REGLAS DE NEGOCIO IMPORTANTES PARA EL FRONT
 ================================================================================
 
+ROL CUSTOMER REQUERIDO (BUG-05):
+  Solo perfiles con rol CUSTOMER pueden operar el carrito.
+  Sellers sin rol CUSTOMER y Admins reciben 403 en todos los endpoints.
+  Acción: leer el rol del usuario al iniciar sesión y condicionar la visibilidad
+  del carrito en la UI. No mostrar el ícono ni las rutas de carrito para estos roles.
+
+LÍMITE DE CANTIDAD 9999 (BUG-01):
+  Cada variante puede acumularse hasta 9999 unidades en el carrito.
+  Validar en el frontend antes de enviar para evitar el viaje al servidor:
+    if (cantidadActual + nuevaCantidad > 9999) → mostrar error local.
+
+PRODUCTOS INACTIVOS FILTRADOS (BUG-06):
+  Si un vendedor desactiva un producto mientras está en el carrito del usuario,
+  ese ítem desaparece silenciosamente del CartResponse.
+  El front puede detectarlo comparando el carrito anterior con el nuevo:
+    → Si el total bajó sin que el usuario hiciera nada → mostrar banner:
+      "Algunos productos ya no están disponibles y fueron removidos de tu carrito."
+  Alternativa: comparar los itemIds entre el carrito guardado en estado local
+  y el recibido en el response.
+
+CONCURRENCIA — 409 Conflict (BUG-03):
+  Caso muy raro (mismo usuario, dos dispositivos, mismo instante).
+  Si se recibe 409 en POST /items:
+    1. Mostrar mensaje: "El ítem ya existe en el carrito. Recargando..."
+    2. Hacer GET /api/v1/cart para obtener el estado actual.
+
 TTL 180 DÍAS:
-  - Si el usuario no toca el carrito en 180 días, este expira automáticamente
-  - Al intentar agregar un ítem a un carrito expirado, se crea uno nuevo vacío
-  - El front no necesita manejar esto explícitamente; el backend lo resuelve
+  Si el usuario no toca el carrito en 180 días, este expira automáticamente.
+  Al intentar agregar un ítem a un carrito expirado, se crea uno nuevo vacío.
+  El front no necesita manejar esto explícitamente; el backend lo resuelve.
 
 CAMBIO DE PRECIO:
-  - Si priceChanged = true en algún ítem, mostrar advertencia visible al usuario
-  - El checkout siempre usa unitPrice (precio actual)
-  - Sugerencia UI: mostrar tachado previousPrice y resaltado unitPrice
+  Si priceChanged = true en algún ítem, mostrar advertencia visible al usuario.
+  El checkout siempre usa unitPrice (precio actual).
+  Sugerencia UI: mostrar tachado previousPrice y resaltado unitPrice.
 
 AGRUPACIÓN POR VENDEDOR:
-  - Los ítems siempre vienen agrupados por seller
-  - El total global está en CartResponse.total
-  - Cada grupo tiene su subtotal en CartSellerGroupResponse.subtotal
+  Los ítems siempre vienen agrupados por seller.
+  El total global está en CartResponse.total.
+  Cada grupo tiene su subtotal en CartSellerGroupResponse.subtotal.
 
 CANTIDAD AL AGREGAR:
-  - POST /items SUMA a la cantidad existente si la variante ya está en el carrito
-  - Si quieres "setear" la cantidad, usa PATCH /items/{itemId}
+  POST /items SUMA a la cantidad existente si la variante ya está en el carrito.
+  Si quieres "setear" la cantidad exacta, usa PATCH /items/{itemId}.
 
 CARRITO VACÍO:
-  - cartId = null significa que el usuario nunca ha tenido carrito
-  - sellerGroups = [] significa carrito sin ítems
+  cartId = null significa que el usuario nunca ha tenido carrito.
+  sellerGroups = [] significa carrito sin ítems (o todos los ítems fueron filtrados).
 
 
 ================================================================================
@@ -255,20 +306,19 @@ CARRITO VACÍO:
 
 
 ================================================================================
-  MANEJO DE ERRORES GENÉRICO
+  MANEJO DE ERRORES COMPLETO
 ================================================================================
 
-  HTTP 400 Bad Request   → Validación fallida (campo requerido, valor inválido)
-  HTTP 403 Forbidden     → Token ausente, inválido o expirado
-  HTTP 404 Not Found     → Recurso no encontrado (variante, ítem, perfil)
+  HTTP 400 Bad Request   → Validación fallida: campo requerido, valor inválido,
+                           o cantidad acumulada supera 9999
+  HTTP 403 Forbidden     → Token ausente/inválido, o usuario sin rol CUSTOMER
+  HTTP 404 Not Found     → Recurso no encontrado (variante, ítem, carrito, perfil)
+  HTTP 409 Conflict      → Solicitud concurrente con la misma variante
   HTTP 500               → Error interno del servidor
 
 Estructura de error:
   {
-    "status":  404,
-    "error":   "Not Found",
-    "message": "Variant not found",
-    "path":    "/api/v1/cart/items"
+    "message": "La cantidad máxima por producto es 9999"
   }
 
 ================================================================================
