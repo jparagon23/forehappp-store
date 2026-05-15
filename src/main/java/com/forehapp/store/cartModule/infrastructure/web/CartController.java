@@ -10,6 +10,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/v1/cart")
 public class CartController {
@@ -31,6 +33,14 @@ public class CartController {
             @AuthenticationPrincipal String userId) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(cartService.addItem(Long.parseLong(userId), dto));
+    }
+
+    @PostMapping("/items/batch")
+    public ResponseEntity<CartResponse> addItems(
+            @Valid @RequestBody List<AddItemRequestDto> dtos,
+            @AuthenticationPrincipal String userId) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(cartService.addItems(Long.parseLong(userId), dtos));
     }
 
     @PatchMapping("/items/{itemId}")

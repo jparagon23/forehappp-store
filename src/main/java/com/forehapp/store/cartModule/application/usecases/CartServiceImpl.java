@@ -30,6 +30,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+
 @Service
 public class CartServiceImpl implements ICartService {
 
@@ -60,21 +61,41 @@ public class CartServiceImpl implements ICartService {
     @Transactional
     public CartResponse addItem(Long userId, AddItemRequestDto dto) {
         StoreProfile buyer = requireBuyer(userId);
-        ProductVariant variant = productVariantDao.findById(dto.variantId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Variant not found"));
-
         Cart cart = findValidCart(buyer.getId()).orElseGet(() -> {
             Cart c = new Cart();
             c.setBuyer(buyer);
             return c;
         });
+        mergeItem(cart, dto);
+        return toResponse(saveCart(cart));
+    }
+
+    @Override
+    @Transactional
+    public CartResponse addItems(Long userId, List<AddItemRequestDto> dtos) {
+        if (dtos == null || dtos.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Items list must not be empty");
+        }
+        StoreProfile buyer = requireBuyer(userId);
+        Cart cart = findValidCart(buyer.getId()).orElseGet(() -> {
+            Cart c = new Cart();
+            c.setBuyer(buyer);
+            return c;
+        });
+        dtos.forEach(dto -> mergeItem(cart, dto));
+        return toResponse(saveCart(cart));
+    }
+
+    private void mergeItem(Cart cart, AddItemRequestDto dto) {
+        ProductVariant variant = productVariantDao.findById(dto.variantId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Variant not found: " + dto.variantId()));
 
         cart.getItems().stream()
                 .filter(i -> i.getVariant().getId().equals(variant.getId()))
                 .findFirst()
                 .ifPresentOrElse(
                         existing -> {
-                            // BUG-01: guard against Integer overflow on quantity accumulation
                             int newQty = existing.getQuantity() + dto.quantity();
                             if (newQty > MAX_ITEM_QUANTITY) {
                                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -91,8 +112,6 @@ public class CartServiceImpl implements ICartService {
                             cart.getItems().add(item);
                         }
                 );
-
-        return toResponse(saveCart(cart));
     }
 
     @Override
