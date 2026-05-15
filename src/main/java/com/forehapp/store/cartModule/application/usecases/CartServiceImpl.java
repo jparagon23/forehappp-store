@@ -117,9 +117,12 @@ public class CartServiceImpl implements ICartService {
     @Transactional
     public void clearCart(Long userId) {
         StoreProfile buyer = requireBuyer(userId);
+        // NUEVA-BUG-03: only persist if there were actually items to remove
         findValidCart(buyer.getId()).ifPresent(cart -> {
-            cart.getItems().clear();
-            saveCart(cart);
+            if (!cart.getItems().isEmpty()) {
+                cart.getItems().clear();
+                saveCart(cart);
+            }
         });
     }
 

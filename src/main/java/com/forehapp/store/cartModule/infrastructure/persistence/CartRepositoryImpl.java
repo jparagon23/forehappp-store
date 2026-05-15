@@ -5,6 +5,7 @@ import com.forehapp.store.cartModule.domain.model.CartStatus;
 import com.forehapp.store.cartModule.domain.ports.out.ICartDao;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 @Repository
@@ -29,5 +30,10 @@ public class CartRepositoryImpl implements ICartDao {
     @Override
     public void delete(Cart cart) {
         jpaRepository.delete(cart);
+    }
+
+    @Override
+    public int expireOldCarts(LocalDateTime threshold) {
+        return jpaRepository.expireOldCarts(threshold);
     }
 }
