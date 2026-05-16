@@ -136,10 +136,12 @@ public class WishlistServiceImpl implements IWishlistService {
                 .map(v -> v.getPrice())
                 .min(BigDecimal::compareTo)
                 .orElse(BigDecimal.ZERO);
+        String thumbnailUrl = product.getImages().isEmpty() ? null : product.getImages().get(0).getUrl();
         return new WishlistItemResponse(
                 item.getId(),
                 product.getId(),
                 product.getTitle(),
+                thumbnailUrl,
                 minPrice,
                 product.getVariants().size(),
                 item.getAddedAt()

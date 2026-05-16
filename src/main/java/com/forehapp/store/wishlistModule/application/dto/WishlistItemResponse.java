@@ -7,6 +7,7 @@ public record WishlistItemResponse(
         Long itemId,
         Long productId,
         String productTitle,
+        String thumbnailUrl,
         BigDecimal minPrice,
         Integer variantCount,
         LocalDateTime addedAt
