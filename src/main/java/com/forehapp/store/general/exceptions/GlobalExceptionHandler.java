@@ -35,12 +35,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse(message));
     }
 
-    // BUG-03: concurrent add of the same cart variant hits uk_cart_variant constraint
+    // BUG-03/BUG-C: concurrent duplicate add hits unique constraint (cart or wishlist)
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ErrorResponse> handleDataIntegrity(DataIntegrityViolationException ex) {
         log.warn("Data integrity violation: {}", ex.getMostSpecificCause().getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(new ErrorResponse("El ítem ya existe en el carrito. Recarga e intenta de nuevo."));
+                .body(new ErrorResponse("El ítem ya existe. Recarga e intenta de nuevo."));
     }
 
     @ExceptionHandler(Exception.class)

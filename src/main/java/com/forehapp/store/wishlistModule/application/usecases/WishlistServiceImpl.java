@@ -1,6 +1,7 @@
 package com.forehapp.store.wishlistModule.application.usecases;
 
 import com.forehapp.store.productModule.domain.model.Product;
+import com.forehapp.store.productModule.domain.model.ProductStatus;
 import com.forehapp.store.productModule.domain.ports.out.IProductDao;
 import com.forehapp.store.userModule.domain.model.StoreProfile;
 import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
@@ -21,6 +22,8 @@ import java.util.List;
 
 @Service
 public class WishlistServiceImpl implements IWishlistService {
+
+    private static final int MAX_WISHLIST_ITEMS = 500;
 
     private final IWishlistDao wishlistDao;
     private final IProductDao productDao;
@@ -62,6 +65,12 @@ public class WishlistServiceImpl implements IWishlistService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Product already in wishlist");
         }
 
+        // BUG-E: cap wishlist size to avoid unbounded growth
+        if (wishlist.getItems().size() >= MAX_WISHLIST_ITEMS) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "La wishlist no puede superar los " + MAX_WISHLIST_ITEMS + " productos");
+        }
+
         WishlistItem item = new WishlistItem();
         item.setWishlist(wishlist);
         item.setProduct(product);
@@ -84,9 +93,12 @@ public class WishlistServiceImpl implements IWishlistService {
     @Transactional
     public void clearWishlist(Long userId) {
         StoreProfile owner = resolveProfile(userId);
+        // BUG-D: only save when there's something to clear
         wishlistDao.findByOwnerId(owner.getId()).ifPresent(wishlist -> {
-            wishlist.getItems().clear();
-            wishlistDao.save(wishlist);
+            if (!wishlist.getItems().isEmpty()) {
+                wishlist.getItems().clear();
+                wishlistDao.save(wishlist);
+            }
         });
     }
 
@@ -110,7 +122,9 @@ public class WishlistServiceImpl implements IWishlistService {
     }
 
     private WishlistResponse toResponse(Wishlist wishlist) {
+        // BUG-B: exclude inactive/draft/out_of_stock products silently
         List<WishlistItemResponse> items = wishlist.getItems().stream()
+                .filter(i -> i.getProduct().getStatus() == ProductStatus.ACTIVE)
                 .map(this::toItemResponse)
                 .toList();
         return new WishlistResponse(wishlist.getId(), items.size(), items);
