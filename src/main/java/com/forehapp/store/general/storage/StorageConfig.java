@@ -26,17 +26,19 @@ public class StorageConfig {
     @Value("${storage.region:us-east-1}")
     private String region;
 
+    @Value("${storage.path-style:false}")
+    private boolean pathStyle;
+
     @Bean
     public S3Client s3Client() {
         AwsBasicCredentials credentials = AwsBasicCredentials.create(accessKey, secretKey);
         S3ClientBuilder builder = S3Client.builder()
                 .region(Region.of(region))
-                .credentialsProvider(StaticCredentialsProvider.create(credentials));
+                .credentialsProvider(StaticCredentialsProvider.create(credentials))
+                .forcePathStyle(pathStyle);
 
         if (endpoint != null && !endpoint.isBlank()) {
-            // Required for Cloudflare R2, MinIO, or any non-AWS S3-compatible endpoint
-            builder.endpointOverride(URI.create(endpoint))
-                   .forcePathStyle(true);
+            builder.endpointOverride(URI.create(endpoint));
         }
 
         return builder.build();
