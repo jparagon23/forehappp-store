@@ -1,6 +1,7 @@
 package com.forehapp.store.general.storage;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
@@ -14,10 +15,10 @@ import java.net.URI;
 @Configuration
 public class StorageConfig {
 
-    @Value("${storage.access-key}")
+    @Value("${storage.access-key:}")
     private String accessKey;
 
-    @Value("${storage.secret-key}")
+    @Value("${storage.secret-key:}")
     private String secretKey;
 
     @Value("${storage.endpoint:}")
@@ -30,7 +31,9 @@ public class StorageConfig {
     private boolean pathStyle;
 
     @Bean
+    @ConditionalOnProperty(name = "storage.access-key", matchIfMissing = false)
     public S3Client s3Client() {
+        if (accessKey == null || accessKey.isBlank()) return null;
         AwsBasicCredentials credentials = AwsBasicCredentials.create(accessKey, secretKey);
         S3ClientBuilder builder = S3Client.builder()
                 .region(Region.of(region))
