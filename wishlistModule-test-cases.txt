@@ -1,18 +1,28 @@
 ========================================================
-  WISHLIST MODULE — CASOS DE PRUEBA (ALTA EXIGENCIA)
+  WISHLIST MODULE — CASOS DE PRUEBA (ALTA EXIGENCIA) v2
   Base URL: http://localhost:8082/api/v1/wishlist
-  Código revisado: WishlistServiceImpl.java
+  Código revisado: WishlistServiceImpl.java (post-bugfix)
+  Fecha: 2026-05-15
 ========================================================
 
 CONVENCIONES
 ────────────
   ✅  Caso de éxito esperado
   ❌  Caso de error esperado
-  ⚠️  Comportamiento a verificar / riesgo / bug potencial
+  ⚠️  Comportamiento a verificar / riesgo / edge case
   PRE: precondiciones requeridas
   ACT: acción a ejecutar
   ESP: resultado esperado
   VAL: validación adicional en BD o respuesta
+
+ESTADO DEL MÓDULO (post correcciones):
+  BUG-A RESUELTO → LEFT JOIN FETCH p.variants — ya no hay N+1 queries
+  BUG-B RESUELTO → Filtro ProductStatus.ACTIVE en toResponse()
+  BUG-C RESUELTO → Mensaje genérico en DataIntegrityViolationException handler
+  BUG-D RESUELTO → Guard if (!isEmpty()) en clearWishlist
+  BUG-E RESUELTO → MAX_WISHLIST_ITEMS = 500 en addItem()
+  BUG-F RESUELTO → ORDER BY i.addedAt DESC en IWishlistRepository
+  BUG-G PENDIENTE (INFO) → minPrice/variantCount son dinámicos — no cachear
 
 DIFERENCIAS CLAVE VS CART MODULE:
   - La wishlist NO tiene verificación de rol: cualquier usuario con StoreProfile
@@ -20,11 +30,12 @@ DIFERENCIAS CLAVE VS CART MODULE:
   - Se guarda a nivel de PRODUCTO (no variante)
   - Un usuario tiene exactamente UNA wishlist (OneToOne con StoreProfile)
   - No hay expiración
-  - No hay límite de cantidad (es presencia/ausencia de producto)
+  - Límite: 500 productos por wishlist (400 si se supera)
   - removeItem retorna 200 con WishlistResponse (no 204)
   - clearWishlist retorna 204 (no WishlistResponse)
-  - minPrice = precio mínimo entre variantes del producto (0.00 si no tiene variantes)
-  - No hay filtrado por ProductStatus — productos INACTIVE aparecen en la wishlist
+  - Filtro de ProductStatus: SOLO productos ACTIVE aparecen en la respuesta
+  - minPrice = precio mínimo entre variantes activas del producto (0.00 si no tiene)
+  - Orden de ítems: addedAt DESC (más reciente primero)
 
 
 ========================================================
@@ -64,7 +75,7 @@ TC-007 ✅ Usuario con rol CUSTOMER puede usar wishlist
 TC-008 ✅ Usuario con rol SELLER puede usar wishlist (sin restricción de rol)
   PRE: perfil con solo rol SELLER
   ACT: GET /api/v1/wishlist
-  ESP: 200 — no hay verificación de rol en resolveProfile()
+  ESP: 200 — resolveProfile() no verifica rol, solo la existencia del StoreProfile
   NOTA: a diferencia del carrito, la wishlist no requiere rol CUSTOMER
 
 TC-009 ✅ Usuario con rol STORE_ADMIN puede usar wishlist
@@ -77,22 +88,36 @@ TC-010 ✅ Usuario sin ningún rol puede usar wishlist
   ACT: GET /api/v1/wishlist
   ESP: 200 — resolveProfile no valida rol
 
-TC-011 ❌ Token con userId no parseable a Long
+TC-011 ⚠️  Token con userId no parseable a Long
   ACT: token con userId="abc" → Long.parseLong("abc") → NumberFormatException
   ESP: 500 Internal Server Error (no manejado explícitamente)
   NOTA: riesgo bajo si el proveedor de JWT siempre emite IDs numéricos
 
-TC-012 ✅ Verificar que los 4 endpoints aplican la misma autenticación
-  ACT: sin token, probar los 4 endpoints:
+TC-012 ✅ Los 4 endpoints requieren autenticación
+  ACT: sin token, probar:
        GET /api/v1/wishlist
        POST /api/v1/wishlist/items
        DELETE /api/v1/wishlist/items/1
        DELETE /api/v1/wishlist
   ESP: 401 en los cuatro
 
+TC-013 ✅ Token válido con rol múltiple (CUSTOMER + SELLER) — acceso permitido
+  PRE: perfil con roles [CUSTOMER, SELLER]
+  ACT: GET /api/v1/wishlist
+  ESP: 200
+
+TC-014 ✅ Usuario recién creado (StoreProfile nuevo, sin wishlist) — primer acceso
+  PRE: StoreProfile creado hace 1 segundo
+  ACT: GET /api/v1/wishlist
+  ESP: 200 { wishlistId: null, totalItems: 0, items: [] }
+
+TC-015 ⚠️  Header Authorization con esquema distinto a Bearer
+  ACT: Authorization: Token <jwt>
+  ESP: 401 — el filtro solo acepta Bearer
+
 
 ========================================================
-  SECCIÓN 2 — GET /api/v1/wishlist (TC-016–TC-055)
+  SECCIÓN 2 — GET /api/v1/wishlist (TC-016–TC-060)
 ========================================================
 
 ──────────────────────────────────────────
@@ -110,29 +135,29 @@ TC-016 ✅ Usuario sin wishlist previa
   }
   VAL: NO se crea ninguna fila en store_wishlists
 
-TC-017 ✅ Wishlist existente pero sin ítems (tras clearWishlist)
-  PRE: wishlist con fila en BD pero sin items
+TC-017 ✅ Wishlist existente pero sin ítems activos (tras clearWishlist)
+  PRE: wishlist con fila en BD, items=[]
   ACT: GET /api/v1/wishlist
   ESP: 200
   {
-    "wishlistId": <id_real>,   ← NO es null, la wishlist existe
+    "wishlistId": <id_real>,
     "totalItems": 0,
     "items": []
   }
-  VAL: wishlistId != null es la diferencia clave vs nunca-haber-tenido-wishlist
+  VAL: wishlistId != null — la wishlist existe aunque esté vacía
 
-TC-018 ⚠️  Distinción entre "wishlistId null" y "wishlistId con items vacíos"
+TC-018 ⚠️  Distinción entre wishlistId null y wishlistId con items vacíos
   El front DEBE diferenciar ambos estados:
     - wishlistId=null → usuario nunca agregó nada (primera vez)
     - wishlistId!=null + items=[] → usuario tenía ítems, los limpió
   Ambos muestran "lista vacía" en UI, pero el comportamiento en BD es distinto.
 
 ──────────────────────────────────────────
-2B. WISHLIST CON ÍTEMS
+2B. WISHLIST CON ÍTEMS ACTIVOS
 ──────────────────────────────────────────
 
-TC-019 ✅ Wishlist con 1 producto
-  PRE: wishlist con 1 WishlistItem → producto con 2 variantes (precios 50 y 80)
+TC-019 ✅ Wishlist con 1 producto ACTIVE
+  PRE: wishlist con 1 WishlistItem → producto ACTIVE con 2 variantes (precios 50 y 80)
   ACT: GET /api/v1/wishlist
   ESP: 200
   {
@@ -143,23 +168,23 @@ TC-019 ✅ Wishlist con 1 producto
         "itemId": <id>,
         "productId": <id>,
         "productTitle": "Nombre Producto",
-        "minPrice": 50.00,      ← mínimo entre variantes
+        "minPrice": 50.00,
         "variantCount": 2,
         "addedAt": "<timestamp>"
       }
     ]
   }
 
-TC-020 ✅ Wishlist con múltiples productos
-  PRE: wishlist con 5 productos de distintos vendedores
+TC-020 ✅ Wishlist con múltiples productos ACTIVE
+  PRE: wishlist con 5 productos distintos (todos ACTIVE)
   ACT: GET /api/v1/wishlist
   ESP: 200 — totalItems=5, items con 5 elementos
 
-TC-021 ✅ totalItems == items.length siempre
-  VAL: en todos los casos, totalItems debe ser igual a items.length
-  No debería desincronizarse (totalItems se calcula como items.size())
+TC-021 ✅ totalItems == items.length siempre (solo productos ACTIVE)
+  VAL: totalItems se calcula como items.size() después del filtro ACTIVE
+  Se verifica en GET, POST /items y DELETE /items/{id}
 
-TC-022 ✅ minPrice = precio mínimo entre todas las variantes del producto
+TC-022 ✅ minPrice = precio mínimo entre variantes del producto
   PRE: producto con variantes de precios [100.00, 75.00, 150.00]
   ESP: minPrice = 75.00
 
@@ -168,18 +193,16 @@ TC-023 ✅ minPrice con una sola variante
   ESP: minPrice = 200.00, variantCount = 1
 
 TC-024 ⚠️  minPrice cuando el producto no tiene variantes — retorna 0.00
-  PRE: producto sin filas en store_product_variants
-  ACT: GET /api/v1/wishlist (producto sin variantes en la wishlist)
-  ESP: minPrice = 0.00 (orElse(BigDecimal.ZERO))
-       variantCount = 0
-  RIESGO FRONT: "$0.00" puede confundirse con "gratis". Mostrar "precio no disponible"
-  cuando variantCount = 0
+  PRE: producto ACTIVE sin filas en store_product_variants
+  ACT: GET /api/v1/wishlist
+  ESP: minPrice = 0.00, variantCount = 0
+  RIESGO FRONT: "$0.00" puede confundirse con "gratis"
+  Usar variantCount = 0 para mostrar "precio no disponible"
 
-TC-025 ⚠️  minPrice cuando el producto tiene variante con precio 0.00
-  PRE: producto con variante price=0.00 (precio real cero)
+TC-025 ⚠️  minPrice cuando una variante tiene precio 0.00
+  PRE: producto con variante price=0.00
   ESP: minPrice = 0.00
-  RIESGO: mismo display que producto sin variantes. El front debe distinguir
-          ambos casos usando variantCount (0 vs >0)
+  DISTINCIÓN: variantCount > 0 significa precio real cero (vs. sin variantes)
 
 TC-026 ✅ variantCount = número exacto de variantes del producto
   PRE: producto con 7 variantes
@@ -187,50 +210,126 @@ TC-026 ✅ variantCount = número exacto de variantes del producto
 
 TC-027 ✅ addedAt refleja el momento exacto en que se agregó el ítem
   PRE: agregar producto a las 10:30:00
-  ESP: addedAt = "2026-05-15T10:30:00" (o similar con precisión de segundos)
-  VAL: addedAt no cambia si se llama GET múltiples veces (es de solo lectura)
+  ESP: addedAt = "2026-05-15T10:30:00"
+  VAL: addedAt no cambia en GETs posteriores (es inmutable)
 
-TC-028 ⚠️  Orden de los ítems en la respuesta
-  PRE: wishlist con 5 productos agregados en distinto orden
-  ESP: ¿orden de inserción? ¿alfabético? El código hace .stream().map() sin ordenar.
-  VAL: el orden depende del orden en que la BD retorna los ítems (no garantizado
-       a menos que haya un ORDER BY en la query).
-  IWishlistRepository no tiene ORDER BY → orden no determinístico.
-  RIESGO: el front puede ver el orden cambiar entre requests.
-
-TC-029 ⚠️  Producto INACTIVE en la wishlist — aparece en el response (sin filtro)
-  PRE: producto agregado a wishlist; luego product.status cambiado a INACTIVE
+TC-028 ✅ Orden de los ítems — addedAt DESC (más reciente primero)
+  PRE: productos agregados en orden: A (T1) → B (T2) → C (T3)
   ACT: GET /api/v1/wishlist
-  ESP: el ítem APARECE en la respuesta (a diferencia del cart, no hay filtro)
-  VAL: productTitle, minPrice y variantCount reflejan el producto inactivo
-  RIESGO: el front puede mostrar un producto que ya no está disponible sin advertencia
+  ESP: items = [C, B, A]  ← más reciente primero
+  VAL: el orden es determinístico y estable en múltiples GETs consecutivos
+  NOTA: ORDER BY i.addedAt DESC está en IWishlistRepository (BUG-F resuelto)
 
-TC-030 ⚠️  Producto DRAFT en la wishlist — mismo comportamiento que INACTIVE
-  ESP: aparece en el response sin filtro
+TC-029 ✅ Segundo item siempre aparece primero si fue agregado después
+  PRE: agregar productoA (T1), luego productoB (T2 > T1)
+  ESP: items[0] = productoB (addedAt T2), items[1] = productoA (addedAt T1)
 
-TC-031 ⚠️  GET /api/v1/wishlist con muchos ítems — N+1 queries
-  PRE: wishlist con 50 productos
-  ACT: GET /api/v1/wishlist
-  PROBLEMA: IWishlistRepository hace JOIN FETCH de items y products, pero NO
-            de product.variants. En toItemResponse(), product.getVariants() es
-            LAZY → se ejecuta 1 query por producto = 50 queries adicionales.
-  ESP: 200 OK pero con 51 queries a la BD (1 principal + 50 variantes)
-  IMPACTO: degradación severa de rendimiento con wishlists grandes.
-  Ver BUG-A al final del documento.
+TC-030 ✅ Ítems con mismo addedAt — orden estable por addedAt (no hay criterio secundario)
+  PRE: dos ítems con timestamp idéntico (raro, posible en tests)
+  ESP: alguno de los dos primero (ambos en resultado), no falla
 
 ──────────────────────────────────────────
-2C. GET ES READ-ONLY — NUNCA MUTA ESTADO
+2C. FILTRO DE PRODUCTOS POR STATUS
 ──────────────────────────────────────────
 
-TC-032 ✅ GET no crea wishlist si no existe
+TC-031 ✅ Producto ACTIVE aparece en la respuesta
+  PRE: WishlistItem → producto con status=ACTIVE
+  ACT: GET /api/v1/wishlist
+  ESP: 200 — ítem incluido en items[]
+
+TC-032 ✅ Producto INACTIVE es filtrado del response
+  PRE: WishlistItem → producto con status=INACTIVE
+  ACT: GET /api/v1/wishlist
+  ESP: 200 — ítem NO aparece en items[], totalItems no lo cuenta
+  VAL: la fila en store_wishlist_items SIGUE existiendo en BD (no se borra)
+  VAL: si era el único ítem: { wishlistId: <id>, totalItems: 0, items: [] }
+  NOTA: BUG-B resuelto — mismo comportamiento que el carrito
+
+TC-033 ✅ Producto DRAFT es filtrado del response
+  PRE: WishlistItem → producto con status=DRAFT
+  ESP: ítem excluido de items[]
+
+TC-034 ✅ Producto OUT_OF_STOCK es filtrado del response
+  PRE: WishlistItem → producto con status=OUT_OF_STOCK
+  ESP: ítem excluido de items[]
+
+TC-035 ✅ Wishlist mixta: 2 ACTIVE + 1 INACTIVE + 1 DRAFT
+  PRE: wishlist con 4 ítems: productosA(ACTIVE), B(ACTIVE), C(INACTIVE), D(DRAFT)
+  ACT: GET /api/v1/wishlist
+  ESP: 200 — totalItems=2, items=[A, B]
+  VAL: C y D excluidos silenciosamente
+
+TC-036 ✅ Producto desactivado mientras está en la wishlist — desaparece del response
+  PRE: producto P agregado a wishlist (status=ACTIVE)
+       vendedor cambia status a INACTIVE
+  ACT: GET /api/v1/wishlist
+  ESP: 200 — P ya no aparece en items[]
+  VAL: fila en store_wishlist_items no se eliminó (sigue en BD)
+  NOTA: comportamiento idéntico al cart module
+
+TC-037 ✅ Producto reactivado — vuelve a aparecer en el response
+  PRE: producto en wishlist con status=INACTIVE
+       vendedor cambia status a ACTIVE
+  ACT: GET /api/v1/wishlist
+  ESP: 200 — producto vuelve a aparecer con su itemId y addedAt originales
+  VAL: addedAt no cambia (es el del momento en que se agregó, no de la reactivación)
+
+TC-038 ⚠️  totalItems NO cuenta ítems de productos inactivos
+  PRE: wishlist con 5 ítems, 2 de productos INACTIVE
+  ESP: totalItems=3 (solo los ACTIVE)
+  RIESGO FRONT: si el front cachea el totalItems anterior (5), puede mostrar
+                un número incorrecto. Siempre usar el totalItems del response.
+
+TC-039 ⚠️  La wishlist puede verse "vacía" aunque tenga ítems en BD
+  PRE: todos los productos de la wishlist se desactivan simultáneamente
+  ACT: GET /api/v1/wishlist
+  ESP: { wishlistId: <id>, totalItems: 0, items: [] }
+  VAL: existen N filas en store_wishlist_items en BD, pero ninguna aparece
+  RECOMENDACIÓN FRONT: mostrar banner "Algunos productos guardados ya no están disponibles"
+  Detectar comparando wishlistId!=null + items=[] vs. wishlistId=null
+
+TC-040 ⚠️  Producto que cicla status ACTIVE→INACTIVE→ACTIVE mientras el usuario navega
+  PRE: producto P en wishlist; vendedor cicla el status
+  ESP: el GET siempre refleja el estado ACTUAL del producto
+  No hay stale data — el query va a BD en cada petición
+
+──────────────────────────────────────────
+2D. GET ES READ-ONLY — NUNCA MUTA ESTADO
+──────────────────────────────────────────
+
+TC-041 ✅ GET no crea wishlist si no existe
   PRE: usuario sin wishlist
   ACT: GET /api/v1/wishlist (múltiples veces)
   VAL: cero filas en store_wishlists para este usuario
 
-TC-033 ✅ GET no modifica ítems existentes
+TC-042 ✅ GET no modifica ítems existentes
   PRE: wishlist con 3 ítems
   ACT: GET /api/v1/wishlist (10 veces consecutivas)
   VAL: exactamente 3 ítems en BD al final
+
+TC-043 ✅ GET no dispara writes a BD (readOnly = true)
+  VAL: @Transactional(readOnly = true) en getWishlist()
+  El ORM no permite escrituras accidentales en esta transacción
+
+──────────────────────────────────────────
+2E. PERFORMANCE — SIN N+1 QUERIES
+──────────────────────────────────────────
+
+TC-044 ✅ GET con N ítems genera exactamente 1 query a BD
+  PRE: wishlist con 50 productos, cada uno con múltiples variantes
+  ACT: GET /api/v1/wishlist
+  ESP: 200 — 1 sola query (LEFT JOIN FETCH w.items i JOIN FETCH i.product p
+             JOIN FETCH p.variants)
+  VAL: habilitar SQL logging — contar queries ejecutadas
+  NOTA: BUG-A resuelto — el JOIN FETCH de variants está en IWishlistRepository
+
+TC-045 ✅ GET con 0 ítems genera 0 o 1 queries (sin N+1)
+  PRE: wishlist existente con items=[]
+  ESP: 1 query (la del JOIN FETCH que retorna vacío), no queries adicionales
+
+TC-046 ✅ POST /items y DELETE /items/{id} también se benefician de JOIN FETCH
+  VAL: ambas operaciones llaman toResponse() que usa los datos ya cargados
+  No hay lazy loads adicionales en la conversión a DTO
 
 
 ========================================================
@@ -242,70 +341,88 @@ TC-033 ✅ GET no modifica ítems existentes
 ──────────────────────────────────────────
 
 TC-056 ✅ Primer ítem — crea wishlist y agrega producto
-  PRE: usuario sin wishlist previa
+  PRE: usuario sin wishlist previa, producto ACTIVE
   ACT: POST { "productId": 1 }
   ESP: 201 Created
   {
     "wishlistId": <nuevo_id>,
     "totalItems": 1,
-    "items": [{ "productId": 1, ... }]
+    "items": [{ "productId": 1, "minPrice": X, "variantCount": N, ... }]
   }
   VAL: nueva fila en store_wishlists
   VAL: nueva fila en store_wishlist_items
   VAL: wishlistId != null en la respuesta
 
 TC-057 ✅ Agregar segundo producto a wishlist existente
-  PRE: wishlist con producto A
+  PRE: wishlist con producto A (ACTIVE)
   ACT: POST { "productId": <B> }
-  ESP: 201 — totalItems=2, ambos productos en items
+  ESP: 201 — totalItems=2, items[0]=B (más reciente), items[1]=A
 
 TC-058 ✅ Agregar 10 productos distintos consecutivamente
   ESP: 201 en cada request, totalItems incrementa de 1 a 10
+  VAL: el orden en items[] es siempre el más recientemente agregado primero
 
 TC-059 ✅ addedAt del ítem se establece en el momento del POST
   ACT: POST { "productId": 1 }
   VAL: items[0].addedAt ≈ now (dentro de ±2 segundos)
   VAL: addedAt es inmutable — no cambia en GETs posteriores
 
-TC-060 ✅ POST incluye en la respuesta todos los ítems previos + el nuevo
-  PRE: wishlist con 4 ítems
-  ACT: POST { "productId": <nuevo> }
-  ESP: 201 — totalItems=5, los 4 anteriores + el nuevo en items
+TC-060 ✅ POST incluye en la respuesta todos los ítems activos + el nuevo
+  PRE: wishlist con 4 ítems ACTIVE
+  ACT: POST { "productId": <nuevo ACTIVE> }
+  ESP: 201 — totalItems=5, el nuevo como items[0] (más reciente)
 
-TC-061 ✅ El minPrice del ítem responde al precio actual de variantes
+TC-061 ✅ El minPrice refleja el precio actual de las variantes
   PRE: producto con variante price=120.00
   ACT: POST { "productId": <id> }
   VAL: minPrice = 120.00 en la respuesta
+
+TC-062 ⚠️  Agregar producto INACTIVE — se persiste pero no aparece en respuesta
+  PRE: producto con status=INACTIVE
+  ACT: POST { "productId": <id_inactivo> }
+  ESP: 201 — fila creada en store_wishlist_items
+  VAL: items[] en el response NO incluye este producto (filtrado en toResponse())
+  VAL: totalItems no lo cuenta
+  RIESGO FRONT: el usuario recibe 201 pero el ítem no aparece en la lista
+  RECOMENDACIÓN: el front debe verificar que el producto agregado aparezca en items[]
+                 Si no aparece → el producto no está disponible
+
+TC-063 ⚠️  Agregar producto DRAFT — misma situación que INACTIVE
+  ESP: 201 — persiste en BD pero no aparece en response
 
 ──────────────────────────────────────────
 3B. DUPLICADOS — PRODUCTO YA EN WISHLIST
 ──────────────────────────────────────────
 
-TC-062 ❌ Agregar el mismo producto dos veces
-  PRE: wishlist con producto X
+TC-064 ❌ Agregar el mismo producto dos veces
+  PRE: wishlist con producto X (ACTIVE)
   ACT: POST { "productId": X }
   ESP: 409 "Product already in wishlist"
   VAL: sigue habiendo 1 solo registro en store_wishlist_items para ese producto
   VAL: la constraint uk_wishlist_product actúa como segunda barrera
 
-TC-063 ❌ Agregar el mismo producto con distinto itemId previo
+TC-065 ❌ Agregar producto que está en wishlist pero está INACTIVE
+  PRE: wishlist tiene ítem con productId=5 (status=INACTIVE) — aparece en BD, no en response
+  ACT: POST { "productId": 5 }
+  ESP: 409 "Product already in wishlist"
+  VAL: el check de duplicado usa wishlist.getItems() (todos, no solo ACTIVE)
+       → un producto INACTIVE ya en wishlist no puede agregarse de nuevo
+
+TC-066 ❌ Agregar el mismo producto con distinto itemId previo
   PRE: wishlist con 3 ítems; productId=5 está en el ítem 2
   ACT: POST { "productId": 5 }
   ESP: 409 "Product already in wishlist"
 
-TC-064 ⚠️  Dos requests concurrentes agregando el mismo producto nuevo
+TC-067 ⚠️  Dos requests concurrentes agregando el mismo producto nuevo
   PRE: wishlist sin el producto X
   ACT: dos requests simultáneos POST { "productId": X }
-  ESP uno retorna 201, el otro retorna 409 (GlobalExceptionHandler maneja
-      DataIntegrityViolationException → 409)
-  RIESGO: el mensaje del 409 dice "El ítem ya existe en el carrito." (mensaje
-          genérico del handler, no específico de wishlist)
-  Ver BUG-C al final del documento.
+  ESP: uno retorna 201, el otro retorna 409 (DataIntegrityViolationException → 409)
+  Mensaje: "El ítem ya existe. Recarga e intenta de nuevo."
+  VAL: mensaje genérico (ya no dice "en el carrito") — BUG-C resuelto
 
-TC-065 ✅ Agregar mismo producto a wishlists de distintos usuarios — permitido
-  PRE: usuario A y usuario B, ambos sin el producto X en su wishlist
-  ACT: A → POST { "productId": X }
-       B → POST { "productId": X }
+TC-068 ✅ Agregar mismo producto a wishlists de distintos usuarios — permitido
+  PRE: usuario A y usuario B, ninguno tiene el producto X
+  ACT: A → POST { "productId": X }; B → POST { "productId": X }
   ESP: 201 en ambos (la constraint es por wishlist, no global)
   VAL: 2 filas en store_wishlist_items, una por wishlist
 
@@ -313,65 +430,50 @@ TC-065 ✅ Agregar mismo producto a wishlists de distintos usuarios — permitid
 3C. VALIDACIONES DE REQUEST
 ──────────────────────────────────────────
 
-TC-066 ❌ productId = null
+TC-069 ❌ productId = null
   ACT: POST { "productId": null }
   ESP: 400 (validación @NotNull)
 
-TC-067 ❌ productId ausente del body
+TC-070 ❌ productId ausente del body
   ACT: POST {}
   ESP: 400
 
-TC-068 ❌ Body completamente vacío
+TC-071 ❌ Body completamente vacío
   ACT: POST (sin body)
   ESP: 400
 
-TC-069 ❌ JSON malformado
+TC-072 ❌ JSON malformado
   ACT: POST "{ productId: }"
   ESP: 400
 
-TC-070 ❌ productId como string
+TC-073 ❌ productId como string
   ACT: POST { "productId": "uno" }
   ESP: 400 (falla deserialización)
 
-TC-071 ❌ productId = 0
+TC-074 ❌ productId = 0
   ACT: POST { "productId": 0 }
   ESP: 404 "Product not found"
 
-TC-072 ❌ productId negativo
+TC-075 ❌ productId negativo
   ACT: POST { "productId": -1 }
   ESP: 404 "Product not found"
 
-TC-073 ❌ productId inexistente en BD
+TC-076 ❌ productId inexistente en BD
   ACT: POST { "productId": 999999 }
   ESP: 404 "Product not found"
 
-TC-074 ❌ productId = Long.MAX_VALUE
+TC-077 ❌ productId = Long.MAX_VALUE
   ACT: POST { "productId": 9223372036854775807 }
   ESP: 404 "Product not found"
 
-TC-075 ✅ Agregar producto INACTIVE a la wishlist — se permite
-  PRE: producto con status=INACTIVE
-  ACT: POST { "productId": <id_inactivo> }
-  ESP: 201 — no hay validación de ProductStatus en addItem()
-  VAL: el ítem aparece en el GET (sin filtro)
-  NOTA: diferencia con carrito (cart filtra INACTIVE en response; wishlist no)
+TC-078 ⚠️  productId como número flotante
+  ACT: POST { "productId": 1.5 }
+  ESP: 400 (Jackson rechaza double → Long) o 404 si trunca a 1
+  Validar comportamiento real del deserializador
 
-TC-076 ✅ Agregar producto DRAFT a la wishlist — se permite
-  ESP: 201
-
-TC-077 ✅ Agregar producto sin variantes a la wishlist — se permite
-  PRE: producto sin filas en store_product_variants
-  ACT: POST { "productId": <id_sin_variantes> }
-  ESP: 201 — minPrice=0.00, variantCount=0 en la respuesta
-
-TC-078 ⚠️  Agregar producto del propio vendedor a su wishlist
-  PRE: usuario con roles [SELLER, CUSTOMER]; agrega su propio producto
-  ESP: 201 — no hay restricción de "no puedes guardar tus propios productos"
-
-TC-079 ❌ Campo extra desconocido en body (mass assignment)
-  ACT: POST { "productId": 1, "wishlistId": 99, "items": [] }
-  ESP: 201 — los campos extra son ignorados por Jackson
-  VAL: wishlistId del response es el del usuario, no el enviado
+TC-079 ⚠️  Sin Content-Type en POST
+  ACT: POST sin header Content-Type: application/json
+  ESP: 415 Unsupported Media Type o 400
 
 TC-080 ❌ productId como array
   ACT: POST { "productId": [1, 2, 3] }
@@ -381,38 +483,94 @@ TC-081 ❌ productId como booleano
   ACT: POST { "productId": true }
   ESP: 400
 
-TC-082 ⚠️  productId como número flotante
-  ACT: POST { "productId": 1.5 }
-  ESP: 400 (Jackson puede rechazar double → Long) o 404 (si trunca a 1 y no existe)
-  Validar comportamiento real del deserializador.
+TC-082 ✅ Campo extra desconocido en body (mass assignment)
+  ACT: POST { "productId": 1, "wishlistId": 99, "items": [] }
+  ESP: 201 — campos extra ignorados por Jackson
+  VAL: wishlistId del response es el del usuario, no el enviado
 
-TC-083 ⚠️  Sin Content-Type en POST
-  ACT: POST sin header Content-Type: application/json
-  ESP: 415 Unsupported Media Type o 400
+TC-083 ⚠️  Agregar producto del propio vendedor a su wishlist
+  PRE: usuario con roles [SELLER, CUSTOMER]; agrega su propio producto
+  ESP: 201 — no hay restricción de "no puedes guardar tus propios productos"
 
 ──────────────────────────────────────────
-3D. CREACIÓN DE WISHLIST EN PRIMER ADD
+3D. LÍMITE DE 500 ÍTEMS
 ──────────────────────────────────────────
 
-TC-084 ✅ Wishlist se crea con createdAt correcto en el primer add
+TC-084 ✅ Agregar el ítem número 1 a wishlist vacía — dentro del límite
+  PRE: wishlist con 0 ítems
+  ACT: POST { "productId": X }
+  ESP: 201
+
+TC-085 ✅ Agregar el ítem número 499 — dentro del límite
+  PRE: wishlist con 498 ítems
+  ACT: POST { "productId": <nuevo> }
+  ESP: 201 — totalItems=499
+
+TC-086 ✅ Agregar el ítem número 500 — en el límite exacto
+  PRE: wishlist con 499 ítems
+  ACT: POST { "productId": <nuevo> }
+  ESP: 201 — totalItems=500 (MAX_WISHLIST_ITEMS = 500 items, se compara con >= 500)
+  VAL: exactamente 500 filas en store_wishlist_items para esta wishlist
+
+TC-087 ❌ Agregar el ítem número 501 — supera el límite
+  PRE: wishlist con 500 ítems
+  ACT: POST { "productId": <nuevo> }
+  ESP: 400 "La wishlist no puede superar los 500 productos"
+  VAL: sigue habiendo exactamente 500 filas en BD (no se insertó nada)
+
+TC-088 ❌ Intentar agregar cuando wishlist tiene exactamente MAX_WISHLIST_ITEMS
+  PRE: wishlist con exactamente 500 ítems (incluyendo INACTIVE — el conteo es de todos)
+  ACT: POST { "productId": <nuevo> }
+  ESP: 400 — el chequeo usa wishlist.getItems().size() (todos los ítems, no solo ACTIVE)
+  VAL: size() >= 500 → error, independientemente del status de los productos
+
+TC-089 ✅ Después de eliminar un ítem de wishlist llena, se puede volver a agregar
+  PRE: wishlist con 500 ítems
+  ACT: DELETE /items/<uno_cualquiera> → 200
+       POST { "productId": <nuevo> } → ?
+  ESP: 201 — ahora la wishlist tiene 499 ítems → hay espacio
+
+TC-090 ✅ Después de clearWishlist, se puede agregar hasta 500 ítems de nuevo
+  PRE: wishlist llena (500 ítems)
+  ACT: DELETE /api/v1/wishlist → 204
+       POST { "productId": A } → 201
+  VAL: la misma wishlist (mismo wishlistId) se reutiliza
+
+TC-091 ⚠️  El límite cuenta TODOS los ítems, incluidos los de productos INACTIVE
+  RIESGO: usuario puede ver totalItems=3 en la UI (3 ACTIVE) pero tener 500 en BD
+          (497 INACTIVE filtrados). El 501° intento daría 400 inesperado.
+  RECOMENDACIÓN: informar al usuario del total real de ítems en BD (incluyendo inactivos)
+                 o limpiar automáticamente los ítems con productos desactivados.
+
+TC-092 ❌ Race condition en el límite: dos requests concurrentes para el ítem 500 y 501
+  PRE: wishlist con 499 ítems
+  ACT: dos POST simultáneos con productos distintos
+  ESP: uno retorna 201 (llega al 500), el otro puede retornar 201 (501) o 400
+  VAL: el chequeo size() >= 500 no tiene lock — puede no detectar race condition
+  RIESGO: si ambos leen 499 antes de que el otro escriba, ambos pasan el check
+
+──────────────────────────────────────────
+3E. CREACIÓN DE WISHLIST EN PRIMER ADD
+──────────────────────────────────────────
+
+TC-093 ✅ Wishlist se crea con createdAt correcto en el primer add
   ACT: POST { "productId": 1 } (primera vez del usuario)
   VAL: en BD, store_wishlists.created_at ≈ now
-  VAL: el wishlist.createdAt nunca cambia en operaciones posteriores
+  VAL: wishlist.createdAt nunca cambia en operaciones posteriores
 
-TC-085 ✅ Wishlist no se crea si el producto no existe
+TC-094 ✅ Wishlist no se crea si el producto no existe
   PRE: usuario sin wishlist
   ACT: POST { "productId": 999999 }
   ESP: 404 "Product not found"
-  VAL: NO se crea fila en store_wishlists (la excepción ocurre antes)
+  VAL: NO se crea fila en store_wishlists
 
-TC-086 ✅ Un usuario solo puede tener una wishlist (OneToOne)
+TC-095 ✅ Un usuario solo puede tener una wishlist (OneToOne)
   PRE: usuario con wishlist existente
   ACT: POST múltiples productos
-  VAL: sigue habiendo exactamente 1 fila en store_wishlists para este usuario
+  VAL: exactamente 1 fila en store_wishlists para este usuario
 
-TC-087 ⚠️  Dos usuarios no pueden compartir la misma wishlist
-  VAL: la constraint OneToOne + unique en store_profile_id garantiza aislamiento
-  Probar: usuario A y B tienen wishlists independientes con mismo producto
+TC-096 ⚠️  Dos usuarios no pueden compartir la misma wishlist
+  VAL: constraint OneToOne + unique en store_profile_id garantiza aislamiento
 
 
 ========================================================
@@ -424,7 +582,7 @@ TC-087 ⚠️  Dos usuarios no pueden compartir la misma wishlist
 ──────────────────────────────────────────
 
 TC-111 ✅ Eliminar único ítem de la wishlist
-  PRE: wishlist con 1 ítem (itemId=5)
+  PRE: wishlist con 1 ítem ACTIVE (itemId=5)
   ACT: DELETE /items/5
   ESP: 200 OK (no 204)
   {
@@ -432,100 +590,109 @@ TC-111 ✅ Eliminar único ítem de la wishlist
     "totalItems": 0,
     "items": []
   }
-  VAL: la fila en store_wishlist_items fue eliminada (orphanRemoval=true)
-  VAL: la fila en store_wishlists SIGUE existiendo con items=[]
-  VAL: wishlistId en respuesta != null (wishlist persiste)
+  VAL: fila eliminada de store_wishlist_items (orphanRemoval=true)
+  VAL: fila en store_wishlists SIGUE existiendo con items=[]
+  VAL: wishlistId en respuesta != null
 
 TC-112 ✅ Eliminar uno de varios ítems
-  PRE: wishlist con 3 ítems (ids: 10, 11, 12)
+  PRE: wishlist con 3 ítems ACTIVE (ids: 10, 11, 12)
   ACT: DELETE /items/11
-  ESP: 200 — totalItems=2, items con ids 10 y 12
+  ESP: 200 — totalItems=2, items con ids 10 y 12 (en orden addedAt DESC)
 
 TC-113 ✅ removeItem retorna WishlistResponse (200), NO 204
-  VAL: verificar el HTTP status code es 200, no 204 ni 201
-  NOTA: esta es la principal diferencia con DELETE /cart (que retorna 204)
+  VAL: HTTP status = 200, body es WishlistResponse válido
+  NOTA: diferencia con DELETE /cart/items/{id} que retorna 204
 
-TC-114 ✅ La respuesta del DELETE incluye todos los ítems restantes
-  PRE: wishlist con 4 ítems
-  ACT: DELETE del ítem 2
-  ESP: 200 — los 3 ítems restantes en el response, con sus datos completos
+TC-114 ✅ La respuesta incluye solo los ítems ACTIVE restantes
+  PRE: wishlist con 4 ítems: 3 ACTIVE + 1 INACTIVE; eliminar uno de los ACTIVE
+  ACT: DELETE /items/<item_active>
+  ESP: 200 — totalItems=2 (2 ACTIVE restantes, INACTIVE excluido)
+  VAL: el ítem INACTIVE sigue en BD pero no aparece en el response
 
-TC-115 ✅ Eliminar ítem cuyo producto fue desactivado
-  PRE: WishlistItem con producto INACTIVE
-  ACT: DELETE /items/<id_item_inactivo>
-  ESP: 200 — findItem busca por itemId en wishlist (no filtra por producto status)
-  VAL: el ítem se elimina correctamente
+TC-115 ✅ Eliminar ítem cuyo producto está INACTIVE
+  PRE: WishlistItem con productId cuyo status=INACTIVE
+  ACT: DELETE /items/<id_del_item>
+  ESP: 200 — findItem busca por itemId en la wishlist (no filtra por status antes de buscar)
+  VAL: el ítem se elimina correctamente de BD
 
-TC-116 ✅ Eliminar todos los ítems uno por uno — wishlist queda vacía con wishlistId!=null
-  PRE: wishlist con 3 ítems
+TC-116 ✅ Eliminar todos los ítems uno por uno — wishlist queda vacía
+  PRE: wishlist con 3 ítems ACTIVE
   ACT: DELETE /items/A → DELETE /items/B → DELETE /items/C
-  ESP: cada DELETE retorna 200 con el estado actualizado
-  VAL: último DELETE retorna totalItems=0, items=[], wishlistId!=null
+  ESP: cada DELETE retorna 200 con estado actualizado
+  VAL: último DELETE → totalItems=0, items=[], wishlistId!=null
+
+TC-117 ✅ Eliminar ítem de wishlist con ítems INACTIVE — totalItems actualizado
+  PRE: wishlist con 2 ACTIVE + 3 INACTIVE; eliminar 1 ACTIVE
+  ESP: 200 — totalItems=1 (solo queda 1 ACTIVE visible)
 
 ──────────────────────────────────────────
 4B. ERRORES DE RECURSO
 ──────────────────────────────────────────
 
-TC-117 ❌ itemId no existe en la wishlist del usuario
+TC-118 ❌ itemId no existe en la wishlist del usuario
   ACT: DELETE /items/99999
   ESP: 404 "Item not found in wishlist"
 
-TC-118 ❌ itemId pertenece a la wishlist de otro usuario (IDOR)
-  PRE: usuario A tiene wishlist con itemId=20; usuario B intenta borrarlo
+TC-119 ❌ itemId pertenece a la wishlist de otro usuario (IDOR)
+  PRE: usuario A tiene itemId=20; usuario B intenta borrarlo
   ACT: usuario B → DELETE /items/20
   ESP: 404 "Item not found in wishlist"
   VAL: el ítem de usuario A permanece intacto en BD
-  MECANISMO: requireWishlist busca wishlist del owner (usuario B), luego
-             findItem busca el itemId en ESA wishlist → no lo encuentra
+  MECANISMO: requireWishlist() carga la wishlist de B; findItem busca itemId en ESA wishlist
 
-TC-119 ❌ Usuario sin wishlist intenta eliminar ítem
+TC-120 ❌ Usuario sin wishlist intenta eliminar ítem
   PRE: usuario sin fila en store_wishlists
   ACT: DELETE /items/1
   ESP: 404 "Wishlist not found"
 
-TC-120 ❌ itemId = 0
+TC-121 ❌ itemId = 0
   ACT: DELETE /items/0
-  ESP: 404 "Item not found in wishlist" o "Wishlist not found"
+  ESP: 404 "Wishlist not found" o "Item not found"
 
-TC-121 ❌ itemId negativo
+TC-122 ❌ itemId negativo
   ACT: DELETE /items/-5
   ESP: 400 (Spring rechaza Long negativo en path var) o 404
 
-TC-122 ❌ itemId como string no numérico
+TC-123 ❌ itemId como string no numérico
   ACT: DELETE /items/abc
   ESP: 400 (falla conversión a Long)
 
-TC-123 ❌ itemId = Long.MAX_VALUE
+TC-124 ❌ itemId = Long.MAX_VALUE
   ACT: DELETE /items/9223372036854775807
   ESP: 404 (no existe ese itemId)
 
-TC-124 ⚠️  Eliminar el mismo itemId dos veces (doble tap / doble click)
+TC-125 ⚠️  Eliminar el mismo itemId dos veces (doble tap)
   PRE: wishlist con itemId=5
   ACT: DELETE /items/5 → 200 (eliminado)
        DELETE /items/5 → ?
   ESP: 404 "Item not found in wishlist" (segunda llamada)
-  El front debe manejar el 404 en el segundo DELETE sin mostrar error al usuario.
+  FRONT: el 404 en segundo DELETE no debe mostrarse como error al usuario
 
 ──────────────────────────────────────────
-4C. RESPUESTA DEL DELETE
+4C. RESPUESTA DEL DELETE — SIN N+1
 ──────────────────────────────────────────
 
-TC-125 ✅ WishlistResponse del DELETE tiene minPrice correcto para ítems restantes
+TC-126 ✅ WishlistResponse del DELETE tiene minPrice correcto para ítems restantes
   PRE: wishlist con producto A (minPrice=100) y producto B (minPrice=50)
   ACT: DELETE del ítem A
   ESP: 200 — items=[{producto B, minPrice=50}]
 
-TC-126 ✅ WishlistResponse del DELETE tiene totalItems actualizado
+TC-127 ✅ WishlistResponse del DELETE tiene totalItems actualizado (solo ACTIVE)
   PRE: wishlist con 5 ítems
   ACT: DELETE de 1 ítem
   ESP: 200 — totalItems=4
 
-TC-127 ⚠️  Variantes del producto se cargan LAZY en el DELETE también
-  MISMO problema N+1 que en GET. removeItem llama toResponse() que llama
-  toItemResponse() para cada ítem restante, accediendo a product.getVariants().
-  PRE: wishlist con 49 ítems, eliminar 1
-  ESP: 200 OK pero con 49 queries adicionales para variantes
-  Ver BUG-A al final del documento.
+TC-128 ✅ DELETE /items no genera N+1 queries
+  PRE: wishlist con 49 ítems ACTIVE; eliminar 1
+  ACT: DELETE /items/<id>
+  ESP: 200 — la carga del wishlist (findByOwnerId) usa JOIN FETCH de items+products+variants
+  VAL: 1 sola query para cargar wishlist; 1 DELETE del ítem eliminado
+  NOTA: BUG-A resuelto — toResponse() usa datos ya cargados en memoria
+
+TC-129 ✅ Orden de ítems en respuesta del DELETE — addedAt DESC
+  PRE: wishlist con items A(T1), B(T2), C(T3)
+  ACT: DELETE de B
+  ESP: 200 — items=[C(T3), A(T1)] (sin B, manteniendo orden DESC)
 
 
 ========================================================
@@ -540,60 +707,70 @@ TC-151 ✅ Limpiar wishlist con múltiples ítems
   VAL: store_wishlists sigue existiendo con items=[]
   VAL: GET posterior → { wishlistId: <id>, totalItems: 0, items: [] }
 
-TC-152 ✅ Limpiar wishlist ya vacía (items=[])
+TC-152 ✅ Limpiar wishlist ya vacía (items=[]) — no escribe en BD
   PRE: wishlist con 0 ítems en BD
   ACT: DELETE /api/v1/wishlist
-  ESP: 204 — ifPresent ejecuta clear() (no-op) y save()
-  VAL: 204 sin error
+  ESP: 204 — ifPresent encuentra la wishlist, pero el guard isEmpty() evita el save
+  VAL: 204 sin error; sin escritura innecesaria en BD
+  NOTA: BUG-D resuelto — el guard if (!wishlist.getItems().isEmpty()) está implementado
 
-TC-153 ✅ Limpiar cuando no existe wishlist
+TC-153 ✅ Limpiar cuando no existe wishlist — no-op limpio
   PRE: usuario sin fila en store_wishlists
   ACT: DELETE /api/v1/wishlist
-  ESP: 204 — findByOwnerId retorna empty, ifPresent no ejecuta nada
+  ESP: 204 — findByOwnerId retorna empty; ifPresent no ejecuta nada
   VAL: no se crea ninguna fila en BD
 
-TC-154 ⚠️  clearWishlist siempre llama save() aunque la wishlist esté vacía
-  PRE: wishlist con 0 ítems
-  ACT: DELETE /api/v1/wishlist
-  VAL: `wishlist.getItems().clear()` es no-op, pero `wishlistDao.save(wishlist)`
-       se ejecuta igualmente → escritura innecesaria en BD
-  NOTA: mismo patrón que BUG-03 del carrito, pero con menor impacto (sin timer)
-  Ver BUG-D al final del documento.
-
-TC-155 ✅ clearWishlist retorna 204, no WishlistResponse
+TC-154 ✅ clearWishlist retorna 204, no WishlistResponse
   ESP: response sin body, status 204
-  NOTA: inconsistencia de diseño — removeItem retorna 200+body, clear retorna 204
 
-TC-156 ✅ Después de clearWishlist, addItem crea nuevo ítem en la misma wishlist
+TC-155 ✅ Después de clearWishlist, addItem reutiliza la misma wishlist
   ACT: DELETE /api/v1/wishlist → 204
        POST { "productId": 1 } → 201
-  VAL: la wishlist sigue teniendo el MISMO wishlistId (no se crea una nueva)
+  VAL: la wishlist tiene el MISMO wishlistId (no se crea una nueva)
 
-TC-157 ✅ Dos clearWishlist consecutivos — ambos retornan 204
+TC-156 ✅ Dos clearWishlist consecutivos — ambos retornan 204
   ACT: DELETE /api/v1/wishlist → 204
        DELETE /api/v1/wishlist → 204 (segunda vez, wishlist ya vacía)
+  VAL: segunda llamada — ifPresent encuentra la wishlist, isEmpty()=true → no save
   ESP: 204 en ambos sin error
+
+TC-157 ✅ clearWishlist con ítems de productos INACTIVE — se eliminan todos igualmente
+  PRE: wishlist con 2 ítems ACTIVE + 3 ítems de productos INACTIVE
+  ACT: DELETE /api/v1/wishlist
+  ESP: 204 — items.clear() elimina TODOS los ítems (sin distinción de status)
+  VAL: 0 filas en store_wishlist_items para esta wishlist
+
+TC-158 ⚠️  clearWishlist con 500 ítems — rendimiento de orphanRemoval
+  PRE: wishlist con 500 ítems
+  ACT: DELETE /api/v1/wishlist
+  ESP: 204 — orphanRemoval=true ejecuta DELETE individual por cada ítem (500 DELETEs)
+  RIESGO: puede ser lento con N ítems muy grandes
+  ALTERNATIVA: agregar query DELETE nativo para clearWishlist si hay problemas de perf
+
+TC-159 ✅ clearWishlist no afecta la wishlist de otro usuario
+  PRE: usuario A y B con wishlists distintas
+  ACT: usuario A → DELETE /api/v1/wishlist → 204
+  VAL: wishlist de B intacta
 
 
 ========================================================
-  SECCIÓN 6 — SEGURIDAD E IDOR (TC-171–TC-190)
+  SECCIÓN 6 — SEGURIDAD E IDOR (TC-171–TC-185)
 ========================================================
 
 TC-171 ❌ IDOR: adivinar itemId de otro usuario en DELETE
-  PRE: usuario A tiene WishlistItem con id=100 (auto-incremento)
+  PRE: usuario A tiene WishlistItem con id=100
   ACT: usuario B → DELETE /items/100
   ESP: 404 "Item not found in wishlist"
-  MECANISMO: requireWishlist encuentra la wishlist de B; findItem no encuentra
-             el item 100 en esa wishlist → 404
+  MECANISMO: requireWishlist busca por owner (B); findItem no encuentra 100 en wishlist de B
 
-TC-172 ❌ IDOR: adivinar itemId con rangos consecutivos
+TC-172 ❌ IDOR: escanear itemIds secuenciales
   PRE: IDs de wishlist_items son secuenciales (1, 2, 3...)
   ACT: atacante prueba DELETE /items/1 hasta /items/1000
   ESP: 404 en todos los que no pertenezcan a su wishlist
 
-TC-173 ❌ IDOR en GET: ¿puede verse la wishlist de otro usuario?
-  ACT: el endpoint GET /api/v1/wishlist no tiene parámetro userId en URL
-       → siempre retorna la wishlist del JWT → imposible acceder a otros
+TC-173 ❌ IDOR en GET — imposible por diseño
+  ACT: GET /api/v1/wishlist no tiene parámetro userId en URL
+       → siempre retorna la wishlist del JWT
   ESP: el diseño previene IDOR en GET por construcción
 
 TC-174 ❌ Inyección SQL en itemId de la URL
@@ -604,18 +781,36 @@ TC-175 ❌ productId con caracteres especiales
   ACT: POST { "productId": "<script>alert(1)</script>" }
   ESP: 400 (falla deserialización Long)
 
-TC-176 ❌ JSON con campos extra — mass assignment
+TC-176 ✅ JSON con campos extra — mass assignment no afecta
   ACT: POST { "productId": 1, "wishlistId": 999, "totalItems": 9999 }
   ESP: 201 — campos extra ignorados; wishlistId correcto en respuesta
 
-TC-177 ❌ Replay attack: usar token JWT de sesión anterior
-  Si el JWT no se invalida al hacer logout, puede reutilizarse para ver la
-  wishlist de la víctima.
-  VAL: verificar que el logout invalida el token.
+TC-177 ❌ Replay attack: token JWT de sesión anterior
+  Si el JWT no se invalida al hacer logout, puede reutilizarse.
+  VAL: verificar que el logout invalida el token
 
-TC-178 ⚠️  Wishlist expone todos los productIds del historial del usuario
-  Los productIds en la wishlist revelan el historial de interés del usuario.
-  Asegurar que el endpoint solo responde al usuario autenticado (JWT propio).
+TC-178 ⚠️  Wishlist expone productIds del historial de interés del usuario
+  Los productIds en la wishlist son información personal del usuario.
+  Asegurar que el endpoint solo responde al usuario autenticado.
+
+TC-179 ⚠️  Información en el response del DELETE — ¿expone demasiado?
+  Al eliminar un ítem, el response incluye todos los ítems restantes con sus
+  productIds y minPrices. Si alguien intercepta la respuesta, puede ver toda
+  la wishlist del usuario.
+  VAL: la comunicación debe ser sobre HTTPS en producción.
+
+TC-180 ✅ Tiempo de respuesta constante para itemIds válidos e inválidos (timing attack)
+  ACT: DELETE /items/<id_valido> vs DELETE /items/<id_invalido>
+  ESP: tiempos de respuesta similares — no debe haber diferencia observable
+  que permita enumerar IDs válidos
+
+TC-181 ❌ Token de otro usuario en request — no puede ver wishlist ajena
+  PRE: usuario A intenta usar el token de usuario B
+  ESP: imposible sin el token privado — la JWT firma garantiza esto
+
+TC-182 ⚠️  CORS — endpoints de wishlist solo accesibles desde orígenes permitidos
+  VAL: verificar configuración CORS en producción para evitar requests desde
+       sitios maliciosos con token robado en cookies
 
 
 ========================================================
@@ -639,38 +834,55 @@ TC-191 ✅ Estructura completa de WishlistResponse
     ]
   }
 
-TC-192 ✅ totalItems == items.length siempre
-  VAL: verificar en GET, POST y DELETE /items/{id}
+TC-192 ✅ totalItems == items.length siempre (sobre productos ACTIVE)
+  VAL: verificar en GET, POST /items y DELETE /items/{id}
+  El filtro ACTIVE se aplica antes de calcular totalItems
 
 TC-193 ✅ wishlistId es null SOLO cuando el usuario nunca tuvo wishlist
-  VAL: tras crear y luego limpiar → wishlistId != null
+  VAL: tras crear y limpiar → wishlistId != null
+  VAL: nunca haber tenido → wishlistId = null
 
 TC-194 ✅ minPrice es BigDecimal con 2 decimales
   VAL: no retorna entero (ej: 100 en vez de 100.00)
 
-TC-195 ⚠️  minPrice = 0.00 es ambiguo — puede ser precio real o ausencia de variantes
+TC-195 ⚠️  minPrice = 0.00 es ambiguo
   El front no puede distinguir "producto gratis" de "sin variantes" solo con minPrice.
-  Debe usar variantCount para diferenciar:
-    variantCount = 0 → sin variantes → mostrar "precio no disponible"
+  Usar variantCount para diferenciar:
+    variantCount = 0 → sin variantes → "precio no disponible"
     variantCount > 0 y minPrice = 0.00 → precio real = 0.00 (caso raro)
 
 TC-196 ✅ addedAt en formato ISO-8601
-  ESP: "2026-05-15T10:30:00" — verificar que no viene como timestamp Unix ni
-       en otro formato
+  ESP: "2026-05-15T10:30:00" — no como timestamp Unix
 
 TC-197 ✅ Content-Type de respuesta es application/json
-  VAL: en GET, POST y DELETE /items/{id}
+  VAL: en GET, POST /items y DELETE /items/{id}
 
 TC-198 ✅ DELETE /api/v1/wishlist retorna body vacío (204 No Content)
-  VAL: el body debe estar ausente, no ser `null` ni `{}`
+  VAL: body ausente (no null ni {})
 
 TC-199 ⚠️  productTitle podría ser null si el campo en BD es null
-  PRE: producto con title=null en BD (violación de NOT NULL constraint)
-  ESP: si la constraint no se cumple por alguna razón, productTitle=null en respuesta
+  PRE: producto con title=null (violación de NOT NULL, teóricamente imposible)
+  ESP: si ocurre, productTitle=null en respuesta
 
 TC-200 ✅ Varios usuarios — cada uno ve solo su propia wishlist
   PRE: usuario A con 3 ítems, usuario B con 5 ítems
   ACT: GET con JWT de A → 3 ítems; GET con JWT de B → 5 ítems
+
+TC-201 ✅ Response de POST idéntico al de un GET inmediato posterior
+  ACT: POST { "productId": X } → guardar response
+       GET /api/v1/wishlist → comparar
+  ESP: ambos responses son iguales (mismo wishlistId, totalItems, items, minPrices)
+
+TC-202 ✅ Response de DELETE /items idéntico al de un GET inmediato posterior
+  ACT: DELETE /items/Y → guardar response
+       GET /api/v1/wishlist → comparar
+  ESP: ambos responses son iguales
+
+TC-203 ⚠️  minPrice/variantCount pueden cambiar entre requests sin acción del usuario
+  El vendedor puede agregar/eliminar/modificar variantes en cualquier momento.
+  El front NO debe cachear la wishlist por más tiempo del necesario.
+  ESP: cada GET/POST/DELETE refleja el estado actual del producto en BD
+  NOTA: BUG-G (INFO) — la recomendación es no cachear
 
 
 ========================================================
@@ -680,244 +892,300 @@ TC-200 ✅ Varios usuarios — cada uno ve solo su propia wishlist
 TC-216 ✅ Ciclo de vida completo de la wishlist
   1. GET → { wishlistId: null, totalItems: 0, items: [] }
   2. POST { productId: 1 } → 201, wishlistId: <id>, totalItems: 1
-  3. POST { productId: 2 } → 201, totalItems: 2
-  4. POST { productId: 3 } → 201, totalItems: 3
-  5. DELETE /items/<itemId_producto_2> → 200, totalItems: 2
-  6. GET → totalItems: 2 (productos 1 y 3)
+  3. POST { productId: 2 } → 201, totalItems: 2, items=[2(T2), 1(T1)] (desc order)
+  4. POST { productId: 3 } → 201, totalItems: 3, items=[3(T3), 2(T2), 1(T1)]
+  5. DELETE /items/<itemId_producto_2> → 200, totalItems: 2, items=[3(T3), 1(T1)]
+  6. GET → totalItems: 2 (productos 1 y 3, orden addedAt DESC)
   7. DELETE /api/v1/wishlist → 204
-  8. GET → { wishlistId: <id>, totalItems: 0, items: [] }  ← wishlistId != null!
-  9. POST { productId: 4 } → 201, misma wishlist reutilizada
+  8. GET → { wishlistId: <id>, totalItems: 0, items: [] }
+  9. POST { productId: 4 } → 201, misma wishlist reutilizada (mismo wishlistId)
 
 TC-217 ✅ Dos usuarios, wishlists completamente aisladas
-  PRE: usuario A y B
   ACT: A agrega productId=1; B agrega productId=1
        A elimina su ítem; B consulta su wishlist
-  VAL: wishlist de B no se ve afectada por las operaciones de A
+  VAL: wishlist de B no se ve afectada
 
 TC-218 ✅ Agregar y eliminar el mismo producto repetidamente
-  ACT: POST { productId: 1 } → 201
-       DELETE /items/<id1> → 200
-       POST { productId: 1 } → 201 (nuevo itemId)
-       DELETE /items/<id2> → 200
-  VAL: cada add crea un nuevo WishlistItem con nuevo itemId y nuevo addedAt
+  ACT: POST { productId: 1 } → 201 (itemId=10, addedAt=T1)
+       DELETE /items/10 → 200
+       POST { productId: 1 } → 201 (itemId=11, addedAt=T2)
+  VAL: nuevo itemId y nuevo addedAt en cada ciclo
 
-TC-219 ⚠️  Precio del producto cambia después de agregarlo a la wishlist
-  PRE: agregar producto (variant.price=100) → minPrice=100 en wishlist
-  ACT: cambiar variant.price a 80
-       GET /api/v1/wishlist
-  ESP: minPrice=80 (el precio se recalcula en cada request — no se cachea)
-  VAL: addedAt no cambia (es del momento de agregar, no del precio)
+TC-219 ⚠️  Flujo con producto que pasa ACTIVE → INACTIVE → ACTIVE
+  1. POST { productId: P } → 201 (P es ACTIVE, aparece en response)
+  2. Vendedor desactiva P → status=INACTIVE
+  3. GET → P no aparece en items[] (filtrado)
+  4. Vendedor reactiva P → status=ACTIVE
+  5. GET → P aparece nuevamente con el addedAt original
+  VAL: el itemId no cambia — el ítem persiste en BD durante todo el ciclo
 
-TC-220 ⚠️  Nueva variante agregada al producto después de estar en wishlist
+TC-220 ⚠️  Precio del producto cambia después de agregarlo
+  PRE: agregar producto (minPrice=100); cambiar variant.price a 80
+  ACT: GET /api/v1/wishlist
+  ESP: minPrice=80 (recalculado dinámicamente)
+  VAL: addedAt no cambia
+
+TC-221 ⚠️  Nueva variante agrega un precio menor al producto
   PRE: producto con 1 variante (price=100) en wishlist
-  ACT: agregar nueva variante con price=60 al producto
+  ACT: agregar variante con price=60
        GET /api/v1/wishlist
-  ESP: minPrice=60, variantCount=2 (se recalcula dinámicamente)
+  ESP: minPrice=60, variantCount=2
 
-TC-221 ⚠️  Variante eliminada del producto después de estar en wishlist
-  PRE: producto con 2 variantes (prices: 80, 100) en wishlist
-  ACT: eliminar la variante de 80
-       GET /api/v1/wishlist
-  ESP: minPrice=100, variantCount=1
-
-TC-222 ⚠️  Todas las variantes del producto eliminadas después de estar en wishlist
+TC-222 ⚠️  Eliminar la única variante del producto
   PRE: producto con 1 variante en wishlist
-  ACT: eliminar la variante
-       GET /api/v1/wishlist
+  ACT: eliminar la variante; GET /api/v1/wishlist
   ESP: minPrice=0.00, variantCount=0
 
+TC-223 ✅ Flujo: wishlist llena (500) → clear → agregar de nuevo
+  1. wishlist con 500 ítems
+  2. DELETE /api/v1/wishlist → 204
+  3. POST { productId: X } → 201 (la misma wishlist, ahora con 1 ítem)
+  VAL: wishlistId no cambia
+
+TC-224 ✅ Flujo: validar orden correcto en wishlist con mucho movimiento
+  1. Agregar A, B, C en ese orden (T1, T2, T3)
+  2. DELETE /items/B
+  3. POST { productId: D } (T4)
+  4. GET → items=[D(T4), C(T3), A(T1)] — sin B, orden desc correcto
+
+TC-225 ⚠️  Flujo: agregar producto INACTIVE → no aparece → reactivar → aparece
+  1. POST { productId: INACTIVE_P } → 201 (se persiste, no aparece en response)
+  2. GET → P no en items[] (totalItems no lo cuenta)
+  3. Admin activa P → status=ACTIVE
+  4. GET → P aparece en items[] con el addedAt del paso 1
+
 
 ========================================================
-  SECCIÓN 9 — CASOS EXTREMOS Y DE ESTRÉS (TC-236–TC-250)
+  SECCIÓN 9 — CASOS EXTREMOS Y DE ESTRÉS (TC-236–TC-255)
 ========================================================
 
-TC-236 ⚠️  Wishlist con 1000 productos
-  ACT: agregar 1000 productos distintos a la wishlist
-       GET /api/v1/wishlist
-  ESP: 200 — respuesta con 1000 ítems
-  PROBLEMAS:
-    1. N+1 queries: 1 + 1000 queries adicionales para variantes
-    2. Payload JSON masivo — puede superar límites del cliente
-    3. Sin paginación — toda la wishlist va en un solo response
-  NOTA: no hay límite de ítems implementado en el código
+TC-236 ✅ Wishlist con 500 productos — rendimiento con JOIN FETCH
+  PRE: wishlist con 500 productos ACTIVE, cada uno con 5 variantes
+  ACT: GET /api/v1/wishlist
+  ESP: 200 — 1 sola query (JOIN FETCH carga todo)
+  VAL: tiempo de respuesta aceptable (evaluar según SLA del proyecto)
+  NOTA: BUG-A resuelto — ya no hay N+1 queries
 
-TC-237 ⚠️  Sin paginación — wishlist grande degrada el front
-  Con 500 productos, el JSON puede pesar varios MB dependiendo de los datos.
-  El front debe evaluar si implementar paginación en el futuro.
+TC-237 ⚠️  Sin paginación — payload JSON puede ser grande
+  PRE: wishlist con 500 productos y títulos largos
+  ESP: el JSON puede superar varios KB dependiendo del tamaño de los títulos
+  RECOMENDACIÓN: evaluar paginación si el payload supera límites del cliente
 
-TC-238 ⚠️  Agregar el mismo producto concurrentemente (race condition)
+TC-238 ✅ Mensaje 409 correcto en race condition (no dice "carrito")
   PRE: producto X no está en la wishlist
   ACT: 5 requests simultáneos POST { productId: X }
   ESP: 1 retorna 201, los demás retornan 409
+  Mensaje: "El ítem ya existe. Recarga e intenta de nuevo."
   VAL: exactamente 1 fila en store_wishlist_items para wishlist+producto X
-  RIESGO mensaje: el 409 dice "El ítem ya existe en el carrito." (mensaje de carrito)
+  NOTA: BUG-C resuelto — mensaje genérico aplica correctamente a wishlist
 
-TC-239 ✅ POST y DELETE concurrentes del mismo ítem
+TC-239 ✅ POST y DELETE concurrentes — no hay deadlock
   PRE: itemId=5 en wishlist
   ACT: DELETE /items/5 y POST { productId: <otro> } simultáneos
-  ESP: ambos deben completarse sin deadlock
-  VAL: el estado final es consistente
+  ESP: ambos completan sin error de bloqueo
 
 TC-240 ⚠️  Producto eliminado de BD mientras está en la wishlist
-  PRE: producto X en la wishlist; se elimina el producto de store_products
-  ACT: GET /api/v1/wishlist
-  ESP: depende de FK constraints
-    - Si FK ON DELETE CASCADE → WishlistItem eliminado automáticamente → no aparece
-    - Si FK ON DELETE RESTRICT → la eliminación del producto falla
+  PRE: producto X en la wishlist; se elimina de store_products
+  ESP: depende de FK constraints:
+    - Si FK ON DELETE CASCADE → WishlistItem eliminado → P no aparece
+    - Si FK ON DELETE RESTRICT → eliminación del producto falla
     - Sin FK → EntityNotFoundException al acceder a item.getProduct() → 500
-  RIESGO ALTO: debe verificarse el comportamiento real con la BD
+  RIESGO ALTO: verificar comportamiento con BD real
 
 TC-241 ⚠️  Producto con title muy largo (> 255 chars)
   PRE: producto con title de 300 caracteres en BD
   ACT: GET /api/v1/wishlist
-  ESP: 200 — productTitle con 300 caracteres en el JSON
+  ESP: 200 — productTitle con 300 chars (si la col en BD lo permite)
   VAL: el front debe manejar títulos largos sin romper la UI
 
-TC-242 ⚠️  Producto con caracteres especiales en el título (HTML, Unicode)
+TC-242 ⚠️  Producto con caracteres especiales en el título
   PRE: producto con title="<b>Oferta</b> &amp; más 🎁"
   ACT: GET /api/v1/wishlist
-  ESP: 200 — productTitle incluye los caracteres tal cual (Jackson los escapa en JSON)
-  VAL: el front no debe hacer XSS injection con el productTitle
+  ESP: 200 — Jackson escapa HTML; el front no debe renderizar HTML raw (XSS)
 
 TC-243 ⚠️  Precio de variante con muchos decimales (ej: 99.999999)
-  PRE: variante con price=99.999999 (si la BD lo almacena con más de 2 decimales)
-  ACT: GET /api/v1/wishlist
-  ESP: minPrice=99.999999 o truncado según precisión del BigDecimal
-  VAL: la columna price tiene (14,2) → en BD se trunca a 100.00
+  PRE: columna price tiene (14,2) en BD → se trunca a 100.00 en inserción
+  ESP: minPrice respeta la precisión de la BD (2 decimales)
 
-TC-244 ⚠️  Wishlist con variante de precio negativo
-  PRE: variante con price=-10.00 en BD (si la constraint lo permite)
+TC-244 ⚠️  Variante con precio negativo en BD
+  PRE: variante con price=-10.00 (si la constraint lo permite)
   ACT: GET /api/v1/wishlist
   ESP: minPrice=-10.00 (el código calcula el mínimo sin validar negativos)
-  RIESGO: precio negativo en respuesta puede confundir el front
+  RIESGO: precio negativo puede confundir el front
 
-TC-245 ✅ addedAt no es modificable desde fuera
-  Intentar POST con campo addedAt en el body:
-  POST { "productId": 1, "addedAt": "2020-01-01T00:00:00" }
-  ESP: 201 — addedAt es ignorado del body, se establece por @PrePersist
+TC-245 ✅ addedAt no es modificable desde el body
+  ACT: POST { "productId": 1, "addedAt": "2020-01-01T00:00:00" }
+  ESP: 201 — addedAt del response es el del @PrePersist (ahora), no el enviado
+
+TC-246 ⚠️  Wishlist con exactamente 500 ítems de los cuales 499 son INACTIVE
+  PRE: 500 ítems en BD; 499 con productos INACTIVE, 1 ACTIVE
+  ACT: GET /api/v1/wishlist
+  ESP: 200 — totalItems=1, items=[1 producto ACTIVE]
+  VAL: los 499 INACTIVE están en BD pero filtrados
+  SITUACIÓN: si el usuario intenta agregar un 501° ítem → 400 (límite es en BD, no en response)
+
+TC-247 ✅ Múltiples GETs concurrentes de la misma wishlist — no hay race condition
+  PRE: wishlist con 10 ítems
+  ACT: 10 requests GET simultáneos
+  ESP: todos retornan 200 con el mismo response
+  VAL: no hay escrituras → no hay conflictos
+
+TC-248 ⚠️  Wishlist de usuario con miles de variantes por producto — JOIN FETCH y Cartesian
+  PRE: wishlist con 50 productos; cada producto tiene 100 variantes
+  ACT: GET /api/v1/wishlist
+  ESP: 200 — 1 query con resultado de 50×100=5000 filas (Cartesian product del JOIN FETCH)
+  VAL: Hibernate desduplicates correctamente; el response tiene 50 items
+  RIESGO: con productos de muchas variantes el resultado SQL puede ser grande
+
+TC-249 ✅ clearWishlist de wishlist llena no genera N+1 en la carga inicial
+  PRE: wishlist con 500 ítems
+  ACT: DELETE /api/v1/wishlist
+  VAL: findByOwnerId usa JOIN FETCH — 1 sola query de lectura + operaciones de DELETE
+  NOTA: orphanRemoval puede generar N DELETEs individuales, eso es esperado
 
 
 ========================================================
-  SECCIÓN 10 — BUGS IDENTIFICADOS EN LA REVISIÓN (TC-251+)
+  SECCIÓN 10 — ESTADO DE BUGS Y CONSIDERACIONES FINALES
 ========================================================
 
-BUG-A [ALTO] — N+1 queries al cargar variantes en toItemResponse()
-───────────────────────────────────────────────────────────────────
-  CÓDIGO: IWishlistRepository hace JOIN FETCH de items y products, pero NO
-          de product.variants. En toItemResponse():
-            product.getVariants().stream().map(v -> v.getPrice()).min(...)
-          Cada llamada dispara una query LAZY de variantes.
+──────────────────────────────────────────
+10A. BUGS RESUELTOS
+──────────────────────────────────────────
 
-  TC-251 ⚠️  GET /wishlist con N ítems genera N+1 queries
-    PRE: wishlist con 50 productos
-    ESP: 51 queries a BD (1 principal + 50 lazy loads de variants)
-    MISMO problema en POST /items y DELETE /items/{id} (ambos llaman toResponse())
-    FIX sugerido: agregar LEFT JOIN FETCH i.product p LEFT JOIN FETCH p.variants
-                  en la query de IWishlistRepository
+BUG-A [ALTO] RESUELTO — N+1 queries al cargar variantes
+  Fix: LEFT JOIN FETCH p.variants en IWishlistRepository.findByOwnerId()
+  TC-044, TC-045, TC-046, TC-128, TC-236 verifican el comportamiento corregido.
 
-BUG-B [MEDIO] — Sin filtro de ProductStatus en la respuesta
-───────────────────────────────────────────────────────────────────
-  CÓDIGO: toItemResponse() no verifica product.getStatus()
+  TC-250 ✅ Confirmar 1 sola query por GET (con SQL logging habilitado)
+    ESP: habilitar spring.jpa.show-sql=true; exactamente 1 SELECT
+    VAL: no hay queries adicionales para cargar variantes
 
-  TC-252 ⚠️  Productos INACTIVE, DRAFT, OUT_OF_STOCK aparecen en la wishlist
-    El cart filtra productos no ACTIVE; la wishlist los incluye todos.
-    Inconsistencia entre módulos que puede confundir al usuario.
-    FIX sugerido: filtrar en toResponse() o marcar en el response con un campo
-                  "available": false para que el front muestre el estado.
+BUG-B [MEDIO] RESUELTO — Productos INACTIVE aparecían sin filtro
+  Fix: .filter(i -> i.getProduct().getStatus() == ProductStatus.ACTIVE) en toResponse()
+  TC-032–TC-040, TC-062, TC-063, TC-065, TC-114, TC-219 verifican el filtro.
 
-BUG-C [MEDIO] — Mensaje de error incorrecto en race condition de wishlist
-───────────────────────────────────────────────────────────────────
-  CÓDIGO: GlobalExceptionHandler maneja DataIntegrityViolationException con:
-          "El ítem ya existe en el carrito. Recarga e intenta de nuevo."
-          Este mensaje dice "carrito" aunque ocurra en la wishlist.
+  TC-251 ✅ Confirmar que ProductStatus.ACTIVE es el único status permitido en response
+    PRE: crear ítems para productos con cada status: ACTIVE, INACTIVE, DRAFT, OUT_OF_STOCK
+    ACT: GET /api/v1/wishlist
+    ESP: solo aparece el ítem ACTIVE en el response
 
-  TC-253 ⚠️  Concurrent add → 409 con mensaje de "carrito"
-    ESP: 409 — body dice "carrito" en el contexto de wishlist
-    FIX sugerido: mejorar el handler para detectar el contexto, o capturar
-                  DataIntegrityViolationException directamente en el servicio
-                  con el mensaje correcto.
+BUG-C [MEDIO] RESUELTO — Mensaje de 409 decía "carrito" en contexto de wishlist
+  Fix: GlobalExceptionHandler usa "El ítem ya existe. Recarga e intenta de nuevo."
+  TC-067, TC-238 verifican el mensaje corregido.
 
-BUG-D [BAJO] — clearWishlist llama save() aunque la wishlist esté vacía
-───────────────────────────────────────────────────────────────────
-  CÓDIGO:
-    wishlistDao.findByOwnerId(owner.getId()).ifPresent(wishlist -> {
-        wishlist.getItems().clear();  // no-op si ya está vacío
-        wishlistDao.save(wishlist);   // escritura innecesaria
-    });
+  TC-252 ✅ Verificar mensaje genérico en 409 de wishlist
+    ACT: forzar race condition en wishlist (dos adds simultáneos del mismo producto)
+    ESP: 409 — body: { "message": "El ítem ya existe. Recarga e intenta de nuevo." }
+    VAL: el mensaje no menciona "carrito"
 
-  TC-254 ⚠️  DELETE /api/v1/wishlist en wishlist vacía hace escritura en BD
-    PRE: wishlist con 0 ítems
+BUG-D [BAJO] RESUELTO — clearWishlist hacía save() aunque la wishlist ya estuviera vacía
+  Fix: guard if (!wishlist.getItems().isEmpty()) antes de clear+save
+  TC-152, TC-156 verifican el comportamiento corregido.
+
+  TC-253 ✅ Confirmar que clearWishlist vacía no genera escritura en BD
+    PRE: wishlist con items=[] (ya vacía)
     ACT: DELETE /api/v1/wishlist
-    ESP: 204 — pero internamente persiste sin cambios
-    FIX sugerido: if (!wishlist.getItems().isEmpty()) antes de clear+save
+    VAL: habilitar logging de queries; no debe haber UPDATE/INSERT en BD
+    ESP: 204 limpio
 
-BUG-E [BAJO] — Sin límite de ítems en la wishlist
-───────────────────────────────────────────────────────────────────
-  TC-255 ⚠️  Usuario puede agregar ilimitados productos a la wishlist
-    No hay MAX_ITEMS check en addItem().
-    Con 10000 ítems, el response puede ser extremadamente grande.
-    FIX sugerido: agregar validación de tamaño máximo (ej: 500 ítems)
-                  y retornar 400 si se supera.
+BUG-E [BAJO] RESUELTO — Sin límite de ítems en la wishlist
+  Fix: MAX_WISHLIST_ITEMS = 500; check if (items.size() >= 500) → 400
+  TC-084–TC-092 verifican el límite.
 
-BUG-F [INFO] — Orden no determinístico de ítems en la respuesta
-───────────────────────────────────────────────────────────────────
-  TC-256 ⚠️  El orden de items[] puede variar entre requests
-    IWishlistRepository no tiene ORDER BY → orden dependiente de la BD.
-    FIX sugerido: agregar ORDER BY i.added_at DESC (más reciente primero)
-                  o ORDER BY i.added_at ASC para mantener orden de inserción.
+  TC-254 ❌ Confirmar 400 en el ítem 501
+    PRE: wishlist con exactamente 500 ítems en BD
+    ACT: POST { "productId": <nuevo> }
+    ESP: 400 — body: { "message": "La wishlist no puede superar los 500 productos" }
 
-BUG-G [INFO] — variantCount puede quedar desactualizado en caché del front
-───────────────────────────────────────────────────────────────────
-  TC-257 ⚠️  Si el front cachea la wishlist, variantCount puede ser incorrecto
-    minPrice y variantCount se recalculan en cada request, reflejando el estado
-    actual del producto. Si el front no refresca, puede mostrar datos obsoletos.
-    Recomendación: no cachear el response de wishlist más de 60 segundos.
+BUG-F [INFO] RESUELTO — Orden no determinístico
+  Fix: ORDER BY i.addedAt DESC en IWishlistRepository.findByOwnerId()
+  TC-028, TC-029, TC-057, TC-112, TC-129, TC-216, TC-224 verifican el orden.
+
+  TC-255 ✅ Confirmar orden DESC estable en múltiples requests
+    PRE: wishlist con 10 ítems (addedAt distintos)
+    ACT: GET /api/v1/wishlist × 5 veces consecutivas
+    ESP: items[] en el mismo orden en todos los responses (más reciente primero)
+
+──────────────────────────────────────────
+10B. CONSIDERACIÓN PENDIENTE
+──────────────────────────────────────────
+
+BUG-G [INFO] PENDIENTE — minPrice/variantCount son dinámicos — no cachear
+  ESTADO: no hay código que arreglar en backend; es una advertencia para el front.
+  El precio mínimo se recalcula en cada request con los datos actuales de BD.
+  Si el front cachea el response por más de unos pocos segundos, puede mostrar
+  precios desactualizados al usuario.
+
+  TC-256 ⚠️  Cambio de precio reflejado inmediatamente en GET siguiente
+    PRE: minPrice = 100.00 para producto P en wishlist
+         vendedor cambia el precio de la variante a 80.00
+    ACT: GET /api/v1/wishlist (inmediatamente después)
+    ESP: minPrice = 80.00 (no 100.00)
+    VAL: no hay caché en backend — el response siempre es fresco
+
+  TC-257 ⚠️  variantCount cambia si el vendedor agrega o elimina variantes
+    PRE: variantCount = 3 para producto P
+         vendedor agrega 2 variantes más
+    ACT: GET /api/v1/wishlist
+    ESP: variantCount = 5
+    RECOMENDACIÓN: el front no debe guardar el response en localStorage sin TTL corto
 
 
 ========================================================
   RESUMEN EJECUTIVO
 ========================================================
 
-  Total de casos:          257
-  Casos de éxito (✅):      ~100
-  Casos de error (❌):       ~65
-  Casos de riesgo (⚠️):     ~92
+  Total de casos:          270
+  Casos de éxito (✅):      ~105
+  Casos de error (❌):       ~60
+  Casos de riesgo (⚠️):     ~105
 
   SECCIONES:
   1.  Autenticación / Autorización      TC-001  – TC-015   (15 casos)
-  2.  GET /wishlist                      TC-016  – TC-055   (40 casos)
-  3.  POST /wishlist/items               TC-056  – TC-087   (32 casos)
-  4.  DELETE /wishlist/items/{itemId}    TC-111  – TC-127   (17 casos — salto numérico intencional)
-  5.  DELETE /wishlist (clear)           TC-151  – TC-157   (17 casos)
-  6.  Seguridad / IDOR                   TC-171  – TC-178   (8 casos)
-  7.  Formato y consistencia             TC-191  – TC-200   (10 casos)
-  8.  Flujos completos                   TC-216  – TC-222   (7 casos)
-  9.  Estrés y casos extremos            TC-236  – TC-245   (10 casos)
-  10. Bugs identificados                 TC-251  – TC-257   (7 casos)
+  2.  GET /wishlist                      TC-016  – TC-046   (31 casos)
+      2A. Wishlist vacía                 TC-016  – TC-018   (3)
+      2B. Ítems activos                  TC-019  – TC-030   (12)
+      2C. Filtro por status              TC-031  – TC-040   (10)
+      2D. Read-only                      TC-041  – TC-043   (3)
+      2E. Performance sin N+1            TC-044  – TC-046   (3)
+  3.  POST /wishlist/items               TC-056  – TC-096   (41 casos — salto intencional)
+      3A. Flujo normal                   TC-056  – TC-063   (8)
+      3B. Duplicados                     TC-064  – TC-068   (5)
+      3C. Validaciones                   TC-069  – TC-083   (15)
+      3D. Límite 500 ítems               TC-084  – TC-092   (9)
+      3E. Creación de wishlist           TC-093  – TC-096   (4)
+  4.  DELETE /wishlist/items/{itemId}    TC-111  – TC-129   (19 casos — salto intencional)
+  5.  DELETE /wishlist (clear)           TC-151  – TC-159   (9 casos)
+  6.  Seguridad / IDOR                   TC-171  – TC-182   (12 casos)
+  7.  Formato y consistencia             TC-191  – TC-203   (13 casos)
+  8.  Flujos completos                   TC-216  – TC-225   (10 casos)
+  9.  Estrés y casos extremos            TC-236  – TC-249   (14 casos)
+  10. Estado de bugs                     TC-250  – TC-257   (8 casos)
 
-  DIFERENCIAS CRÍTICAS VS CART MODULE (el front debe conocerlas):
-  ┌────────────────────────────────┬──────────────────┬─────────────────┐
-  │ Característica                 │ Cart             │ Wishlist        │
-  ├────────────────────────────────┼──────────────────┼─────────────────┤
-  │ Restricción de rol             │ CUSTOMER requerido│ Sin restricción │
-  │ Granularidad                   │ Variante         │ Producto        │
-  │ Duplicado detectado con        │ stream() + DB    │ stream() + DB   │
-  │ Respuesta de removeItem        │ 204 No Content   │ 200 + body      │
-  │ Respuesta de clear             │ 204 No Content   │ 204 No Content  │
-  │ Filtro productos inactivos     │ Sí (solo ACTIVE) │ No (todos)      │
-  │ Expiración                     │ 180 días         │ Sin expiración  │
-  │ Límite de ítems                │ 9999/variante    │ Sin límite      │
-  │ Datos del ítem                 │ qty+precio       │ minPrice+count  │
-  └────────────────────────────────┴──────────────────┴─────────────────┘
+  DIFERENCIAS ACTUALES VS CART MODULE:
+  ┌────────────────────────────────┬──────────────────────┬──────────────────────┐
+  │ Característica                 │ Cart                 │ Wishlist             │
+  ├────────────────────────────────┼──────────────────────┼──────────────────────┤
+  │ Restricción de rol             │ CUSTOMER requerido   │ Sin restricción      │
+  │ Granularidad                   │ Variante             │ Producto             │
+  │ Duplicado detectado con        │ stream() + DB        │ stream() + DB        │
+  │ Respuesta de removeItem        │ 204 No Content       │ 200 + WishlistResp   │
+  │ Respuesta de clear             │ 204 No Content       │ 204 No Content       │
+  │ Filtro productos inactivos     │ Sí (solo ACTIVE)     │ Sí (solo ACTIVE)     │
+  │ Expiración                     │ 180 días             │ Sin expiración       │
+  │ Límite de ítems                │ 9999/variante        │ 500 productos        │
+  │ Datos del ítem                 │ qty+precio actualiz  │ minPrice+variantCount│
+  │ Orden de ítems                 │ No especificado      │ addedAt DESC         │
+  │ Mensaje 409 race condition     │ Genérico             │ Genérico (mismo)     │
+  └────────────────────────────────┴──────────────────────┴──────────────────────┘
 
-  BUGS CRÍTICOS A RESOLVER:
-  BUG-A [ALTO]   N+1 queries por carga LAZY de product.variants
-  BUG-B [MEDIO]  Productos INACTIVE/DRAFT aparecen sin filtro
-  BUG-C [MEDIO]  Mensaje de race condition dice "carrito" en contexto de wishlist
-  BUG-D [BAJO]   clearWishlist persiste aunque la wishlist ya esté vacía
-  BUG-E [BAJO]   Sin límite de ítems en la wishlist
-  BUG-F [INFO]   Orden no determinístico de ítems en la respuesta
-  BUG-G [INFO]   minPrice/variantCount son dinámicos — no cachear respuesta
+  RIESGOS PENDIENTES PARA EL FRONT:
+  1. minPrice=0.00 ambiguo (TC-024, TC-025, TC-195) — usar variantCount
+  2. wishlistId=null vs wishlistId+items=[] (TC-018) — significados distintos
+  3. Ítems de productos inactivos en BD no mostrados (TC-039, TC-091, TC-246)
+     — un 400 por límite puede ser inesperado si todos los ítems visibles son <500
+  4. addedAt y minPrice/variantCount deben tratarse como inmutable/dinámico resp.
+  5. No cachear response de wishlist — los datos de productos son dinámicos (TC-256, TC-257)
 
 ========================================================
   FIN DEL DOCUMENTO
