@@ -1,6 +1,7 @@
 package com.forehapp.store.general.storage;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -14,6 +15,12 @@ import java.net.URI;
 
 @Configuration
 public class StorageConfig {
+
+    @Bean
+    @ConditionalOnMissingBean(StorageService.class)
+    public StorageService noOpStorageService() {
+        return new NoOpStorageServiceImpl();
+    }
 
     @Value("${storage.access-key:}")
     private String accessKey;
