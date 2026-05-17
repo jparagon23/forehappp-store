@@ -16,12 +16,6 @@ import java.net.URI;
 @Configuration
 public class StorageConfig {
 
-    @Bean
-    @ConditionalOnMissingBean(StorageService.class)
-    public StorageService noOpStorageService() {
-        return new NoOpStorageServiceImpl();
-    }
-
     @Value("${storage.access-key:}")
     private String accessKey;
 
@@ -37,10 +31,10 @@ public class StorageConfig {
     @Value("${storage.path-style:false}")
     private boolean pathStyle;
 
+    // Must be defined BEFORE noOpStorageService so @ConditionalOnMissingBean evaluates correctly
     @Bean
     @ConditionalOnProperty(name = "storage.access-key", matchIfMissing = false)
     public S3Client s3Client() {
-        if (accessKey == null || accessKey.isBlank()) return null;
         AwsBasicCredentials credentials = AwsBasicCredentials.create(accessKey, secretKey);
         S3ClientBuilder builder = S3Client.builder()
                 .region(Region.of(region))
@@ -52,5 +46,11 @@ public class StorageConfig {
         }
 
         return builder.build();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(S3Client.class)
+    public StorageService noOpStorageService() {
+        return new NoOpStorageServiceImpl();
     }
 }
