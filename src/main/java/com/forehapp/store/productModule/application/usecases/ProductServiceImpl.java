@@ -20,6 +20,7 @@ import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -282,7 +283,7 @@ public class ProductServiceImpl implements IProductService {
     public SellerProductDetailResponse getSellerProductById(Long productId, Long userId) {
         Product product = resolveOwnedProduct(productId, userId);
         List<ProductImageResponse> images = productImageDao.findByProductId(productId).stream()
-                .map(ProductImageResponse::new)
+                .map(img -> new ProductImageResponse(img, storageService.presign(img.getS3Key(), Duration.ofDays(7))))
                 .toList();
         return new SellerProductDetailResponse(product, images);
     }

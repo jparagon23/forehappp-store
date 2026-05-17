@@ -1,25 +1,57 @@
 package com.forehapp.store.general.storage;
 
 import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3ClientBuilder;
+import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
 import java.io.IOException;
+import java.net.URI;
+import java.time.Duration;
 import java.util.UUID;
 
 public class S3StorageServiceImpl implements StorageService {
 
     private final S3Client s3Client;
+    private final S3Presigner presigner;
     private final String bucketName;
-    private final String publicUrl;
 
-    public S3StorageServiceImpl(S3Client s3Client, String bucketName, String publicUrl) {
-        this.s3Client = s3Client;
+    public S3StorageServiceImpl(String accessKey, String secretKey, String endpoint,
+                                 String region, boolean pathStyle, String bucketName) {
+        AwsBasicCredentials credentials = AwsBasicCredentials.create(accessKey, secretKey);
+        StaticCredentialsProvider credProvider = StaticCredentialsProvider.create(credentials);
+        Region awsRegion = Region.of(region);
+
+        S3ClientBuilder clientBuilder = S3Client.builder()
+                .region(awsRegion)
+                .credentialsProvider(credProvider)
+                .forcePathStyle(pathStyle);
+
+        S3Presigner.Builder presignerBuilder = S3Presigner.builder()
+                .region(awsRegion)
+                .credentialsProvider(credProvider)
+                .serviceConfiguration(S3Configuration.builder()
+                        .pathStyleAccessEnabled(pathStyle)
+                        .build());
+
+        if (endpoint != null && !endpoint.isBlank()) {
+            URI endpointUri = URI.create(endpoint);
+            clientBuilder.endpointOverride(endpointUri);
+            presignerBuilder.endpointOverride(endpointUri);
+        }
+
+        this.s3Client = clientBuilder.build();
+        this.presigner = presignerBuilder.build();
         this.bucketName = bucketName;
-        this.publicUrl = publicUrl;
     }
 
     @Override
@@ -38,8 +70,17 @@ public class S3StorageServiceImpl implements StorageService {
         } catch (S3Exception e) {
             throw new RuntimeException("Error al subir el archivo al almacenamiento: " + e.awsErrorDetails().errorMessage());
         }
-        String url = publicUrl.replaceAll("/+$", "") + "/" + key;
+        String url = presign(key, Duration.ofDays(7));
         return new UploadResult(key, url);
+    }
+
+    @Override
+    public String presign(String key, Duration expiration) {
+        GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
+                .signatureDuration(expiration)
+                .getObjectRequest(r -> r.bucket(bucketName).key(key))
+                .build();
+        return presigner.presignGetObject(presignRequest).url().toString();
     }
 
     @Override

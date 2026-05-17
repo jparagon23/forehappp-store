@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 
@@ -52,10 +53,12 @@ public class ProductImageServiceImpl implements IProductImageService {
         ProductImage image = new ProductImage();
         image.setProduct(product);
         image.setS3Key(result.key());
-        image.setUrl(result.url());
+        image.setUrl(result.key());
         image.setDisplayOrder(0);
 
-        return new ProductImageResponse(imageDao.save(image));
+        ProductImage saved = imageDao.save(image);
+        String presignedUrl = storageService.presign(saved.getS3Key(), Duration.ofDays(7));
+        return new ProductImageResponse(saved, presignedUrl);
     }
 
     @Override
@@ -85,7 +88,7 @@ public class ProductImageServiceImpl implements IProductImageService {
     @Override
     public List<ProductImageResponse> getByProduct(Long productId) {
         return imageDao.findByProductId(productId).stream()
-                .map(ProductImageResponse::new)
+                .map(img -> new ProductImageResponse(img, storageService.presign(img.getS3Key(), Duration.ofDays(7))))
                 .toList();
     }
 

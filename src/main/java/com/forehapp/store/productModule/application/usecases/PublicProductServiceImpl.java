@@ -6,9 +6,9 @@ import com.forehapp.store.productModule.application.dto.PublicProductDetailRespo
 import com.forehapp.store.productModule.application.dto.PublicProductSummaryResponse;
 import com.forehapp.store.productModule.domain.model.Product;
 import com.forehapp.store.productModule.domain.model.ProductStatus;
+import com.forehapp.store.productModule.domain.ports.in.IProductImageService;
 import com.forehapp.store.productModule.domain.ports.in.IPublicProductService;
 import com.forehapp.store.productModule.domain.ports.out.IProductDao;
-import com.forehapp.store.productModule.domain.ports.out.IProductImageDao;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -20,11 +20,11 @@ import java.util.List;
 public class PublicProductServiceImpl implements IPublicProductService {
 
     private final IProductDao productDao;
-    private final IProductImageDao productImageDao;
+    private final IProductImageService imageService;
 
-    public PublicProductServiceImpl(IProductDao productDao, IProductImageDao productImageDao) {
+    public PublicProductServiceImpl(IProductDao productDao, IProductImageService imageService) {
         this.productDao = productDao;
-        this.productImageDao = productImageDao;
+        this.imageService = imageService;
     }
 
     @Override
@@ -44,9 +44,7 @@ public class PublicProductServiceImpl implements IPublicProductService {
             throw new NotFoundException("Product not found");
         }
 
-        List<ProductImageResponse> images = productImageDao.findByProductId(productId).stream()
-                .map(ProductImageResponse::new)
-                .toList();
+        List<ProductImageResponse> images = imageService.getByProduct(productId);
 
         return new PublicProductDetailResponse(product, images);
     }

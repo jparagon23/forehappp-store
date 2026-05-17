@@ -1,5 +1,6 @@
 package com.forehapp.store.wishlistModule.application.usecases;
 
+import com.forehapp.store.general.storage.StorageService;
 import com.forehapp.store.productModule.domain.model.Product;
 import com.forehapp.store.productModule.domain.model.ProductStatus;
 import com.forehapp.store.productModule.domain.ports.out.IProductDao;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.List;
 
 @Service
@@ -28,13 +30,16 @@ public class WishlistServiceImpl implements IWishlistService {
     private final IWishlistDao wishlistDao;
     private final IProductDao productDao;
     private final IStoreProfileDao storeProfileDao;
+    private final StorageService storageService;
 
     public WishlistServiceImpl(IWishlistDao wishlistDao,
                                IProductDao productDao,
-                               IStoreProfileDao storeProfileDao) {
+                               IStoreProfileDao storeProfileDao,
+                               StorageService storageService) {
         this.wishlistDao = wishlistDao;
         this.productDao = productDao;
         this.storeProfileDao = storeProfileDao;
+        this.storageService = storageService;
     }
 
     @Override
@@ -136,7 +141,8 @@ public class WishlistServiceImpl implements IWishlistService {
                 .map(v -> v.getPrice())
                 .min(BigDecimal::compareTo)
                 .orElse(BigDecimal.ZERO);
-        String thumbnailUrl = product.getImages().isEmpty() ? null : product.getImages().get(0).getUrl();
+        String thumbnailUrl = product.getImages().isEmpty() ? null
+                : storageService.presign(product.getImages().get(0).getS3Key(), Duration.ofDays(7));
         return new WishlistItemResponse(
                 item.getId(),
                 product.getId(),

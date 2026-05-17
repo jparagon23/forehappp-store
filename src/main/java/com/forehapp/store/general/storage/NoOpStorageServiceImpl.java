@@ -4,6 +4,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Duration;
+
 public class NoOpStorageServiceImpl implements StorageService {
 
     @Override
@@ -15,5 +17,10 @@ public class NoOpStorageServiceImpl implements StorageService {
     @Override
     public void delete(String key) {
         // no-op — nothing to delete if storage is not configured
+    }
+
+    @Override
+    public String presign(String key, Duration expiration) {
+        return "";
     }
 }
