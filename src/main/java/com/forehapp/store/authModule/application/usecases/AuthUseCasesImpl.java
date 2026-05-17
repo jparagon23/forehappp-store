@@ -115,7 +115,7 @@ public class AuthUseCasesImpl implements RegisterUseCase, VerifyCodeUseCase, Res
         String accessToken = JwtUtil.createToken(String.valueOf(user.getId()), userDetails.getAuthorities());
         String refreshToken = JwtUtil.createRefreshToken(String.valueOf(user.getId()), userDetails.getAuthorities());
 
-        return new LoginResponseDto(accessToken, refreshToken, user.getId(), user.getName(), user.getEmail());
+        return new LoginResponseDto(accessToken, refreshToken, user.getId(), user.getName(), user.getEmail(), profile.getRoles());
     }
 
     @Override
