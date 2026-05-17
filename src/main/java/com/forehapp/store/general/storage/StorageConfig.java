@@ -1,9 +1,6 @@
 package com.forehapp.store.general.storage;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
@@ -17,52 +14,31 @@ import java.net.URI;
 @Configuration
 public class StorageConfig {
 
-    @Value("${storage.access-key:}")
-    private String accessKey;
-
-    @Value("${storage.secret-key:}")
-    private String secretKey;
-
-    @Value("${storage.endpoint:}")
-    private String endpoint;
-
-    @Value("${storage.region:us-east-1}")
-    private String region;
-
-    @Value("${storage.path-style:false}")
-    private boolean pathStyle;
-
-    @Value("${storage.bucket-name:local-bucket}")
-    private String bucketName;
-
-    @Value("${storage.public-url:http://localhost}")
-    private String publicUrl;
-
     @Bean
-    @ConditionalOnProperty(name = "storage.access-key", matchIfMissing = false)
-    public S3Client s3Client() {
+    public StorageService storageService(
+            @Value("${AWS_ACCESS_KEY_ID:}") String accessKey,
+            @Value("${AWS_SECRET_ACCESS_KEY:}") String secretKey,
+            @Value("${AWS_ENDPOINT_URL:}") String endpoint,
+            @Value("${AWS_DEFAULT_REGION:us-east-1}") String region,
+            @Value("${STORAGE_PATH_STYLE:false}") boolean pathStyle,
+            @Value("${AWS_S3_BUCKET_NAME:local-bucket}") String bucketName,
+            @Value("${STORAGE_PUBLIC_URL:http://localhost}") String publicUrl) {
+
+        if (accessKey.isBlank()) {
+            return new NoOpStorageServiceImpl();
+        }
+
         AwsBasicCredentials credentials = AwsBasicCredentials.create(accessKey, secretKey);
         S3ClientBuilder builder = S3Client.builder()
                 .region(Region.of(region))
                 .credentialsProvider(StaticCredentialsProvider.create(credentials))
                 .forcePathStyle(pathStyle);
 
-        if (endpoint != null && !endpoint.isBlank()) {
+        if (!endpoint.isBlank()) {
             builder.endpointOverride(URI.create(endpoint));
         }
 
-        return builder.build();
-    }
-
-    @Bean
-    @ConditionalOnBean(S3Client.class)
-    public StorageService s3StorageService(S3Client s3Client) {
+        S3Client s3Client = builder.build();
         return new S3StorageServiceImpl(s3Client, bucketName, publicUrl);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(StorageService.class)
-    public StorageService noOpStorageService() {
-        return new NoOpStorageServiceImpl();
     }
 }
