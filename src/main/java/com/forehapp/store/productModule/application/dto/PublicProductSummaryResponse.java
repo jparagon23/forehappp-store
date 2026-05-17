@@ -17,8 +17,9 @@ public class PublicProductSummaryResponse {
     private final LocalDateTime createdAt;
     private final BigDecimal minPrice;
     private final int variantCount;
+    private final String thumbnailUrl;
 
-    public PublicProductSummaryResponse(Product product) {
+    public PublicProductSummaryResponse(Product product, String thumbnailUrl) {
         this.id = product.getId();
         this.title = product.getTitle();
         this.brand = product.getBrand().getDescription();
@@ -30,5 +31,6 @@ public class PublicProductSummaryResponse {
                 .map(v -> v.getPrice())
                 .min(BigDecimal::compareTo)
                 .orElse(null);
+        this.thumbnailUrl = thumbnailUrl;
     }
 }
