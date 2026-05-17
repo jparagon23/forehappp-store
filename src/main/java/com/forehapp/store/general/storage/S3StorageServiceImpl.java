@@ -1,8 +1,5 @@
 package com.forehapp.store.general.storage;
 
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -13,20 +10,16 @@ import software.amazon.awssdk.services.s3.model.S3Exception;
 import java.io.IOException;
 import java.util.UUID;
 
-@Service
-@ConditionalOnBean(software.amazon.awssdk.services.s3.S3Client.class)
 public class S3StorageServiceImpl implements StorageService {
 
     private final S3Client s3Client;
+    private final String bucketName;
+    private final String publicUrl;
 
-    @Value("${storage.bucket-name}")
-    private String bucketName;
-
-    @Value("${storage.public-url}")
-    private String publicUrl;
-
-    public S3StorageServiceImpl(S3Client s3Client) {
+    public S3StorageServiceImpl(S3Client s3Client, String bucketName, String publicUrl) {
         this.s3Client = s3Client;
+        this.bucketName = bucketName;
+        this.publicUrl = publicUrl;
     }
 
     @Override

@@ -1,6 +1,7 @@
 package com.forehapp.store.general.storage;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -31,7 +32,12 @@ public class StorageConfig {
     @Value("${storage.path-style:false}")
     private boolean pathStyle;
 
-    // Must be defined BEFORE noOpStorageService so @ConditionalOnMissingBean evaluates correctly
+    @Value("${storage.bucket-name:local-bucket}")
+    private String bucketName;
+
+    @Value("${storage.public-url:http://localhost}")
+    private String publicUrl;
+
     @Bean
     @ConditionalOnProperty(name = "storage.access-key", matchIfMissing = false)
     public S3Client s3Client() {
@@ -49,7 +55,13 @@ public class StorageConfig {
     }
 
     @Bean
-    @ConditionalOnMissingBean(S3Client.class)
+    @ConditionalOnBean(S3Client.class)
+    public StorageService s3StorageService(S3Client s3Client) {
+        return new S3StorageServiceImpl(s3Client, bucketName, publicUrl);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(StorageService.class)
     public StorageService noOpStorageService() {
         return new NoOpStorageServiceImpl();
     }
