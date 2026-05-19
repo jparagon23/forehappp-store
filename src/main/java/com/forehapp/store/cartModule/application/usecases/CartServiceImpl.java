@@ -76,6 +76,11 @@ public class CartServiceImpl implements ICartService {
         if (dtos == null || dtos.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Items list must not be empty");
         }
+        // BUG-BATCH-02: cap batch size to avoid N unbounded DB queries
+        if (dtos.size() > 50) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "El batch no puede superar 50 ítems por solicitud");
+        }
         StoreProfile buyer = requireBuyer(userId);
         Cart cart = findValidCart(buyer.getId()).orElseGet(() -> {
             Cart c = new Cart();
@@ -87,6 +92,15 @@ public class CartServiceImpl implements ICartService {
     }
 
     private void mergeItem(Cart cart, AddItemRequestDto dto) {
+        // BUG-BATCH-01: @Valid does not cascade into List elements in Spring MVC —
+        // validate manually so batch and single-add behave identically
+        if (dto.variantId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "variantId must not be null");
+        }
+        if (dto.quantity() == null || dto.quantity() < 1 || dto.quantity() > MAX_ITEM_QUANTITY) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "quantity debe estar entre 1 y " + MAX_ITEM_QUANTITY);
+        }
         ProductVariant variant = productVariantDao.findById(dto.variantId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Variant not found: " + dto.variantId()));
