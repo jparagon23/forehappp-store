@@ -48,10 +48,18 @@ anteriores de los enums.
    El body ahora requiere "paymentMethod". Sin ese campo → 400.
    Ver sección "Endpoint: Crear orden".
 
-5. OrderResponse y OrderSummaryDto — nuevo campo
-   ──────────────────────────────────────────────
-   Ambas respuestas ahora incluyen "paymentMethod": String.
-   No rompe, pero hay que usarlo para la lógica de UI descrita abajo.
+5. OrderResponse y OrderSummaryDto — campos nuevos / renombrados
+   ──────────────────────────────────────────────────────────────
+   a) "status" renombrado a "paymentStatus" en ambos DTOs.
+      Actualizar cualquier referencia a order.status → order.paymentStatus.
+
+   b) Ambas respuestas incluyen "paymentMethod": String.
+      Usar para lógica de UI descrita abajo.
+
+   c) OrderSummaryDto incluye ahora "shippingStatus": String.
+      Es el estado de envío más avanzado entre todos los grupos de la orden.
+      Valores posibles (en orden): PENDING → PREPARING → SHIPPED → DELIVERED / CANCELLED
+      Usar para mostrar en el listado el estado real del envío sin abrir el detalle.
 
 
 ================================================================================
@@ -98,7 +106,7 @@ VALORES VÁLIDOS:
 RESPUESTA 201 Created — OrderResponse:
 {
   "orderId":         42,
-  "status":          "PENDING",
+  "paymentStatus":   "PENDING",             // ← renombrado de "status"
   "paymentMethod":   "MERCADO_PAGO",        // ← campo nuevo
   "total":           250000.00,
   "shippingAddress": "Calle 123 #45-67",
@@ -145,15 +153,24 @@ RESPUESTA 200 OK — Lista de OrderSummaryDto:
 [
   {
     "orderId":          42,
-    "status":           "PENDING",
-    "paymentMethod":    "CASH_ON_DELIVERY",   // ← campo nuevo
+    "paymentStatus":    "PENDING",            // ← renombrado de "status"
+    "paymentMethod":    "CASH_ON_DELIVERY",
+    "shippingStatus":   "SHIPPED",            // ← campo nuevo: estado más avanzado entre grupos
     "total":            250000.00,
     "createdAt":        "2026-05-19T10:00:00",
     "sellerGroupCount": 2
   }
 ]
 
-Usar paymentMethod para mostrar el método en el listado de órdenes del buyer.
+Usar paymentMethod para mostrar el método de pago y shippingStatus para el
+estado de envío en el listado de órdenes del buyer.
+
+shippingStatus — valores posibles:
+  "PENDING"    → ningún grupo ha iniciado aún
+  "PREPARING"  → al menos un grupo en preparación
+  "SHIPPED"    → al menos un grupo en camino
+  "DELIVERED"  → todos los grupos entregados
+  "CANCELLED"  → solo si todos están cancelados
 
 
 ================================================================================
@@ -196,7 +213,7 @@ ERRORES:
   ESTADOS — QUÉ MOSTRAR AL BUYER
 ================================================================================
 
-ORDER STATUS:
+ORDER PAYMENT STATUS (campo: paymentStatus):
 
   "PENDING"
     → MERCADO_PAGO:     "Esperando confirmación de pago"
@@ -215,7 +232,7 @@ ORDER STATUS:
     → Todos:            "Orden cancelada"
 
 Lógica sugerida para COD en estado PENDING:
-  if (order.paymentMethod === "CASH_ON_DELIVERY" && order.status === "PENDING") {
+  if (order.paymentMethod === "CASH_ON_DELIVERY" && order.paymentStatus === "PENDING") {
     mostrar: "Pedido recibido — en preparación. Pagarás al recibir."
   }
 
@@ -300,11 +317,15 @@ Si se omite esta validación y se envía de todas formas:
                                   checkoutUrl = null  → pantalla de confirmación
                                   (mensaje distinto según paymentMethod)
 
-  Lista de órdenes (buyer)        Mostrar paymentMethod en cada fila
+  Lista de órdenes (buyer)        "status" renombrado a "paymentStatus"
+                                  Nuevo campo "shippingStatus" (estado más avanzado
+                                  de los grupos — usar para mostrar el envío)
+                                  Mostrar paymentMethod en cada fila
                                   Nuevo estado "PAYMENT_CONFIRMED" en badge
 
-  Detalle de orden (buyer)        Nuevo campo paymentMethod en OrderResponse
-                                  Lógica de mensaje por (paymentMethod + status)
+  Detalle de orden (buyer)        "status" renombrado a "paymentStatus"
+                                  Nuevo campo paymentMethod en OrderResponse
+                                  Lógica de mensaje por (paymentMethod + paymentStatus)
                                   COD en PENDING → mostrar "en preparación"
 
   Detalle de orden (buyer)        PaymentStatus ya no está en español:

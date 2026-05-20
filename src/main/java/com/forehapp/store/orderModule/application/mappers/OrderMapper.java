@@ -3,6 +3,7 @@ package com.forehapp.store.orderModule.application.mappers;
 import com.forehapp.store.orderModule.domain.model.Order;
 import com.forehapp.store.orderModule.domain.model.OrderItem;
 import com.forehapp.store.orderModule.domain.model.OrderSellerGroup;
+import com.forehapp.store.orderModule.domain.model.OrderSellerGroupStatus;
 import com.forehapp.store.orderModule.infrastructure.web.dto.OrderItemDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.OrderResponse;
 import com.forehapp.store.orderModule.infrastructure.web.dto.OrderSellerGroupDto;
@@ -10,10 +11,20 @@ import com.forehapp.store.orderModule.infrastructure.web.dto.OrderSummaryDto;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 @Component
 public class OrderMapper {
+
+    private static final Map<OrderSellerGroupStatus, Integer> STATUS_PRIORITY = Map.of(
+            OrderSellerGroupStatus.DELIVERED,  5,
+            OrderSellerGroupStatus.SHIPPED,    4,
+            OrderSellerGroupStatus.PREPARING,  3,
+            OrderSellerGroupStatus.PENDING,    2,
+            OrderSellerGroupStatus.CANCELLED,  1
+    );
 
     public OrderResponse toResponse(Order order, String checkoutUrl) {
         List<OrderSellerGroupDto> groups = order.getSellerGroups().stream()
@@ -34,10 +45,16 @@ public class OrderMapper {
     }
 
     public OrderSummaryDto toSummary(Order order) {
+        String shippingStatus = order.getSellerGroups().stream()
+                .map(OrderSellerGroup::getStatus)
+                .max(Comparator.comparingInt(s -> STATUS_PRIORITY.getOrDefault(s, 0)))
+                .map(OrderSellerGroupStatus::name)
+                .orElse(OrderSellerGroupStatus.PENDING.name());
         return new OrderSummaryDto(
                 order.getId(),
                 order.getStatus().name(),
                 order.getPaymentMethod(),
+                shippingStatus,
                 order.getTotal(),
                 order.getCreatedAt(),
                 order.getSellerGroups().size()
