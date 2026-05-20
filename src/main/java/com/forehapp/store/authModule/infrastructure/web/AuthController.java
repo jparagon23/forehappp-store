@@ -42,8 +42,8 @@ public class AuthController {
     }
 
     @PostMapping("/resend-code")
-    public ResponseEntity<Void> resendCode(@RequestParam Long userId) {
-        resendCodeUseCase.resendCode(userId);
+    public ResponseEntity<Void> resendCode(@RequestBody Map<String, Long> body) {
+        resendCodeUseCase.resendCode(body.get("userId"));
         return ResponseEntity.ok().build();
     }
 
