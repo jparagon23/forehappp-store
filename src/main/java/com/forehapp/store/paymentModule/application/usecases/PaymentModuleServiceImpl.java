@@ -9,14 +9,20 @@ import com.forehapp.store.orderModule.domain.model.OrderSellerGroupStatus;
 import com.forehapp.store.orderModule.domain.model.OrderStatus;
 import com.forehapp.store.orderModule.domain.ports.out.IOrderDao;
 import com.forehapp.store.orderModule.domain.ports.out.IOrderGroupDao;
+import com.forehapp.store.paymentModule.domain.model.PaymentMethod;
 import com.forehapp.store.paymentModule.domain.model.PaymentStatus;
 import com.forehapp.store.paymentModule.domain.ports.in.IPaymentModuleService;
 import com.forehapp.store.paymentModule.infrastructure.persistence.IPaymentRepository;
+import com.forehapp.store.userModule.domain.model.StoreProfile;
+import com.forehapp.store.userModule.domain.model.StoreRole;
+import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class PaymentModuleServiceImpl implements IPaymentModuleService {
@@ -26,15 +32,18 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
     private final IPaymentRepository paymentRepository;
     private final IOrderDao orderDao;
     private final IOrderGroupDao orderGroupDao;
+    private final IStoreProfileDao storeProfileDao;
     private final ApplicationEventPublisher eventPublisher;
 
     public PaymentModuleServiceImpl(IPaymentRepository paymentRepository,
                                     IOrderDao orderDao,
                                     IOrderGroupDao orderGroupDao,
+                                    IStoreProfileDao storeProfileDao,
                                     ApplicationEventPublisher eventPublisher) {
         this.paymentRepository = paymentRepository;
         this.orderDao = orderDao;
         this.orderGroupDao = orderGroupDao;
+        this.storeProfileDao = storeProfileDao;
         this.eventPublisher = eventPublisher;
     }
 
@@ -73,7 +82,7 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
 
         com.forehapp.store.paymentModule.domain.model.Payment payment = paymentOpt.get();
 
-        if (PaymentStatus.APROBADO.name().equals(payment.getStatus())) {
+        if (PaymentStatus.APPROVED.name().equals(payment.getStatus())) {
             log.info("[Webhook] Payment already approved (idempotency). orderId={}", orderId);
             return;
         }
@@ -83,7 +92,7 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
 
         switch (mpStatus) {
             case "approved" -> {
-                payment.setStatus(PaymentStatus.APROBADO.name());
+                payment.setStatus(PaymentStatus.APPROVED.name());
                 payment.setReference(externalPaymentId);
                 paymentRepository.save(payment);
 
@@ -103,12 +112,12 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
                 }
             }
             case "rejected" -> {
-                payment.setStatus(PaymentStatus.RECHAZADO.name());
+                payment.setStatus(PaymentStatus.REJECTED.name());
                 paymentRepository.save(payment);
                 log.warn("[Webhook] Payment rejected for orderId={}", orderId);
             }
             case "refunded", "charged_back" -> {
-                payment.setStatus(PaymentStatus.REEMBOLSADO.name());
+                payment.setStatus(PaymentStatus.REFUNDED.name());
                 paymentRepository.save(payment);
 
                 Order order = orderDao.findBasicById(orderId).orElse(null);
@@ -122,6 +131,48 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
         }
     }
 
+    @Override
+    @Transactional
+    public void confirmCashPayment(Long userId, Long orderId) {
+        resolveAdmin(userId);
+
+        Order order = orderDao.findBasicById(orderId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found"));
+
+        if (order.getStatus() != OrderStatus.PENDING) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Order is not in PENDING status");
+        }
+
+        String method = order.getPaymentMethod();
+        if (!PaymentMethod.CASH.name().equals(method) && !PaymentMethod.TRANSFER.name().equals(method)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Only CASH or TRANSFER orders can be confirmed manually");
+        }
+
+        var paymentOpt = paymentRepository.findByOrderId(orderId);
+        if (paymentOpt.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment record not found");
+        }
+
+        com.forehapp.store.paymentModule.domain.model.Payment payment = paymentOpt.get();
+        payment.setStatus(PaymentStatus.APPROVED.name());
+        paymentRepository.save(payment);
+
+        order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
+        orderDao.save(order);
+        log.info("[Admin] Cash payment confirmed for orderId={}", orderId);
+
+        transitionGroupsToPreparing(orderId);
+
+        String buyerEmail = order.getBuyer().getUser().getEmail();
+        String buyerName  = order.getBuyer().getUser().getName() + " " + order.getBuyer().getUser().getLastname();
+        eventPublisher.publishEvent(new OrderPaidEvent(
+                order.getId(), buyerEmail, buyerName, order.getTotal(), order.getCreatedAt()
+        ));
+    }
+
+    // ── helpers ────────────────────────────────────────────────────────────────
+
     private void transitionGroupsToPreparing(Long orderId) {
         java.time.LocalDateTime now = java.time.LocalDateTime.now();
         for (OrderSellerGroup group : orderGroupDao.findAllByOrderId(orderId)) {
@@ -129,8 +180,16 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
                 group.setStatus(OrderSellerGroupStatus.PREPARING);
                 group.setPreparedAt(now);
                 orderGroupDao.save(group);
-                log.info("[Webhook] Group {} transitioned to PREPARING", group.getId());
+                log.info("[Payment] Group {} transitioned to PREPARING", group.getId());
             }
+        }
+    }
+
+    private void resolveAdmin(Long userId) {
+        StoreProfile profile = storeProfileDao.findByUserId(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Store profile not found"));
+        if (!profile.getRoles().contains(StoreRole.STORE_ADMIN)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: STORE_ADMIN role required");
         }
     }
 }

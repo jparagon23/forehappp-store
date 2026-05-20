@@ -1,5 +1,5 @@
 package com.forehapp.store.paymentModule.domain.model;
 
 public enum PaymentMethod {
-    MERCADOPAGO, TRANSFERENCIA, EFECTIVO
+    MERCADO_PAGO, TRANSFER, CASH, CASH_ON_DELIVERY
 }

@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 public record OrderSummaryDto(
         Long orderId,
         String status,
+        String paymentMethod,
         BigDecimal total,
         LocalDateTime createdAt,
         int sellerGroupCount

@@ -1,13 +1,19 @@
 package com.forehapp.store.orderModule.application.usecases;
 
 import com.forehapp.store.orderModule.domain.events.OrderStatusChangedEvent;
+import com.forehapp.store.orderModule.domain.model.Order;
 import com.forehapp.store.orderModule.domain.model.OrderItem;
 import com.forehapp.store.orderModule.domain.model.OrderSellerGroup;
 import com.forehapp.store.orderModule.domain.model.OrderSellerGroupStatus;
+import com.forehapp.store.orderModule.domain.model.OrderStatus;
 import com.forehapp.store.orderModule.domain.ports.in.IOrderModuleService;
+import com.forehapp.store.orderModule.domain.ports.out.IOrderDao;
 import com.forehapp.store.orderModule.domain.ports.out.IOrderGroupDao;
 import com.forehapp.store.orderModule.infrastructure.web.dto.OrderItemDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.SellerOrderGroupDto;
+import com.forehapp.store.paymentModule.domain.model.PaymentMethod;
+import com.forehapp.store.paymentModule.domain.model.PaymentStatus;
+import com.forehapp.store.paymentModule.infrastructure.persistence.IPaymentRepository;
 import com.forehapp.store.userModule.domain.model.StoreProfile;
 import com.forehapp.store.userModule.domain.model.StoreRole;
 import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
@@ -25,13 +31,19 @@ import java.util.List;
 public class OrderModuleServiceImpl implements IOrderModuleService {
 
     private final IOrderGroupDao orderGroupDao;
+    private final IOrderDao orderDao;
+    private final IPaymentRepository paymentRepository;
     private final IStoreProfileDao storeProfileDao;
     private final ApplicationEventPublisher eventPublisher;
 
     public OrderModuleServiceImpl(IOrderGroupDao orderGroupDao,
+                                  IOrderDao orderDao,
+                                  IPaymentRepository paymentRepository,
                                   IStoreProfileDao storeProfileDao,
                                   ApplicationEventPublisher eventPublisher) {
         this.orderGroupDao = orderGroupDao;
+        this.orderDao = orderDao;
+        this.paymentRepository = paymentRepository;
         this.storeProfileDao = storeProfileDao;
         this.eventPublisher = eventPublisher;
     }
@@ -106,6 +118,23 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
         orderGroupDao.save(group);
 
         eventPublisher.publishEvent(buildStatusEvent(group));
+
+        // For COD: when all groups are delivered, mark order PAID and approve payment
+        Long orderId = group.getOrder().getId();
+        orderDao.findBasicById(orderId).ifPresent(order -> {
+            if (PaymentMethod.CASH_ON_DELIVERY.name().equals(order.getPaymentMethod())) {
+                boolean allDelivered = orderGroupDao.findAllByOrderId(orderId).stream()
+                        .allMatch(g -> g.getStatus() == OrderSellerGroupStatus.DELIVERED);
+                if (allDelivered) {
+                    order.setStatus(OrderStatus.PAID);
+                    orderDao.save(order);
+                    paymentRepository.findByOrderId(orderId).ifPresent(p -> {
+                        p.setStatus(PaymentStatus.APPROVED.name());
+                        paymentRepository.save(p);
+                    });
+                }
+            }
+        });
     }
 
     @Override

@@ -10,15 +10,18 @@ import com.forehapp.store.orderModule.domain.events.OrderCreatedEvent;
 import com.forehapp.store.orderModule.domain.model.Order;
 import com.forehapp.store.orderModule.domain.model.OrderItem;
 import com.forehapp.store.orderModule.domain.model.OrderSellerGroup;
+import com.forehapp.store.orderModule.domain.model.OrderSellerGroupStatus;
 import com.forehapp.store.orderModule.domain.ports.in.IOrderService;
 import com.forehapp.store.orderModule.domain.ports.out.IOrderDao;
 import com.forehapp.store.orderModule.infrastructure.web.dto.CreateOrderRequestDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.OrderResponse;
 import com.forehapp.store.orderModule.infrastructure.web.dto.OrderSummaryDto;
+import com.forehapp.store.paymentModule.domain.model.PaymentMethod;
 import com.forehapp.store.paymentModule.domain.ports.in.IPaymentService;
 import com.forehapp.store.productModule.domain.model.ProductVariant;
 import com.forehapp.store.productModule.domain.ports.out.IProductVariantDao;
 import com.forehapp.store.userModule.domain.model.StoreProfile;
+import com.forehapp.store.userModule.domain.model.StoreRole;
 import com.forehapp.store.userModule.domain.model.UserAddress;
 import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
 import com.forehapp.store.userModule.domain.ports.out.IUserAddressRepository;
@@ -84,16 +87,34 @@ public class OrderServiceImpl implements IOrderService {
                 .filter(a -> a.getStoreProfile().getId().equals(buyer.getId()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Address not found"));
 
+        if (dto.paymentMethod() == PaymentMethod.CASH_ON_DELIVERY
+                && !address.getCity().equalsIgnoreCase("Cali")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Cash on delivery is only available for orders shipped to Cali");
+        }
+
         preValidateStock(cart.getItems());
 
         Order order = buildOrder(buyer, address, cart.getItems());
+        order.setPaymentMethod(dto.paymentMethod().name());
         Order savedOrder = orderDao.save(order);
 
         cart.setStatus(CartStatus.CONVERTED);
         cart.setUpdatedAt(LocalDateTime.now());
         cartDao.save(cart);
 
-        String checkoutUrl = paymentService.createMercadoPagoPreference(savedOrder);
+        String checkoutUrl = switch (dto.paymentMethod()) {
+            case MERCADO_PAGO -> paymentService.createMercadoPagoPreference(savedOrder);
+            case CASH, TRANSFER -> {
+                paymentService.createPendingPayment(savedOrder, dto.paymentMethod());
+                yield null;
+            }
+            case CASH_ON_DELIVERY -> {
+                paymentService.createPendingPayment(savedOrder, PaymentMethod.CASH_ON_DELIVERY);
+                transitionGroupsToPreparing(savedOrder);
+                yield null;
+            }
+        };
 
         eventPublisher.publishEvent(buildOrderCreatedEvent(savedOrder, buyer));
 
@@ -111,6 +132,15 @@ public class OrderServiceImpl implements IOrderService {
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────
+
+    private void transitionGroupsToPreparing(Order order) {
+        LocalDateTime now = LocalDateTime.now();
+        order.getSellerGroups().forEach(g -> {
+            g.setStatus(OrderSellerGroupStatus.PREPARING);
+            g.setPreparedAt(now);
+        });
+        orderDao.save(order);
+    }
 
     private void preValidateStock(List<CartItem> items) {
         for (CartItem item : items) {
@@ -229,7 +259,11 @@ public class OrderServiceImpl implements IOrderService {
     }
 
     private StoreProfile resolveProfile(Long userId) {
-        return storeProfileDao.findByUserId(userId)
+        StoreProfile profile = storeProfileDao.findByUserId(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Store profile not found"));
+        if (!profile.getRoles().contains(StoreRole.CUSTOMER)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "User does not have CUSTOMER role");
+        }
+        return profile;
     }
 }

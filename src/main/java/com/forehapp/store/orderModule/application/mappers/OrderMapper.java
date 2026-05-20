@@ -22,6 +22,7 @@ public class OrderMapper {
         return new OrderResponse(
                 order.getId(),
                 order.getStatus().name(),
+                order.getPaymentMethod(),
                 order.getTotal(),
                 order.getShippingAddress(),
                 order.getShippingCity(),
@@ -36,6 +37,7 @@ public class OrderMapper {
         return new OrderSummaryDto(
                 order.getId(),
                 order.getStatus().name(),
+                order.getPaymentMethod(),
                 order.getTotal(),
                 order.getCreatedAt(),
                 order.getSellerGroups().size()
