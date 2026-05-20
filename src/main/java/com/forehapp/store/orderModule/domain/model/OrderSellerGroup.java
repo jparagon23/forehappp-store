@@ -1,6 +1,6 @@
 package com.forehapp.store.orderModule.domain.model;
 
-import com.forehapp.store.userModule.domain.model.StoreProfile;
+import com.forehapp.store.storeModule.domain.model.Store;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -28,8 +28,8 @@ public class OrderSellerGroup {
     private Order order;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "seller_id", nullable = false)
-    private StoreProfile seller;
+    @JoinColumn(name = "store_id", nullable = false)
+    private Store store;
 
     @Enumerated(EnumType.STRING)
     @Column(length = 20, nullable = false)

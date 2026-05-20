@@ -20,6 +20,9 @@ import com.forehapp.store.paymentModule.domain.model.PaymentMethod;
 import com.forehapp.store.paymentModule.domain.ports.in.IPaymentService;
 import com.forehapp.store.productModule.domain.model.ProductVariant;
 import com.forehapp.store.productModule.domain.ports.out.IProductVariantDao;
+import com.forehapp.store.storeModule.domain.model.Store;
+import com.forehapp.store.storeModule.domain.model.StoreMemberRole;
+import com.forehapp.store.storeModule.domain.ports.out.IStoreMembershipDao;
 import com.forehapp.store.userModule.domain.model.StoreProfile;
 import com.forehapp.store.userModule.domain.model.StoreRole;
 import com.forehapp.store.userModule.domain.model.UserAddress;
@@ -44,6 +47,7 @@ public class OrderServiceImpl implements IOrderService {
     private final ICartDao cartDao;
     private final IOrderDao orderDao;
     private final IStoreProfileDao storeProfileDao;
+    private final IStoreMembershipDao membershipDao;
     private final IUserAddressRepository addressRepository;
     private final IProductVariantDao productVariantDao;
     private final IPaymentService paymentService;
@@ -56,6 +60,7 @@ public class OrderServiceImpl implements IOrderService {
     public OrderServiceImpl(ICartDao cartDao,
                             IOrderDao orderDao,
                             IStoreProfileDao storeProfileDao,
+                            IStoreMembershipDao membershipDao,
                             IUserAddressRepository addressRepository,
                             IProductVariantDao productVariantDao,
                             IPaymentService paymentService,
@@ -64,6 +69,7 @@ public class OrderServiceImpl implements IOrderService {
         this.cartDao = cartDao;
         this.orderDao = orderDao;
         this.storeProfileDao = storeProfileDao;
+        this.membershipDao = membershipDao;
         this.addressRepository = addressRepository;
         this.productVariantDao = productVariantDao;
         this.paymentService = paymentService;
@@ -131,6 +137,15 @@ public class OrderServiceImpl implements IOrderService {
         return orderMapper.toResponse(order, null);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<OrderSummaryDto> getMyOrders(Long userId) {
+        StoreProfile buyer = resolveProfile(userId);
+        return orderDao.findAllByBuyerIdOrderByCreatedAtDesc(buyer.getId()).stream()
+                .map(orderMapper::toSummary)
+                .toList();
+    }
+
     // ── helpers ────────────────────────────────────────────────────────────────
 
     private void transitionGroupsToPreparing(Order order) {
@@ -159,14 +174,14 @@ public class OrderServiceImpl implements IOrderService {
         order.setShippingCity(address.getCity());
         order.setShippingCountry(address.getCountry());
 
-        Map<Long, List<CartItem>> bySeller = cartItems.stream()
-                .collect(Collectors.groupingBy(i -> i.getVariant().getProduct().getSeller().getId()));
+        Map<Long, List<CartItem>> byStore = cartItems.stream()
+                .collect(Collectors.groupingBy(i -> i.getVariant().getProduct().getStore().getId()));
 
         BigDecimal total = BigDecimal.ZERO;
 
-        for (Map.Entry<Long, List<CartItem>> entry : bySeller.entrySet()) {
-            StoreProfile seller = entry.getValue().get(0).getVariant().getProduct().getSeller();
-            OrderSellerGroup group = buildSellerGroup(order, seller, entry.getValue());
+        for (Map.Entry<Long, List<CartItem>> entry : byStore.entrySet()) {
+            Store store = entry.getValue().get(0).getVariant().getProduct().getStore();
+            OrderSellerGroup group = buildStoreGroup(order, store, entry.getValue());
             order.getSellerGroups().add(group);
             total = total.add(group.getSubtotal());
         }
@@ -175,10 +190,10 @@ public class OrderServiceImpl implements IOrderService {
         return order;
     }
 
-    private OrderSellerGroup buildSellerGroup(Order order, StoreProfile seller, List<CartItem> items) {
+    private OrderSellerGroup buildStoreGroup(Order order, Store store, List<CartItem> items) {
         OrderSellerGroup group = new OrderSellerGroup();
         group.setOrder(order);
-        group.setSeller(seller);
+        group.setStore(store);
 
         BigDecimal subtotal = BigDecimal.ZERO;
 
@@ -205,10 +220,16 @@ public class OrderServiceImpl implements IOrderService {
             productVariantDao.save(variant);
 
             if (newStock <= lowStockThreshold) {
-                String sellerEmail = group.getSeller().getUser().getEmail();
-                String sellerName = group.getSeller().getUser().getName() + " " + group.getSeller().getUser().getLastname();
-                eventPublisher.publishEvent(new LowStockEvent(sellerEmail, sellerName,
-                        variant.getProduct().getTitle(), variant.getSku(), newStock));
+                membershipDao.findActiveByStoreId(store.getId()).stream()
+                        .filter(m -> m.getRole() == StoreMemberRole.OWNER)
+                        .findFirst()
+                        .ifPresent(ownerMembership -> {
+                            String ownerEmail = ownerMembership.getStoreProfile().getUser().getEmail();
+                            String ownerName = ownerMembership.getStoreProfile().getUser().getName()
+                                    + " " + ownerMembership.getStoreProfile().getUser().getLastname();
+                            eventPublisher.publishEvent(new LowStockEvent(ownerEmail, ownerName,
+                                    variant.getProduct().getTitle(), variant.getSku(), newStock));
+                        });
             }
         }
 
@@ -221,8 +242,12 @@ public class OrderServiceImpl implements IOrderService {
 
         List<OrderCreatedEvent.SellerGroupData> sellerGroups = order.getSellerGroups().stream()
                 .map(group -> {
-                    String sellerEmail = group.getSeller().getUser().getEmail();
-                    String sellerName = group.getSeller().getUser().getName() + " " + group.getSeller().getUser().getLastname();
+                    Store store = group.getStore();
+                    String storeEmail = membershipDao.findActiveByStoreId(store.getId()).stream()
+                            .filter(m -> m.getRole() == StoreMemberRole.OWNER)
+                            .findFirst()
+                            .map(m -> m.getStoreProfile().getUser().getEmail())
+                            .orElse(null);
 
                     List<OrderCreatedEvent.ItemData> items = group.getItems().stream()
                             .map(item -> new OrderCreatedEvent.ItemData(
@@ -234,7 +259,7 @@ public class OrderServiceImpl implements IOrderService {
                             ))
                             .toList();
 
-                    return new OrderCreatedEvent.SellerGroupData(sellerEmail, sellerName, group.getSubtotal(), items);
+                    return new OrderCreatedEvent.SellerGroupData(storeEmail, store.getName(), group.getSubtotal(), items);
                 })
                 .toList();
 
@@ -247,15 +272,6 @@ public class OrderServiceImpl implements IOrderService {
                 order.getCreatedAt(),
                 sellerGroups
         );
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public List<OrderSummaryDto> getMyOrders(Long userId) {
-        StoreProfile buyer = resolveProfile(userId);
-        return orderDao.findAllByBuyerIdOrderByCreatedAtDesc(buyer.getId()).stream()
-                .map(orderMapper::toSummary)
-                .toList();
     }
 
     private StoreProfile resolveProfile(Long userId) {

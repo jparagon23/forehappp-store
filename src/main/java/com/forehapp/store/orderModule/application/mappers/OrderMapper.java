@@ -62,14 +62,13 @@ public class OrderMapper {
     }
 
     private OrderSellerGroupDto toGroupDto(OrderSellerGroup group) {
-        String sellerName = group.getSeller().getUser().getName() + " " + group.getSeller().getUser().getLastname();
         List<OrderItemDto> items = group.getItems().stream()
                 .map(this::toItemDto)
                 .toList();
         return new OrderSellerGroupDto(
                 group.getId(),
-                group.getSeller().getId(),
-                sellerName,
+                group.getStore().getId(),
+                group.getStore().getName(),
                 group.getStatus().name(),
                 group.getSubtotal(),
                 group.getTrackingNumber(),

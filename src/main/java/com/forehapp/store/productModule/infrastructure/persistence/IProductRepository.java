@@ -8,6 +8,6 @@ import java.util.List;
 import java.util.Optional;
 
 public interface IProductRepository extends JpaRepository<Product, Long>, JpaSpecificationExecutor<Product> {
-    Optional<Product> findByIdAndSellerId(Long id, Long sellerId);
-    List<Product> findAllBySellerId(Long sellerId);
+    Optional<Product> findByIdAndStoreId(Long id, Long storeId);
+    List<Product> findAllByStoreId(Long storeId);
 }

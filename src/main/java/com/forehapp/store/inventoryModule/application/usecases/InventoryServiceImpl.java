@@ -11,6 +11,7 @@ import com.forehapp.store.productModule.domain.model.*;
 import com.forehapp.store.productModule.domain.ports.out.IInventoryMovementDao;
 import com.forehapp.store.productModule.domain.ports.out.IProductDao;
 import com.forehapp.store.productModule.domain.ports.out.IProductVariantDao;
+import com.forehapp.store.storeModule.domain.ports.out.IStoreMembershipDao;
 import com.forehapp.store.userModule.domain.model.StoreProfile;
 import com.forehapp.store.userModule.domain.model.StoreRole;
 import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
@@ -24,15 +25,18 @@ public class InventoryServiceImpl implements IInventoryService {
     private final IProductVariantDao variantDao;
     private final IInventoryMovementDao movementDao;
     private final IStoreProfileDao storeProfileDao;
+    private final IStoreMembershipDao membershipDao;
 
     public InventoryServiceImpl(IProductDao productDao,
                                 IProductVariantDao variantDao,
                                 IInventoryMovementDao movementDao,
-                                IStoreProfileDao storeProfileDao) {
+                                IStoreProfileDao storeProfileDao,
+                                IStoreMembershipDao membershipDao) {
         this.productDao = productDao;
         this.variantDao = variantDao;
         this.movementDao = movementDao;
         this.storeProfileDao = storeProfileDao;
+        this.membershipDao = membershipDao;
     }
 
     @Override
@@ -61,8 +65,9 @@ public class InventoryServiceImpl implements IInventoryService {
         Product product = productDao.findById(productId)
                 .orElseThrow(() -> new NotFoundException("Product not found"));
 
-        if (isSeller && !isAdmin && !product.getSeller().getId().equals(profile.getId())) {
-            throw new BadRequestException("Product does not belong to this seller");
+        if (!isAdmin) {
+            membershipDao.findActiveByStoreIdAndUserId(product.getStore().getId(), userId)
+                    .orElseThrow(() -> new BadRequestException("Product does not belong to your store"));
         }
 
         ProductVariant variant = variantDao.findByIdAndProductId(variantId, productId)
@@ -101,8 +106,9 @@ public class InventoryServiceImpl implements IInventoryService {
         Product product = productDao.findById(productId)
                 .orElseThrow(() -> new NotFoundException("Product not found"));
 
-        if (isSeller && !isAdmin && !product.getSeller().getId().equals(profile.getId())) {
-            throw new BadRequestException("Product does not belong to this seller");
+        if (!isAdmin) {
+            membershipDao.findActiveByStoreIdAndUserId(product.getStore().getId(), userId)
+                    .orElseThrow(() -> new BadRequestException("Product does not belong to your store"));
         }
 
         variantDao.findByIdAndProductId(variantId, productId)

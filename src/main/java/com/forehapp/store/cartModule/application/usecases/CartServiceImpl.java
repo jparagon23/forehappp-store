@@ -13,6 +13,7 @@ import com.forehapp.store.cartModule.domain.ports.out.ICartDao;
 import com.forehapp.store.productModule.domain.model.ProductStatus;
 import com.forehapp.store.productModule.domain.model.ProductVariant;
 import com.forehapp.store.productModule.domain.ports.out.IProductVariantDao;
+import com.forehapp.store.storeModule.domain.model.Store;
 import com.forehapp.store.userModule.domain.model.StoreProfile;
 import com.forehapp.store.userModule.domain.model.StoreRole;
 import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
@@ -25,10 +26,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 
 @Service
@@ -201,24 +200,20 @@ public class CartServiceImpl implements ICartService {
 
     private CartResponse toResponse(Cart cart) {
         // BUG-06: exclude items whose product is no longer ACTIVE
-        Map<Long, List<CartItem>> bySeller = cart.getItems().stream()
+        Map<Long, List<CartItem>> byStore = cart.getItems().stream()
                 .filter(i -> i.getVariant().getProduct().getStatus() == ProductStatus.ACTIVE)
-                .collect(Collectors.groupingBy(i -> i.getVariant().getProduct().getSeller().getId()));
+                .collect(Collectors.groupingBy(i -> i.getVariant().getProduct().getStore().getId()));
 
-        List<CartSellerGroupResponse> groups = bySeller.entrySet().stream()
+        List<CartSellerGroupResponse> groups = byStore.entrySet().stream()
                 .map(entry -> {
-                    StoreProfile seller = entry.getValue().get(0).getVariant().getProduct().getSeller();
-                    // BUG-04: build sellerName safely — name or lastname may be null
-                    String sellerName = Stream.of(seller.getUser().getName(), seller.getUser().getLastname())
-                            .filter(Objects::nonNull)
-                            .collect(Collectors.joining(" "));
+                    Store store = entry.getValue().get(0).getVariant().getProduct().getStore();
                     List<CartItemResponse> itemResponses = entry.getValue().stream()
                             .map(this::toItemResponse)
                             .toList();
                     BigDecimal subtotal = itemResponses.stream()
                             .map(CartItemResponse::subtotal)
                             .reduce(BigDecimal.ZERO, BigDecimal::add);
-                    return new CartSellerGroupResponse(entry.getKey(), sellerName, itemResponses, subtotal);
+                    return new CartSellerGroupResponse(entry.getKey(), store.getName(), itemResponses, subtotal);
                 })
                 .toList();
 

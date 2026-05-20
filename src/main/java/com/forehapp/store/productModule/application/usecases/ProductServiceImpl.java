@@ -1,6 +1,7 @@
 package com.forehapp.store.productModule.application.usecases;
 
 import com.forehapp.store.general.exceptions.BadRequestException;
+import com.forehapp.store.general.exceptions.ForbiddenException;
 import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.productModule.application.dto.CreateProductRequestDto;
 import com.forehapp.store.productModule.application.dto.CreateVariantDto;
@@ -14,9 +15,10 @@ import com.forehapp.store.productModule.domain.model.*;
 import com.forehapp.store.general.storage.StorageService;
 import com.forehapp.store.productModule.domain.ports.in.IProductService;
 import com.forehapp.store.productModule.domain.ports.out.*;
-import com.forehapp.store.userModule.domain.model.StoreProfile;
-import com.forehapp.store.userModule.domain.model.StoreRole;
-import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
+import com.forehapp.store.storeModule.domain.model.Store;
+import com.forehapp.store.storeModule.domain.model.StoreMembership;
+import com.forehapp.store.storeModule.domain.model.StoreMemberRole;
+import com.forehapp.store.storeModule.domain.ports.out.IStoreMembershipDao;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,7 +36,7 @@ public class ProductServiceImpl implements IProductService {
     private final ILineDao lineDao;
     private final ICategoryDao categoryDao;
     private final IAttributeValueDao attributeValueDao;
-    private final IStoreProfileDao storeProfileDao;
+    private final IStoreMembershipDao membershipDao;
     private final IProductImageDao productImageDao;
     private final IProductVariantDao variantDao;
     private final IInventoryMovementDao movementDao;
@@ -45,7 +47,7 @@ public class ProductServiceImpl implements IProductService {
                               ILineDao lineDao,
                               ICategoryDao categoryDao,
                               IAttributeValueDao attributeValueDao,
-                              IStoreProfileDao storeProfileDao,
+                              IStoreMembershipDao membershipDao,
                               IProductImageDao productImageDao,
                               IProductVariantDao variantDao,
                               IInventoryMovementDao movementDao,
@@ -55,7 +57,7 @@ public class ProductServiceImpl implements IProductService {
         this.lineDao = lineDao;
         this.categoryDao = categoryDao;
         this.attributeValueDao = attributeValueDao;
-        this.storeProfileDao = storeProfileDao;
+        this.membershipDao = membershipDao;
         this.productImageDao = productImageDao;
         this.variantDao = variantDao;
         this.movementDao = movementDao;
@@ -64,8 +66,8 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    public ProductResponse createProduct(CreateProductRequestDto dto, Long userId) {
-        StoreProfile seller = resolveSeller(userId);
+    public ProductResponse createProduct(CreateProductRequestDto dto, Long storeId, Long userId) {
+        Store store = resolveStoreAccess(storeId, userId).getStore();
 
         Brand brand = brandDao.findById(dto.getBrandId())
                 .orElseThrow(() -> new NotFoundException("Brand not found"));
@@ -83,7 +85,7 @@ public class ProductServiceImpl implements IProductService {
                 .orElseThrow(() -> new NotFoundException("Category not found"));
 
         Product product = new Product();
-        product.setSeller(seller);
+        product.setStore(store);
         product.setTitle(dto.getTitle().trim());
         product.setDescription(dto.getDescription() != null ? dto.getDescription().trim() : null);
         product.setBrand(brand);
@@ -96,8 +98,9 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    public ProductResponse updateProduct(Long productId, UpdateProductRequestDto dto, Long userId) {
-        Product product = resolveOwnedProduct(productId, userId);
+    public ProductResponse updateProduct(Long productId, UpdateProductRequestDto dto, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        Product product = resolveStoreProduct(productId, storeId);
 
         if (dto.getTitle() != null) {
             product.setTitle(dto.getTitle().trim());
@@ -127,8 +130,9 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    public ProductVariantResponse addVariant(Long productId, CreateVariantDto dto, Long userId) {
-        Product product = resolveOwnedProduct(productId, userId);
+    public ProductVariantResponse addVariant(Long productId, CreateVariantDto dto, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        Product product = resolveStoreProduct(productId, storeId);
 
         if (variantDao.existsBySku(dto.getSku().trim())) {
             throw new BadRequestException("SKU already exists: " + dto.getSku());
@@ -164,8 +168,9 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    public ProductVariantResponse updateVariant(Long productId, Long variantId, UpdateVariantDto dto, Long userId) {
-        resolveOwnedProduct(productId, userId);
+    public ProductVariantResponse updateVariant(Long productId, Long variantId, UpdateVariantDto dto, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        resolveStoreProduct(productId, storeId);
 
         ProductVariant variant = variantDao.findByIdAndProductId(variantId, productId)
                 .orElseThrow(() -> new NotFoundException("Variant not found"));
@@ -187,8 +192,9 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    public ProductResponse publish(Long productId, Long userId) {
-        Product product = resolveOwnedProduct(productId, userId);
+    public ProductResponse publish(Long productId, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        Product product = resolveStoreProduct(productId, storeId);
 
         if (product.getStatus() == ProductStatus.ACTIVE) {
             throw new BadRequestException("Product is already active");
@@ -213,8 +219,9 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    public ProductResponse deactivate(Long productId, Long userId) {
-        Product product = resolveOwnedProduct(productId, userId);
+    public ProductResponse deactivate(Long productId, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        Product product = resolveStoreProduct(productId, storeId);
 
         if (product.getStatus() == ProductStatus.DRAFT) {
             throw new BadRequestException("Product is still a draft — delete it instead");
@@ -229,8 +236,9 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    public ProductResponse activate(Long productId, Long userId) {
-        Product product = resolveOwnedProduct(productId, userId);
+    public ProductResponse activate(Long productId, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        Product product = resolveStoreProduct(productId, storeId);
 
         if (product.getStatus() == ProductStatus.DRAFT) {
             throw new BadRequestException("Use the publish endpoint to activate a draft product");
@@ -245,8 +253,9 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    public void deleteProduct(Long productId, Long userId) {
-        Product product = resolveOwnedProduct(productId, userId);
+    public void deleteProduct(Long productId, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        Product product = resolveStoreProduct(productId, storeId);
         if (product.getStatus() != ProductStatus.DRAFT) {
             throw new BadRequestException("Only DRAFT products can be deleted. Deactivate it instead.");
         }
@@ -258,8 +267,9 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    public void deleteVariant(Long productId, Long variantId, Long userId) {
-        Product product = resolveOwnedProduct(productId, userId);
+    public void deleteVariant(Long productId, Long variantId, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        Product product = resolveStoreProduct(productId, storeId);
         ProductVariant variant = variantDao.findByIdAndProductId(variantId, productId)
                 .orElseThrow(() -> new NotFoundException("Variant not found"));
 
@@ -280,8 +290,9 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional(readOnly = true)
-    public SellerProductDetailResponse getSellerProductById(Long productId, Long userId) {
-        Product product = resolveOwnedProduct(productId, userId);
+    public SellerProductDetailResponse getStoreProductById(Long productId, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        Product product = resolveStoreProduct(productId, storeId);
         List<ProductImageResponse> images = productImageDao.findByProductId(productId).stream()
                 .map(img -> new ProductImageResponse(img, storageService.presign(img.getS3Key(), Duration.ofDays(7))))
                 .toList();
@@ -290,25 +301,21 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<ProductResponse> getSellerProducts(Long userId) {
-        StoreProfile seller = resolveSeller(userId);
-        return productDao.findAllBySellerId(seller.getId()).stream()
+    public List<ProductResponse> getStoreProducts(Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        return productDao.findAllByStoreId(storeId).stream()
                 .map(ProductResponse::new)
                 .toList();
     }
 
-    private StoreProfile resolveSeller(Long userId) {
-        StoreProfile seller = storeProfileDao.findByUserId(userId)
-                .orElseThrow(() -> new NotFoundException("Store profile not found"));
-        if (!seller.getRoles().contains(StoreRole.SELLER)) {
-            throw new BadRequestException("User does not have SELLER role");
-        }
-        return seller;
+    private StoreMembership resolveStoreAccess(Long storeId, Long userId) {
+        return membershipDao.findActiveByStoreIdAndUserId(storeId, userId)
+                .filter(m -> m.getRole() != StoreMemberRole.STAFF)
+                .orElseThrow(() -> new ForbiddenException("You do not have permission to manage this store's products"));
     }
 
-    private Product resolveOwnedProduct(Long productId, Long userId) {
-        StoreProfile seller = resolveSeller(userId);
-        return productDao.findByIdAndSellerId(productId, seller.getId())
+    private Product resolveStoreProduct(Long productId, Long storeId) {
+        return productDao.findByIdAndStoreId(productId, storeId)
                 .orElseThrow(() -> new NotFoundException("Product not found"));
     }
 

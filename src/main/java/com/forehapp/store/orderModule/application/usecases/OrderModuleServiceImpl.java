@@ -14,9 +14,7 @@ import com.forehapp.store.orderModule.infrastructure.web.dto.SellerOrderGroupDto
 import com.forehapp.store.paymentModule.domain.model.PaymentMethod;
 import com.forehapp.store.paymentModule.domain.model.PaymentStatus;
 import com.forehapp.store.paymentModule.infrastructure.persistence.IPaymentRepository;
-import com.forehapp.store.userModule.domain.model.StoreProfile;
-import com.forehapp.store.userModule.domain.model.StoreRole;
-import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
+import com.forehapp.store.storeModule.domain.ports.out.IStoreMembershipDao;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -33,43 +31,43 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
     private final IOrderGroupDao orderGroupDao;
     private final IOrderDao orderDao;
     private final IPaymentRepository paymentRepository;
-    private final IStoreProfileDao storeProfileDao;
+    private final IStoreMembershipDao membershipDao;
     private final ApplicationEventPublisher eventPublisher;
 
     public OrderModuleServiceImpl(IOrderGroupDao orderGroupDao,
                                   IOrderDao orderDao,
                                   IPaymentRepository paymentRepository,
-                                  IStoreProfileDao storeProfileDao,
+                                  IStoreMembershipDao membershipDao,
                                   ApplicationEventPublisher eventPublisher) {
         this.orderGroupDao = orderGroupDao;
         this.orderDao = orderDao;
         this.paymentRepository = paymentRepository;
-        this.storeProfileDao = storeProfileDao;
+        this.membershipDao = membershipDao;
         this.eventPublisher = eventPublisher;
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<SellerOrderGroupDto> getSellerGroups(Long userId) {
-        StoreProfile seller = resolveSeller(userId);
-        return orderGroupDao.findAllBySellerIdWithDetails(seller.getId()).stream()
+    public List<SellerOrderGroupDto> getSellerGroups(Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        return orderGroupDao.findAllByStoreIdWithDetails(storeId).stream()
                 .map(this::toSellerDto)
                 .toList();
     }
 
     @Override
     @Transactional(readOnly = true)
-    public SellerOrderGroupDto getSellerGroupById(Long userId, Long groupId) {
-        StoreProfile seller = resolveSeller(userId);
-        OrderSellerGroup group = resolveGroup(groupId, seller.getId());
+    public SellerOrderGroupDto getSellerGroupById(Long storeId, Long groupId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        OrderSellerGroup group = resolveGroup(groupId, storeId);
         return toSellerDto(group);
     }
 
     @Override
     @Transactional
-    public void prepareGroup(Long userId, Long groupId) {
-        StoreProfile seller = resolveSeller(userId);
-        OrderSellerGroup group = resolveGroup(groupId, seller.getId());
+    public void prepareGroup(Long storeId, Long groupId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        OrderSellerGroup group = resolveGroup(groupId, storeId);
 
         if (group.getStatus() != OrderSellerGroupStatus.PENDING) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -85,9 +83,9 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
 
     @Override
     @Transactional
-    public void shipGroup(Long userId, Long groupId, String trackingNumber) {
-        StoreProfile seller = resolveSeller(userId);
-        OrderSellerGroup group = resolveGroup(groupId, seller.getId());
+    public void shipGroup(Long storeId, Long groupId, String trackingNumber, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        OrderSellerGroup group = resolveGroup(groupId, storeId);
 
         if (group.getStatus() != OrderSellerGroupStatus.PREPARING) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -104,9 +102,9 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
 
     @Override
     @Transactional
-    public void deliverGroup(Long userId, Long groupId) {
-        StoreProfile seller = resolveSeller(userId);
-        OrderSellerGroup group = resolveGroup(groupId, seller.getId());
+    public void deliverGroup(Long storeId, Long groupId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        OrderSellerGroup group = resolveGroup(groupId, storeId);
 
         if (group.getStatus() != OrderSellerGroupStatus.SHIPPED) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -119,7 +117,6 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
 
         eventPublisher.publishEvent(buildStatusEvent(group));
 
-        // For COD: when all groups are delivered, mark order PAID and approve payment
         Long orderId = group.getOrder().getId();
         orderDao.findBasicById(orderId).ifPresent(order -> {
             if (PaymentMethod.CASH_ON_DELIVERY.name().equals(order.getPaymentMethod())) {
@@ -139,9 +136,9 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
 
     @Override
     @Transactional
-    public void cancelGroup(Long userId, Long groupId, String reason) {
-        StoreProfile seller = resolveSeller(userId);
-        OrderSellerGroup group = resolveGroup(groupId, seller.getId());
+    public void cancelGroup(Long storeId, Long groupId, String reason, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        OrderSellerGroup group = resolveGroup(groupId, storeId);
 
         if (group.getStatus() == OrderSellerGroupStatus.SHIPPED
                 || group.getStatus() == OrderSellerGroupStatus.DELIVERED
@@ -160,19 +157,16 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
 
     // ── helpers ────────────────────────────────────────────────────────────────
 
-    private StoreProfile resolveSeller(Long userId) {
-        StoreProfile profile = storeProfileDao.findByUserId(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Store profile not found"));
-        if (!profile.getRoles().contains(StoreRole.SELLER)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "User does not have SELLER role");
-        }
-        return profile;
+    private void resolveStoreAccess(Long storeId, Long userId) {
+        membershipDao.findActiveByStoreIdAndUserId(storeId, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "You are not an active member of this store"));
     }
 
-    private OrderSellerGroup resolveGroup(Long groupId, Long sellerId) {
+    private OrderSellerGroup resolveGroup(Long groupId, Long storeId) {
         OrderSellerGroup group = orderGroupDao.findByIdWithDetails(groupId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order group not found"));
-        if (!group.getSeller().getId().equals(sellerId)) {
+        if (!group.getStore().getId().equals(storeId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to this order group");
         }
         return group;

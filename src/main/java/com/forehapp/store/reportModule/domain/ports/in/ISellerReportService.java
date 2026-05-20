@@ -7,6 +7,6 @@ import java.time.LocalDate;
 import java.util.List;
 
 public interface ISellerReportService {
-    BusinessSummaryResponse getMySummary(Long userId, LocalDate from, LocalDate to);
-    List<TopProductResponse> getMyTopProducts(Long userId, LocalDate from, LocalDate to, int limit);
+    BusinessSummaryResponse getMySummary(Long storeId, Long userId, LocalDate from, LocalDate to);
+    List<TopProductResponse> getMyTopProducts(Long storeId, Long userId, LocalDate from, LocalDate to, int limit);
 }

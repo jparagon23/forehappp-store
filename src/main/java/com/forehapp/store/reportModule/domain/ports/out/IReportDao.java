@@ -28,12 +28,12 @@ public interface IReportDao {
     List<SellerSalesResponse> getSellerSales(LocalDateTime from, LocalDateTime to);
 
     // --- Seller: summary scalars ---
-    Long countSellerOrders(Long sellerId, LocalDateTime from, LocalDateTime to);
-    BigDecimal sumSellerRevenue(Long sellerId, LocalDateTime from, LocalDateTime to);
-    BigDecimal avgSellerTicket(Long sellerId, LocalDateTime from, LocalDateTime to);
-    Long countSellerReturns(Long sellerId, LocalDateTime from, LocalDateTime to);
-    BigDecimal sumSellerRefunded(Long sellerId, LocalDateTime from, LocalDateTime to);
+    Long countSellerOrders(Long storeId, LocalDateTime from, LocalDateTime to);
+    BigDecimal sumSellerRevenue(Long storeId, LocalDateTime from, LocalDateTime to);
+    BigDecimal avgSellerTicket(Long storeId, LocalDateTime from, LocalDateTime to);
+    Long countSellerReturns(Long storeId, LocalDateTime from, LocalDateTime to);
+    BigDecimal sumSellerRefunded(Long storeId, LocalDateTime from, LocalDateTime to);
 
     // --- Seller: rankings ---
-    List<TopProductResponse> getSellerTopProducts(Long sellerId, LocalDateTime from, LocalDateTime to, int limit);
+    List<TopProductResponse> getSellerTopProducts(Long storeId, LocalDateTime from, LocalDateTime to, int limit);
 }

@@ -1,6 +1,7 @@
 package com.forehapp.store.productModule.application.usecases;
 
 import com.forehapp.store.general.exceptions.BadRequestException;
+import com.forehapp.store.general.exceptions.ForbiddenException;
 import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.general.storage.StorageService;
 import com.forehapp.store.productModule.application.dto.ProductImageResponse;
@@ -9,7 +10,8 @@ import com.forehapp.store.productModule.domain.model.ProductImage;
 import com.forehapp.store.productModule.domain.ports.in.IProductImageService;
 import com.forehapp.store.productModule.domain.ports.out.IProductDao;
 import com.forehapp.store.productModule.domain.ports.out.IProductImageDao;
-import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
+import com.forehapp.store.storeModule.domain.model.StoreMemberRole;
+import com.forehapp.store.storeModule.domain.ports.out.IStoreMembershipDao;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -28,24 +30,24 @@ public class ProductImageServiceImpl implements IProductImageService {
     private final StorageService storageService;
     private final IProductImageDao imageDao;
     private final IProductDao productDao;
-    private final IStoreProfileDao storeProfileDao;
+    private final IStoreMembershipDao membershipDao;
 
     public ProductImageServiceImpl(StorageService storageService,
                                    IProductImageDao imageDao,
                                    IProductDao productDao,
-                                   IStoreProfileDao storeProfileDao) {
+                                   IStoreMembershipDao membershipDao) {
         this.storageService = storageService;
         this.imageDao = imageDao;
         this.productDao = productDao;
-        this.storeProfileDao = storeProfileDao;
+        this.membershipDao = membershipDao;
     }
 
     @Override
     @Transactional
-    public ProductImageResponse upload(Long productId, MultipartFile file, Long userId) {
+    public ProductImageResponse upload(Long productId, MultipartFile file, Long storeId, Long userId) {
         validateFile(file);
-        Long sellerId = resolveSellerId(userId);
-        Product product = productDao.findByIdAndSellerId(productId, sellerId)
+        resolveStoreAccess(storeId, userId);
+        Product product = productDao.findByIdAndStoreId(productId, storeId)
                 .orElseThrow(() -> new NotFoundException("Producto no encontrado"));
 
         StorageService.UploadResult result = storageService.upload(file, "products/" + productId);
@@ -63,9 +65,9 @@ public class ProductImageServiceImpl implements IProductImageService {
 
     @Override
     @Transactional
-    public void delete(Long productId, Long imageId, Long userId) {
-        Long sellerId = resolveSellerId(userId);
-        productDao.findByIdAndSellerId(productId, sellerId)
+    public void delete(Long productId, Long imageId, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        productDao.findByIdAndStoreId(productId, storeId)
                 .orElseThrow(() -> new NotFoundException("Producto no encontrado"));
 
         ProductImage image = imageDao.findById(imageId)
@@ -79,17 +81,17 @@ public class ProductImageServiceImpl implements IProductImageService {
         imageDao.delete(image);
     }
 
-    private Long resolveSellerId(Long userId) {
-        return storeProfileDao.findByUserId(userId)
-                .orElseThrow(() -> new NotFoundException("Store profile not found"))
-                .getId();
-    }
-
     @Override
     public List<ProductImageResponse> getByProduct(Long productId) {
         return imageDao.findByProductId(productId).stream()
                 .map(img -> new ProductImageResponse(img, storageService.presign(img.getS3Key(), Duration.ofDays(7))))
                 .toList();
+    }
+
+    private void resolveStoreAccess(Long storeId, Long userId) {
+        membershipDao.findActiveByStoreIdAndUserId(storeId, userId)
+                .filter(m -> m.getRole() != StoreMemberRole.STAFF)
+                .orElseThrow(() -> new ForbiddenException("You do not have permission to manage this store's products"));
     }
 
     private void validateFile(MultipartFile file) {

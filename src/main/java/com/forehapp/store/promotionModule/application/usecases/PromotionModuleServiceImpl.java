@@ -7,6 +7,9 @@ import com.forehapp.store.promotionModule.domain.model.Coupon;
 import com.forehapp.store.promotionModule.domain.model.PromotionStatus;
 import com.forehapp.store.promotionModule.domain.ports.in.IPromotionModuleService;
 import com.forehapp.store.promotionModule.domain.ports.out.ICouponDao;
+import com.forehapp.store.storeModule.domain.model.Store;
+import com.forehapp.store.storeModule.domain.model.StoreMembership;
+import com.forehapp.store.storeModule.domain.ports.out.IStoreMembershipDao;
 import com.forehapp.store.userModule.domain.model.StoreProfile;
 import com.forehapp.store.userModule.domain.model.StoreRole;
 import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
@@ -22,17 +25,21 @@ import org.springframework.web.server.ResponseStatusException;
 public class PromotionModuleServiceImpl implements IPromotionModuleService {
 
     private final ICouponDao couponDao;
+    private final IStoreMembershipDao membershipDao;
     private final IStoreProfileDao storeProfileDao;
 
-    public PromotionModuleServiceImpl(ICouponDao couponDao, IStoreProfileDao storeProfileDao) {
+    public PromotionModuleServiceImpl(ICouponDao couponDao,
+                                      IStoreMembershipDao membershipDao,
+                                      IStoreProfileDao storeProfileDao) {
         this.couponDao = couponDao;
+        this.membershipDao = membershipDao;
         this.storeProfileDao = storeProfileDao;
     }
 
     @Override
     @Transactional
-    public CouponResponse createCoupon(Long userId, CreateCouponRequestDto dto) {
-        StoreProfile seller = requireSeller(userId);
+    public CouponResponse createCoupon(Long storeId, Long userId, CreateCouponRequestDto dto) {
+        Store store = resolveStoreAccess(storeId, userId).getStore();
 
         if (couponDao.findByCode(dto.code().toUpperCase()).isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Coupon code already exists");
@@ -42,7 +49,7 @@ public class PromotionModuleServiceImpl implements IPromotionModuleService {
         }
 
         Coupon coupon = new Coupon();
-        coupon.setSeller(seller);
+        coupon.setStore(store);
         coupon.setCode(dto.code().toUpperCase());
         coupon.setDescription(dto.description());
         coupon.setDiscountType(dto.discountType());
@@ -58,9 +65,9 @@ public class PromotionModuleServiceImpl implements IPromotionModuleService {
 
     @Override
     @Transactional
-    public CouponResponse updateCoupon(Long userId, Long couponId, UpdateCouponRequestDto dto) {
-        StoreProfile seller = requireSeller(userId);
-        Coupon coupon = findOwnedCoupon(couponId, seller.getId());
+    public CouponResponse updateCoupon(Long storeId, Long userId, Long couponId, UpdateCouponRequestDto dto) {
+        resolveStoreAccess(storeId, userId);
+        Coupon coupon = findStoreCoupon(couponId, storeId);
 
         if (dto.description() != null) coupon.setDescription(dto.description());
         if (dto.minOrderAmount() != null) coupon.setMinOrderAmount(dto.minOrderAmount());
@@ -73,26 +80,26 @@ public class PromotionModuleServiceImpl implements IPromotionModuleService {
 
     @Override
     @Transactional
-    public CouponResponse deactivateCoupon(Long userId, Long couponId) {
-        StoreProfile seller = requireSeller(userId);
-        Coupon coupon = findOwnedCoupon(couponId, seller.getId());
+    public CouponResponse deactivateCoupon(Long storeId, Long userId, Long couponId) {
+        resolveStoreAccess(storeId, userId);
+        Coupon coupon = findStoreCoupon(couponId, storeId);
         coupon.setStatus(PromotionStatus.INACTIVA);
         return toResponse(couponDao.save(coupon));
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<CouponResponse> listMyCoupons(Long userId, int page, int size) {
-        StoreProfile seller = requireSeller(userId);
+    public Page<CouponResponse> listMyCoupons(Long storeId, Long userId, int page, int size) {
+        resolveStoreAccess(storeId, userId);
         PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        return couponDao.findBySellerId(seller.getId(), pageable).map(this::toResponse);
+        return couponDao.findByStoreId(storeId, pageable).map(this::toResponse);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public CouponResponse getCoupon(Long userId, Long couponId) {
-        StoreProfile seller = requireSeller(userId);
-        return toResponse(findOwnedCoupon(couponId, seller.getId()));
+    public CouponResponse getCoupon(Long storeId, Long userId, Long couponId) {
+        resolveStoreAccess(storeId, userId);
+        return toResponse(findStoreCoupon(couponId, storeId));
     }
 
     @Override
@@ -103,22 +110,19 @@ public class PromotionModuleServiceImpl implements IPromotionModuleService {
         return couponDao.findAll(pageable).map(this::toResponse);
     }
 
-    private Coupon findOwnedCoupon(Long couponId, Long sellerId) {
-        Coupon coupon = couponDao.findById(couponId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Coupon not found"));
-        if (!coupon.getSeller().getId().equals(sellerId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This coupon does not belong to you");
-        }
-        return coupon;
+    private StoreMembership resolveStoreAccess(Long storeId, Long userId) {
+        return membershipDao.findActiveByStoreIdAndUserId(storeId, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "You are not an active member of this store"));
     }
 
-    private StoreProfile requireSeller(Long userId) {
-        StoreProfile profile = storeProfileDao.findByUserId(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Store profile not found"));
-        if (!profile.getRoles().contains(StoreRole.SELLER)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Seller access required");
+    private Coupon findStoreCoupon(Long couponId, Long storeId) {
+        Coupon coupon = couponDao.findById(couponId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Coupon not found"));
+        if (!coupon.getStore().getId().equals(storeId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This coupon does not belong to this store");
         }
-        return profile;
+        return coupon;
     }
 
     private void requireAdmin(Long userId) {
@@ -130,11 +134,10 @@ public class PromotionModuleServiceImpl implements IPromotionModuleService {
     }
 
     private CouponResponse toResponse(Coupon c) {
-        String sellerName = c.getSeller().getUser().getName() + " " + c.getSeller().getUser().getLastname();
         return new CouponResponse(
                 c.getId(),
-                c.getSeller().getId(),
-                sellerName.trim(),
+                c.getStore().getId(),
+                c.getStore().getName(),
                 c.getCode(),
                 c.getDescription(),
                 c.getDiscountType().name(),

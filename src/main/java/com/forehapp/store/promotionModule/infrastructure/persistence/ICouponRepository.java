@@ -9,5 +9,5 @@ import java.util.Optional;
 
 public interface ICouponRepository extends JpaRepository<Coupon, Long> {
     Optional<Coupon> findByCode(String code);
-    Page<Coupon> findBySellerId(Long sellerId, Pageable pageable);
+    Page<Coupon> findByStoreId(Long storeId, Pageable pageable);
 }

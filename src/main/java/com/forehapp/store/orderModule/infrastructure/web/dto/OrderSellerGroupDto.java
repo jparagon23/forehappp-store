@@ -6,8 +6,8 @@ import java.util.List;
 
 public record OrderSellerGroupDto(
         Long groupId,
-        Long sellerId,
-        String sellerName,
+        Long storeId,
+        String storeName,
         String status,
         BigDecimal subtotal,
         String trackingNumber,

@@ -4,9 +4,7 @@ import com.forehapp.store.reportModule.application.dto.BusinessSummaryResponse;
 import com.forehapp.store.reportModule.application.dto.TopProductResponse;
 import com.forehapp.store.reportModule.domain.ports.in.ISellerReportService;
 import com.forehapp.store.reportModule.domain.ports.out.IReportDao;
-import com.forehapp.store.userModule.domain.model.StoreProfile;
-import com.forehapp.store.userModule.domain.model.StoreRole;
-import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
+import com.forehapp.store.storeModule.domain.ports.out.IStoreMembershipDao;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,50 +19,46 @@ import java.util.List;
 public class SellerReportServiceImpl implements ISellerReportService {
 
     private final IReportDao reportDao;
-    private final IStoreProfileDao storeProfileDao;
+    private final IStoreMembershipDao membershipDao;
 
-    public SellerReportServiceImpl(IReportDao reportDao, IStoreProfileDao storeProfileDao) {
+    public SellerReportServiceImpl(IReportDao reportDao, IStoreMembershipDao membershipDao) {
         this.reportDao = reportDao;
-        this.storeProfileDao = storeProfileDao;
+        this.membershipDao = membershipDao;
     }
 
     @Override
     @Transactional(readOnly = true)
-    public BusinessSummaryResponse getMySummary(Long userId, LocalDate from, LocalDate to) {
-        StoreProfile profile = requireSeller(userId);
-        Long sellerId = profile.getId();
+    public BusinessSummaryResponse getMySummary(Long storeId, Long userId, LocalDate from, LocalDate to) {
+        resolveStoreAccess(storeId, userId);
         LocalDateTime fromDt = from.atStartOfDay();
         LocalDateTime toDt = to.atTime(LocalTime.MAX);
 
         return new BusinessSummaryResponse(
-                reportDao.countSellerOrders(sellerId, fromDt, toDt),
-                reportDao.sumSellerRevenue(sellerId, fromDt, toDt),
-                reportDao.avgSellerTicket(sellerId, fromDt, toDt),
+                reportDao.countSellerOrders(storeId, fromDt, toDt),
+                reportDao.sumSellerRevenue(storeId, fromDt, toDt),
+                reportDao.avgSellerTicket(storeId, fromDt, toDt),
                 0L,
-                reportDao.countSellerReturns(sellerId, fromDt, toDt),
-                reportDao.sumSellerRefunded(sellerId, fromDt, toDt)
+                reportDao.countSellerReturns(storeId, fromDt, toDt),
+                reportDao.sumSellerRefunded(storeId, fromDt, toDt)
         );
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<TopProductResponse> getMyTopProducts(Long userId, LocalDate from, LocalDate to, int limit) {
-        StoreProfile profile = requireSeller(userId);
+    public List<TopProductResponse> getMyTopProducts(Long storeId, Long userId, LocalDate from, LocalDate to, int limit) {
+        resolveStoreAccess(storeId, userId);
         int safeLimit = Math.min(Math.max(limit, 1), 50);
         return reportDao.getSellerTopProducts(
-                profile.getId(),
+                storeId,
                 from.atStartOfDay(),
                 to.atTime(LocalTime.MAX),
                 safeLimit
         );
     }
 
-    private StoreProfile requireSeller(Long userId) {
-        StoreProfile profile = storeProfileDao.findByUserId(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Store profile not found"));
-        if (!profile.getRoles().contains(StoreRole.SELLER)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Seller access required");
-        }
-        return profile;
+    private void resolveStoreAccess(Long storeId, Long userId) {
+        membershipDao.findActiveByStoreIdAndUserId(storeId, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "You are not an active member of this store"));
     }
 }

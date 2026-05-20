@@ -79,39 +79,39 @@ public class ReportRepositoryImpl implements IReportDao {
     public List<SellerSalesResponse> getSellerSales(LocalDateTime from, LocalDateTime to) {
         return repository.getSellerSales(from, to).stream()
                 .map(p -> new SellerSalesResponse(
-                        p.getSellerId(), p.getSellerName(),
+                        p.getStoreId(), p.getStoreName(),
                         p.getTotalOrders(), p.getTotalRevenue()))
                 .toList();
     }
 
     @Override
-    public Long countSellerOrders(Long sellerId, LocalDateTime from, LocalDateTime to) {
-        return repository.countSellerOrders(sellerId, from, to);
+    public Long countSellerOrders(Long storeId, LocalDateTime from, LocalDateTime to) {
+        return repository.countSellerOrders(storeId, from, to);
     }
 
     @Override
-    public BigDecimal sumSellerRevenue(Long sellerId, LocalDateTime from, LocalDateTime to) {
-        return repository.sumSellerRevenue(sellerId, from, to);
+    public BigDecimal sumSellerRevenue(Long storeId, LocalDateTime from, LocalDateTime to) {
+        return repository.sumSellerRevenue(storeId, from, to);
     }
 
     @Override
-    public BigDecimal avgSellerTicket(Long sellerId, LocalDateTime from, LocalDateTime to) {
-        return repository.avgSellerTicket(sellerId, from, to);
+    public BigDecimal avgSellerTicket(Long storeId, LocalDateTime from, LocalDateTime to) {
+        return repository.avgSellerTicket(storeId, from, to);
     }
 
     @Override
-    public Long countSellerReturns(Long sellerId, LocalDateTime from, LocalDateTime to) {
-        return repository.countSellerReturns(sellerId, from, to);
+    public Long countSellerReturns(Long storeId, LocalDateTime from, LocalDateTime to) {
+        return repository.countSellerReturns(storeId, from, to);
     }
 
     @Override
-    public BigDecimal sumSellerRefunded(Long sellerId, LocalDateTime from, LocalDateTime to) {
-        return repository.sumSellerRefunded(sellerId, from, to);
+    public BigDecimal sumSellerRefunded(Long storeId, LocalDateTime from, LocalDateTime to) {
+        return repository.sumSellerRefunded(storeId, from, to);
     }
 
     @Override
-    public List<TopProductResponse> getSellerTopProducts(Long sellerId, LocalDateTime from, LocalDateTime to, int limit) {
-        return repository.getSellerTopProducts(sellerId, from, to, limit).stream()
+    public List<TopProductResponse> getSellerTopProducts(Long storeId, LocalDateTime from, LocalDateTime to, int limit) {
+        return repository.getSellerTopProducts(storeId, from, to, limit).stream()
                 .map(p -> new TopProductResponse(
                         p.getProductId(), p.getProductTitle(), p.getVariantSku(),
                         p.getUnitsSold(), p.getRevenue()))

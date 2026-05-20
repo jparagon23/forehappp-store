@@ -24,11 +24,11 @@ public interface IOrderSellerGroupRepository extends JpaRepository<OrderSellerGr
             LEFT JOIN FETCH g.order o
             LEFT JOIN FETCH o.buyer b
             LEFT JOIN FETCH b.user
-            WHERE g.seller.id = :sellerId
+            WHERE g.store.id = :storeId
               AND g.status <> com.forehapp.store.orderModule.domain.model.OrderSellerGroupStatus.PENDING
             ORDER BY o.createdAt DESC
             """)
-    List<OrderSellerGroup> findAllBySellerIdWithDetails(@Param("sellerId") Long sellerId);
+    List<OrderSellerGroup> findAllByStoreIdWithDetails(@Param("storeId") Long storeId);
 
     List<OrderSellerGroup> findAllByOrder_Id(Long orderId);
 }

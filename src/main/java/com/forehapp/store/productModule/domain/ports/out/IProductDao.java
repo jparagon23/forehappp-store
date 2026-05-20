@@ -10,8 +10,8 @@ import java.util.Optional;
 
 public interface IProductDao {
     Optional<Product> findById(Long id);
-    Optional<Product> findByIdAndSellerId(Long productId, Long sellerId);
-    List<Product> findAllBySellerId(Long sellerId);
+    Optional<Product> findByIdAndStoreId(Long productId, Long storeId);
+    List<Product> findAllByStoreId(Long storeId);
     Page<Product> findActiveProducts(String search, Long categoryId, Long brandId, Pageable pageable);
     Product save(Product product);
     void delete(Product product);

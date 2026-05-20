@@ -64,6 +64,32 @@ CREATE TABLE IF NOT EXISTS store_profile_roles (
     CONSTRAINT fk_spr_role    FOREIGN KEY (role)             REFERENCES store_roles(role_name)
 );
 
+-- =====================
+-- Store Management
+-- =====================
+CREATE TABLE IF NOT EXISTS stores (
+    store_id    BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(150) NOT NULL,
+    slug        VARCHAR(100) NOT NULL,
+    description TEXT,
+    logo_s3_key VARCHAR(500),
+    status      VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    created_at  DATETIME NOT NULL,
+    CONSTRAINT uk_store_slug UNIQUE (slug)
+);
+
+CREATE TABLE IF NOT EXISTS store_memberships (
+    membership_id    BIGINT AUTO_INCREMENT PRIMARY KEY,
+    store_id         BIGINT NOT NULL,
+    store_profile_id BIGINT NOT NULL,
+    role             VARCHAR(20) NOT NULL,
+    joined_at        DATETIME NOT NULL,
+    active           TINYINT(1) NOT NULL DEFAULT 1,
+    CONSTRAINT uk_store_membership UNIQUE (store_id, store_profile_id),
+    CONSTRAINT fk_sm_store   FOREIGN KEY (store_id)         REFERENCES stores(store_id),
+    CONSTRAINT fk_sm_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id)
+);
+
 CREATE TABLE IF NOT EXISTS store_brands (
     brand_id    BIGINT AUTO_INCREMENT PRIMARY KEY,
     description VARCHAR(150) NOT NULL
@@ -107,7 +133,7 @@ CREATE TABLE IF NOT EXISTS store_category_attributes (
 
 CREATE TABLE IF NOT EXISTS store_products (
     product_id   BIGINT AUTO_INCREMENT PRIMARY KEY,
-    seller_id    BIGINT NOT NULL,
+    store_id     BIGINT NOT NULL,
     title        VARCHAR(255) NOT NULL,
     description  TEXT,
     brand_id     BIGINT NOT NULL,
@@ -115,7 +141,7 @@ CREATE TABLE IF NOT EXISTS store_products (
     category_id  BIGINT NOT NULL,
     status       VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
     created_at   DATETIME NOT NULL,
-    CONSTRAINT store_fk_prod_seller   FOREIGN KEY (seller_id)   REFERENCES store_profiles(store_profile_id),
+    CONSTRAINT store_fk_prod_store    FOREIGN KEY (store_id)    REFERENCES stores(store_id),
     CONSTRAINT store_fk_prod_brand    FOREIGN KEY (brand_id)    REFERENCES store_brands(brand_id),
     CONSTRAINT store_fk_prod_line     FOREIGN KEY (line_id)     REFERENCES store_lines(line_id),
     CONSTRAINT store_fk_prod_category FOREIGN KEY (category_id) REFERENCES store_categories(category_id)
@@ -175,15 +201,15 @@ CREATE TABLE IF NOT EXISTS store_orders (
 CREATE TABLE IF NOT EXISTS store_order_seller_groups (
     group_id        BIGINT AUTO_INCREMENT PRIMARY KEY,
     order_id        BIGINT NOT NULL,
-    seller_id       BIGINT NOT NULL,
+    store_id        BIGINT NOT NULL,
     status          VARCHAR(20) NOT NULL DEFAULT 'PENDING',
     subtotal        DECIMAL(14,2) NOT NULL,
     tracking_number VARCHAR(100),
     prepared_at     DATETIME,
     shipped_at      DATETIME,
     delivered_at    DATETIME,
-    CONSTRAINT store_fk_osg_order  FOREIGN KEY (order_id)  REFERENCES store_orders(order_id),
-    CONSTRAINT store_fk_osg_seller FOREIGN KEY (seller_id) REFERENCES store_profiles(store_profile_id)
+    CONSTRAINT store_fk_osg_order FOREIGN KEY (order_id) REFERENCES store_orders(order_id),
+    CONSTRAINT store_fk_osg_store FOREIGN KEY (store_id) REFERENCES stores(store_id)
 );
 
 SET @s = (SELECT IF(COUNT(*)=0,'ALTER TABLE store_order_seller_groups ADD COLUMN tracking_number VARCHAR(100)','SELECT 1') FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_order_seller_groups' AND COLUMN_NAME='tracking_number');
@@ -288,7 +314,7 @@ CREATE TABLE IF NOT EXISTS store_product_reviews (
 
 CREATE TABLE IF NOT EXISTS store_coupons (
     coupon_id         BIGINT AUTO_INCREMENT PRIMARY KEY,
-    seller_id         BIGINT NOT NULL,
+    store_id          BIGINT NOT NULL,
     code              VARCHAR(50) NOT NULL,
     description       VARCHAR(255),
     discount_type     VARCHAR(20) NOT NULL,
@@ -302,7 +328,7 @@ CREATE TABLE IF NOT EXISTS store_coupons (
     status            VARCHAR(20) NOT NULL DEFAULT 'ACTIVA',
     created_at        DATETIME NOT NULL,
     CONSTRAINT uk_coupon_code UNIQUE (code),
-    CONSTRAINT fk_coupon_seller FOREIGN KEY (seller_id) REFERENCES store_profiles(store_profile_id)
+    CONSTRAINT fk_coupon_store FOREIGN KEY (store_id) REFERENCES stores(store_id)
 );
 
 CREATE TABLE IF NOT EXISTS store_coupon_redemptions (
@@ -339,3 +365,62 @@ CREATE TABLE IF NOT EXISTS store_return_items (
     CONSTRAINT fk_ri_return     FOREIGN KEY (return_id)     REFERENCES store_return_requests(return_id),
     CONSTRAINT fk_ri_order_item FOREIGN KEY (order_item_id) REFERENCES store_order_items(item_id)
 );
+
+-- =====================
+-- Migration: seller_id → store_id (existing DBs)
+-- =====================
+
+SET @s = (SELECT IF(COUNT(*)=0,
+  'ALTER TABLE store_products ADD COLUMN store_id BIGINT, ADD CONSTRAINT store_fk_prod_store FOREIGN KEY (store_id) REFERENCES stores(store_id)',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_products' AND COLUMN_NAME='store_id');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*)>0,
+  'ALTER TABLE store_products DROP FOREIGN KEY store_fk_prod_seller',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_products' AND CONSTRAINT_NAME='store_fk_prod_seller');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*)>0,
+  'ALTER TABLE store_products DROP COLUMN seller_id',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_products' AND COLUMN_NAME='seller_id');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*)=0,
+  'ALTER TABLE store_order_seller_groups ADD COLUMN store_id BIGINT, ADD CONSTRAINT store_fk_osg_store FOREIGN KEY (store_id) REFERENCES stores(store_id)',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_order_seller_groups' AND COLUMN_NAME='store_id');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*)>0,
+  'ALTER TABLE store_order_seller_groups DROP FOREIGN KEY store_fk_osg_seller',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_order_seller_groups' AND CONSTRAINT_NAME='store_fk_osg_seller');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*)>0,
+  'ALTER TABLE store_order_seller_groups DROP COLUMN seller_id',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_order_seller_groups' AND COLUMN_NAME='seller_id');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- Migrate store_coupons: seller_id → store_id
+SET @s = (SELECT IF(COUNT(*)=0,
+  'ALTER TABLE store_coupons ADD COLUMN store_id BIGINT NOT NULL DEFAULT 0, ADD CONSTRAINT fk_coupon_store FOREIGN KEY (store_id) REFERENCES stores(store_id)',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_coupons' AND COLUMN_NAME='store_id');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*)>0,
+  'ALTER TABLE store_coupons DROP FOREIGN KEY fk_coupon_seller',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_coupons' AND CONSTRAINT_NAME='fk_coupon_seller');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*)>0,
+  'ALTER TABLE store_coupons DROP COLUMN seller_id',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_coupons' AND COLUMN_NAME='seller_id');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;

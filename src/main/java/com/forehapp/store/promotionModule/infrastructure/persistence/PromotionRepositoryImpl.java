@@ -37,8 +37,8 @@ public class PromotionRepositoryImpl implements ICouponDao {
     }
 
     @Override
-    public Page<Coupon> findBySellerId(Long sellerId, Pageable pageable) {
-        return couponRepository.findBySellerId(sellerId, pageable);
+    public Page<Coupon> findByStoreId(Long storeId, Pageable pageable) {
+        return couponRepository.findByStoreId(storeId, pageable);
     }
 
     @Override
