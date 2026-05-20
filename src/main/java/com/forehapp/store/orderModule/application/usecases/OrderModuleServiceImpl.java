@@ -230,6 +230,8 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
                 group.getOrder().getShippingAddress(),
                 group.getOrder().getShippingCity(),
                 group.getOrder().getShippingCountry(),
+                group.getOrder().getPaymentMethod(),
+                group.getOrder().getStatus().name(),
                 group.getStatus().name(),
                 group.getSubtotal(),
                 group.getTrackingNumber(),
