@@ -13,6 +13,7 @@ import com.forehapp.store.productModule.domain.ports.out.IProductDao;
 import com.forehapp.store.productModule.domain.ports.out.IProductImageDao;
 import com.forehapp.store.storeModule.domain.model.StoreMemberRole;
 import com.forehapp.store.storeModule.domain.ports.out.IStoreMembershipDao;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -45,6 +46,7 @@ public class ProductImageServiceImpl implements IProductImageService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "public-products", allEntries = true)
     public ProductImageResponse upload(Long productId, MultipartFile file, Long storeId, Long userId) {
         validateFile(file);
         resolveStoreAccess(storeId, userId);
@@ -66,6 +68,7 @@ public class ProductImageServiceImpl implements IProductImageService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "public-products", allEntries = true)
     public void delete(Long productId, Long imageId, Long storeId, Long userId) {
         resolveStoreAccess(storeId, userId);
         productDao.findByIdAndStoreId(productId, storeId)

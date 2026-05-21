@@ -23,7 +23,10 @@ import com.forehapp.store.orderModule.infrastructure.web.dto.OrderResponse;
 import com.forehapp.store.orderModule.infrastructure.web.dto.OrderSummaryDto;
 import com.forehapp.store.paymentModule.domain.model.PaymentMethod;
 import com.forehapp.store.paymentModule.domain.ports.in.IPaymentService;
+import com.forehapp.store.productModule.domain.model.Product;
+import com.forehapp.store.productModule.domain.model.ProductStatus;
 import com.forehapp.store.productModule.domain.model.ProductVariant;
+import com.forehapp.store.productModule.domain.ports.out.IProductDao;
 import com.forehapp.store.productModule.domain.ports.out.IProductVariantDao;
 import com.forehapp.store.storeModule.domain.model.Store;
 import com.forehapp.store.storeModule.domain.model.StoreMemberRole;
@@ -34,14 +37,17 @@ import com.forehapp.store.userModule.domain.model.UserAddress;
 import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
 import com.forehapp.store.userModule.domain.ports.out.IUserAddressRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -53,6 +59,7 @@ public class OrderServiceImpl implements IOrderService {
     private final IStoreMembershipDao membershipDao;
     private final IUserAddressRepository addressRepository;
     private final IProductVariantDao productVariantDao;
+    private final IProductDao productDao;
     private final IPaymentService paymentService;
     private final OrderMapper orderMapper;
     private final ApplicationEventPublisher eventPublisher;
@@ -66,6 +73,7 @@ public class OrderServiceImpl implements IOrderService {
                             IStoreMembershipDao membershipDao,
                             IUserAddressRepository addressRepository,
                             IProductVariantDao productVariantDao,
+                            IProductDao productDao,
                             IPaymentService paymentService,
                             OrderMapper orderMapper,
                             ApplicationEventPublisher eventPublisher) {
@@ -75,6 +83,7 @@ public class OrderServiceImpl implements IOrderService {
         this.membershipDao = membershipDao;
         this.addressRepository = addressRepository;
         this.productVariantDao = productVariantDao;
+        this.productDao = productDao;
         this.paymentService = paymentService;
         this.orderMapper = orderMapper;
         this.eventPublisher = eventPublisher;
@@ -82,6 +91,7 @@ public class OrderServiceImpl implements IOrderService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "public-products", allEntries = true)
     public OrderResponse createOrder(Long userId, CreateOrderRequestDto dto) {
         StoreProfile buyer = resolveProfile(userId);
 
@@ -199,6 +209,7 @@ public class OrderServiceImpl implements IOrderService {
         group.setStore(store);
 
         BigDecimal subtotal = BigDecimal.ZERO;
+        Set<Long> affectedProductIds = new HashSet<>();
 
         for (CartItem cartItem : items) {
             ProductVariant variant = productVariantDao.findByIdForUpdate(cartItem.getVariant().getId())
@@ -222,6 +233,8 @@ public class OrderServiceImpl implements IOrderService {
             variant.setStock(newStock);
             productVariantDao.save(variant);
 
+            affectedProductIds.add(variant.getProduct().getId());
+
             if (newStock <= lowStockThreshold) {
                 membershipDao.findActiveByStoreId(store.getId()).stream()
                         .filter(m -> m.getRole() == StoreMemberRole.OWNER)
@@ -233,6 +246,18 @@ public class OrderServiceImpl implements IOrderService {
                             eventPublisher.publishEvent(new LowStockEvent(ownerEmail, ownerName,
                                     variant.getProduct().getTitle(), variant.getSku(), newStock));
                         });
+            }
+        }
+
+        for (Long productId : affectedProductIds) {
+            Product product = productDao.findById(productId)
+                    .orElseThrow(() -> new NotFoundException(ErrorCode.ORDER_VARIANT_NOT_FOUND, "Product not found"));
+            if (product.getStatus() == ProductStatus.ACTIVE) {
+                boolean allOutOfStock = product.getVariants().stream().allMatch(v -> v.getStock() <= 0);
+                if (allOutOfStock) {
+                    product.setStatus(ProductStatus.OUT_OF_STOCK);
+                    productDao.save(product);
+                }
             }
         }
 

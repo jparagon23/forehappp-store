@@ -12,6 +12,7 @@ import com.forehapp.store.productModule.domain.model.ProductStatus;
 import com.forehapp.store.productModule.domain.ports.in.IProductImageService;
 import com.forehapp.store.productModule.domain.ports.in.IPublicProductService;
 import com.forehapp.store.productModule.domain.ports.out.IProductDao;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -34,6 +35,8 @@ public class PublicProductServiceImpl implements IPublicProductService {
     }
 
     @Override
+    @Cacheable(value = "public-products",
+               key = "#search + ':' + #categoryId + ':' + #brandId + ':' + #pageable.pageNumber + ':' + #pageable.pageSize")
     @Transactional(readOnly = true)
     public Page<PublicProductSummaryResponse> findActiveProducts(String search, Long categoryId, Long brandId, Pageable pageable) {
         return productDao.findActiveProducts(search, categoryId, brandId, pageable)
