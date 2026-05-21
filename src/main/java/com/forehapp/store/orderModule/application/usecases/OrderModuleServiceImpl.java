@@ -11,6 +11,7 @@ import com.forehapp.store.orderModule.domain.ports.out.IOrderDao;
 import com.forehapp.store.orderModule.domain.ports.out.IOrderGroupDao;
 import com.forehapp.store.orderModule.infrastructure.web.dto.OrderItemDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.SellerOrderGroupDto;
+import com.forehapp.store.orderModule.infrastructure.web.dto.VariantAttributeDto;
 import com.forehapp.store.paymentModule.domain.model.PaymentMethod;
 import com.forehapp.store.paymentModule.domain.model.PaymentStatus;
 import com.forehapp.store.paymentModule.infrastructure.persistence.IPaymentRepository;
@@ -206,11 +207,17 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
         List<OrderItemDto> items = group.getItems().stream()
                 .map(i -> {
                     BigDecimal subtotal = i.getUnitPrice().multiply(BigDecimal.valueOf(i.getQuantity()));
+                    List<VariantAttributeDto> attributes = i.getVariant().getAttributeValues().stream()
+                            .map(av -> new VariantAttributeDto(
+                                    av.getAttribute().getDescription(),
+                                    av.getDescription()))
+                            .toList();
                     return new OrderItemDto(
                             i.getId(),
                             i.getVariant().getId(),
                             i.getVariant().getSku(),
                             i.getVariant().getProduct().getTitle(),
+                            attributes,
                             i.getQuantity(),
                             i.getUnitPrice(),
                             subtotal);

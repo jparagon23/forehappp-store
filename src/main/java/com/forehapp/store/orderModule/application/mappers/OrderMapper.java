@@ -8,6 +8,7 @@ import com.forehapp.store.orderModule.infrastructure.web.dto.OrderItemDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.OrderResponse;
 import com.forehapp.store.orderModule.infrastructure.web.dto.OrderSellerGroupDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.OrderSummaryDto;
+import com.forehapp.store.orderModule.infrastructure.web.dto.VariantAttributeDto;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -81,11 +82,17 @@ public class OrderMapper {
 
     private OrderItemDto toItemDto(OrderItem item) {
         BigDecimal subtotal = item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity()));
+        List<VariantAttributeDto> attributes = item.getVariant().getAttributeValues().stream()
+                .map(av -> new VariantAttributeDto(
+                        av.getAttribute().getDescription(),
+                        av.getDescription()))
+                .toList();
         return new OrderItemDto(
                 item.getId(),
                 item.getVariant().getId(),
                 item.getVariant().getSku(),
                 item.getVariant().getProduct().getTitle(),
+                attributes,
                 item.getQuantity(),
                 item.getUnitPrice(),
                 subtotal
