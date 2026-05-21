@@ -16,6 +16,7 @@ public class PublicProductSummaryResponse {
     private final String category;
     private final LocalDateTime createdAt;
     private final BigDecimal minPrice;
+    private final BigDecimal compareAtPrice;
     private final int variantCount;
     private final String thumbnailUrl;
 
@@ -30,6 +31,11 @@ public class PublicProductSummaryResponse {
         this.minPrice = product.getVariants().stream()
                 .map(v -> v.getPrice())
                 .min(BigDecimal::compareTo)
+                .orElse(null);
+        this.compareAtPrice = product.getVariants().stream()
+                .map(v -> v.getCompareAtPrice())
+                .filter(p -> p != null)
+                .max(BigDecimal::compareTo)
                 .orElse(null);
         this.thumbnailUrl = thumbnailUrl;
     }
