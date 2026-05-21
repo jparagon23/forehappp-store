@@ -1,6 +1,7 @@
 package com.forehapp.store.productModule.application.usecases;
 
 import com.forehapp.store.general.exceptions.BadRequestException;
+import com.forehapp.store.general.exceptions.ErrorCode;
 import com.forehapp.store.general.exceptions.ForbiddenException;
 import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.general.storage.StorageService;
@@ -48,7 +49,7 @@ public class ProductImageServiceImpl implements IProductImageService {
         validateFile(file);
         resolveStoreAccess(storeId, userId);
         Product product = productDao.findByIdAndStoreId(productId, storeId)
-                .orElseThrow(() -> new NotFoundException("Producto no encontrado"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Producto no encontrado"));
 
         StorageService.UploadResult result = storageService.upload(file, "products/" + productId);
 
@@ -68,13 +69,13 @@ public class ProductImageServiceImpl implements IProductImageService {
     public void delete(Long productId, Long imageId, Long storeId, Long userId) {
         resolveStoreAccess(storeId, userId);
         productDao.findByIdAndStoreId(productId, storeId)
-                .orElseThrow(() -> new NotFoundException("Producto no encontrado"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Producto no encontrado"));
 
         ProductImage image = imageDao.findById(imageId)
-                .orElseThrow(() -> new NotFoundException("Imagen no encontrada"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Imagen no encontrada"));
 
         if (!image.getProduct().getId().equals(productId)) {
-            throw new BadRequestException("La imagen no pertenece al producto indicado");
+            throw new BadRequestException(ErrorCode.PRODUCT_IMAGE_WRONG_PRODUCT, "La imagen no pertenece al producto indicado");
         }
 
         storageService.delete(image.getS3Key());
@@ -91,27 +92,27 @@ public class ProductImageServiceImpl implements IProductImageService {
     private void resolveStoreAccess(Long storeId, Long userId) {
         membershipDao.findActiveByStoreIdAndUserId(storeId, userId)
                 .filter(m -> m.getRole() != StoreMemberRole.STAFF)
-                .orElseThrow(() -> new ForbiddenException("You do not have permission to manage this store's products"));
+                .orElseThrow(() -> new ForbiddenException(ErrorCode.STORE_ACCESS_DENIED, "You do not have permission to manage this store's products"));
     }
 
     private void validateFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new BadRequestException("El archivo está vacío");
+            throw new BadRequestException(ErrorCode.PRODUCT_IMAGE_EMPTY, "El archivo está vacío");
         }
         if (file.getSize() > MAX_SIZE_BYTES) {
-            throw new BadRequestException("El archivo no puede superar 5MB");
+            throw new BadRequestException(ErrorCode.PRODUCT_IMAGE_TOO_LARGE, "El archivo no puede superar 5MB");
         }
         String contentType = file.getContentType();
         if (contentType == null || !ALLOWED_TYPES.contains(contentType)) {
-            throw new BadRequestException("Formato no permitido. Use JPEG, PNG o WebP");
+            throw new BadRequestException(ErrorCode.PRODUCT_IMAGE_FORMAT_INVALID, "Formato no permitido. Use JPEG, PNG o WebP");
         }
         try {
             byte[] header = file.getBytes();
             if (!hasValidMagicBytes(header, contentType)) {
-                throw new BadRequestException("El contenido del archivo no coincide con su tipo declarado");
+                throw new BadRequestException(ErrorCode.PRODUCT_IMAGE_CONTENT_MISMATCH, "El contenido del archivo no coincide con su tipo declarado");
             }
         } catch (IOException e) {
-            throw new BadRequestException("No se pudo leer el archivo");
+            throw new BadRequestException(ErrorCode.PRODUCT_IMAGE_READ_ERROR, "No se pudo leer el archivo");
         }
     }
 

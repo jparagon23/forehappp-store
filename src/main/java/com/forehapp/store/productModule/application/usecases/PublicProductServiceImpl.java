@@ -1,5 +1,6 @@
 package com.forehapp.store.productModule.application.usecases;
 
+import com.forehapp.store.general.exceptions.ErrorCode;
 import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.general.storage.StorageService;
 import com.forehapp.store.productModule.application.dto.ProductImageResponse;
@@ -49,10 +50,10 @@ public class PublicProductServiceImpl implements IPublicProductService {
     @Transactional(readOnly = true)
     public PublicProductDetailResponse findActiveProductById(Long productId) {
         Product product = productDao.findById(productId)
-                .orElseThrow(() -> new NotFoundException("Product not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Product not found"));
 
         if (product.getStatus() != ProductStatus.ACTIVE) {
-            throw new NotFoundException("Product not found");
+            throw new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Product not found");
         }
 
         List<ProductImageResponse> images = imageService.getByProduct(productId);

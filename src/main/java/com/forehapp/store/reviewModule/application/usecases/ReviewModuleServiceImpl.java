@@ -1,5 +1,9 @@
 package com.forehapp.store.reviewModule.application.usecases;
 
+import com.forehapp.store.general.exceptions.BadRequestException;
+import com.forehapp.store.general.exceptions.ErrorCode;
+import com.forehapp.store.general.exceptions.ForbiddenException;
+import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.reviewModule.application.dto.ReviewPageResponse;
 import com.forehapp.store.reviewModule.application.dto.ReviewResponse;
 import com.forehapp.store.reviewModule.domain.model.ProductReview;
@@ -12,10 +16,8 @@ import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -61,18 +63,18 @@ public class ReviewModuleServiceImpl implements IReviewModuleService {
 
     private ProductReview findPendingReview(Long reviewId) {
         ProductReview review = reviewDao.findById(reviewId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Review not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.REVIEW_NOT_FOUND, "Review not found"));
         if (review.getStatus() != ReviewStatus.PENDIENTE) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Review is not pending");
+            throw new BadRequestException(ErrorCode.REVIEW_NOT_PENDING, "Review is not pending");
         }
         return review;
     }
 
     private void requireAdmin(Long userId) {
         StoreProfile profile = storeProfileDao.findByUserId(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Store profile not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_PROFILE_NOT_FOUND, "Store profile not found"));
         if (!profile.getRoles().contains(StoreRole.STORE_ADMIN)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin access required");
+            throw new ForbiddenException(ErrorCode.REVIEW_ACCESS_DENIED, "Admin access required");
         }
     }
 

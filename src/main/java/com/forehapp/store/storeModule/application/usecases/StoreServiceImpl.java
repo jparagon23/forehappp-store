@@ -1,6 +1,7 @@
 package com.forehapp.store.storeModule.application.usecases;
 
 import com.forehapp.store.general.exceptions.BadRequestException;
+import com.forehapp.store.general.exceptions.ErrorCode;
 import com.forehapp.store.general.exceptions.ForbiddenException;
 import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.general.utils.SlugUtils;
@@ -39,11 +40,11 @@ public class StoreServiceImpl implements IStoreService {
     public StoreResponse createStore(CreateStoreRequestDto dto, Long userId) {
         StoreProfile adminProfile = resolveProfile(userId);
         if (!adminProfile.getRoles().contains(StoreRole.STORE_ADMIN)) {
-            throw new ForbiddenException("Only platform admins can create stores");
+            throw new ForbiddenException(ErrorCode.STORE_ADMIN_REQUIRED, "Only platform admins can create stores");
         }
 
         StoreProfile ownerProfile = storeProfileDao.findByUserId(dto.getOwnerId())
-                .orElseThrow(() -> new NotFoundException("Owner user not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_PROFILE_NOT_FOUND, "Owner user not found"));
 
         String slug = generateUniqueSlug(dto.getName());
 
@@ -108,19 +109,19 @@ public class StoreServiceImpl implements IStoreService {
 
         if (inviterMembership.getRole() == StoreMemberRole.MANAGER
                 && dto.getRole() != StoreMemberRole.STAFF) {
-            throw new ForbiddenException("Managers can only invite staff members");
+            throw new ForbiddenException(ErrorCode.STORE_MANAGER_REMOVE_RESTRICTED, "Managers can only invite staff members");
         }
 
         StoreProfile targetProfile = storeProfileDao.findByUserId(dto.getUserId())
-                .orElseThrow(() -> new NotFoundException("User not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_PROFILE_NOT_FOUND, "User not found"));
 
         if (targetProfile.getId().equals(inviterProfile.getId())) {
-            throw new BadRequestException("You are already a member of this store");
+            throw new BadRequestException(ErrorCode.STORE_ALREADY_MEMBER, "You are already a member of this store");
         }
 
         membershipDao.findActiveByStoreIdAndStoreProfileId(storeId, targetProfile.getId())
                 .ifPresent(m -> {
-                    throw new BadRequestException("User is already a member of this store");
+                    throw new BadRequestException(ErrorCode.STORE_ALREADY_MEMBER, "User is already a member of this store");
                 });
 
         StoreMembership newMembership = new StoreMembership();
@@ -146,16 +147,16 @@ public class StoreServiceImpl implements IStoreService {
         requireRole(callerMembership, StoreMemberRole.OWNER);
 
         StoreMembership target = membershipDao.findByIdAndStoreId(membershipId, storeId)
-                .orElseThrow(() -> new NotFoundException("Membership not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_PROFILE_NOT_FOUND, "Membership not found"));
 
         if (target.getId().equals(callerMembership.getId())) {
-            throw new BadRequestException("Cannot change your own role");
+            throw new BadRequestException(ErrorCode.STORE_ROLE_SELF_CHANGE, "Cannot change your own role");
         }
 
         if (target.getRole() == StoreMemberRole.OWNER && dto.getRole() != StoreMemberRole.OWNER) {
             long ownerCount = membershipDao.countActiveOwnersByStoreId(storeId);
             if (ownerCount <= 1) {
-                throw new BadRequestException("Cannot demote the last owner");
+                throw new BadRequestException(ErrorCode.STORE_LAST_OWNER, "Cannot demote the last owner");
             }
         }
 
@@ -170,22 +171,22 @@ public class StoreServiceImpl implements IStoreService {
         StoreMembership callerMembership = resolveActiveMembership(storeId, callerProfile.getId());
 
         StoreMembership target = membershipDao.findByIdAndStoreId(membershipId, storeId)
-                .orElseThrow(() -> new NotFoundException("Membership not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_PROFILE_NOT_FOUND, "Membership not found"));
 
         boolean isSelf = target.getId().equals(callerMembership.getId());
 
         if (isSelf) {
             if (target.getRole() == StoreMemberRole.OWNER
                     && membershipDao.countActiveOwnersByStoreId(storeId) <= 1) {
-                throw new BadRequestException("Cannot leave as the last owner. Transfer ownership first.");
+                throw new BadRequestException(ErrorCode.STORE_LAST_OWNER_LEAVE, "Cannot leave as the last owner. Transfer ownership first.");
             }
         } else {
             if (callerMembership.getRole() == StoreMemberRole.STAFF) {
-                throw new ForbiddenException("Staff members cannot remove other members");
+                throw new ForbiddenException(ErrorCode.STORE_STAFF_CANNOT_REMOVE, "Staff members cannot remove other members");
             }
             if (callerMembership.getRole() == StoreMemberRole.MANAGER
                     && target.getRole() != StoreMemberRole.STAFF) {
-                throw new ForbiddenException("Managers can only remove staff members");
+                throw new ForbiddenException(ErrorCode.STORE_MANAGER_REMOVE_RESTRICTED, "Managers can only remove staff members");
             }
         }
 
@@ -205,19 +206,19 @@ public class StoreServiceImpl implements IStoreService {
 
     private StoreProfile resolveProfile(Long userId) {
         return storeProfileDao.findByUserId(userId)
-                .orElseThrow(() -> new NotFoundException("Store profile not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_PROFILE_NOT_FOUND, "Store profile not found"));
     }
 
     private StoreMembership resolveActiveMembership(Long storeId, Long storeProfileId) {
         return membershipDao.findActiveByStoreIdAndStoreProfileId(storeId, storeProfileId)
-                .orElseThrow(() -> new ForbiddenException("You are not a member of this store"));
+                .orElseThrow(() -> new ForbiddenException(ErrorCode.STORE_ACCESS_DENIED, "You are not a member of this store"));
     }
 
     private void requireRole(StoreMembership membership, StoreMemberRole... allowedRoles) {
         for (StoreMemberRole role : allowedRoles) {
             if (membership.getRole() == role) return;
         }
-        throw new ForbiddenException("Insufficient permissions for this action");
+        throw new ForbiddenException(ErrorCode.STORE_INSUFFICIENT_PERMISSIONS, "Insufficient permissions for this action");
     }
 
     private String generateUniqueSlug(String name) {

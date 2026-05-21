@@ -1,6 +1,7 @@
 package com.forehapp.store.inventoryModule.application.usecases;
 
 import com.forehapp.store.general.exceptions.BadRequestException;
+import com.forehapp.store.general.exceptions.ErrorCode;
 import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.inventoryModule.application.dto.AdjustInventoryRequestDto;
 import com.forehapp.store.inventoryModule.application.dto.InventoryMovementResponse;
@@ -43,39 +44,39 @@ public class InventoryServiceImpl implements IInventoryService {
     @Transactional
     public void adjustInventory(Long productId, Long variantId, AdjustInventoryRequestDto dto, Long userId) {
         if (dto.getQuantity() == 0) {
-            throw new BadRequestException("Quantity must not be zero");
+            throw new BadRequestException(ErrorCode.INVENTORY_QUANTITY_ZERO, "Quantity must not be zero");
         }
         if (dto.getReason() == MovementReason.SALE) {
-            throw new BadRequestException("SALE movements are handled internally");
+            throw new BadRequestException(ErrorCode.INVENTORY_SALE_INTERNAL_ONLY, "SALE movements are handled internally");
         }
         if (dto.getReason() != MovementReason.ADJUSTMENT && dto.getQuantity() < 0) {
-            throw new BadRequestException("Only ADJUSTMENT movements can have a negative quantity");
+            throw new BadRequestException(ErrorCode.INVENTORY_NEGATIVE_ONLY_ADJUSTMENT, "Only ADJUSTMENT movements can have a negative quantity");
         }
 
         StoreProfile profile = storeProfileDao.findByUserId(userId)
-                .orElseThrow(() -> new NotFoundException("Store profile not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_PROFILE_NOT_FOUND, "Store profile not found"));
 
         boolean isAdmin = profile.getRoles().contains(StoreRole.STORE_ADMIN);
         boolean isSeller = profile.getRoles().contains(StoreRole.SELLER);
 
         if (!isAdmin && !isSeller) {
-            throw new BadRequestException("User does not have permission to adjust inventory");
+            throw new BadRequestException(ErrorCode.INVENTORY_ACCESS_DENIED, "User does not have permission to adjust inventory");
         }
 
         Product product = productDao.findById(productId)
-                .orElseThrow(() -> new NotFoundException("Product not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Product not found"));
 
         if (!isAdmin) {
             membershipDao.findActiveByStoreIdAndUserId(product.getStore().getId(), userId)
-                    .orElseThrow(() -> new BadRequestException("Product does not belong to your store"));
+                    .orElseThrow(() -> new BadRequestException(ErrorCode.STORE_ACCESS_DENIED, "Product does not belong to your store"));
         }
 
         ProductVariant variant = variantDao.findByIdAndProductId(variantId, productId)
-                .orElseThrow(() -> new NotFoundException("Variant not found for this product"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Variant not found for this product"));
 
         int resultingStock = variant.getStock() + dto.getQuantity();
         if (resultingStock < 0) {
-            throw new BadRequestException("Insufficient stock. Current: " + variant.getStock()
+            throw new BadRequestException(ErrorCode.INVENTORY_INSUFFICIENT_STOCK, "Insufficient stock. Current: " + variant.getStock()
                     + ", adjustment: " + dto.getQuantity());
         }
 
@@ -94,25 +95,25 @@ public class InventoryServiceImpl implements IInventoryService {
                                                          MovementReason reason, Pageable pageable,
                                                          Long userId) {
         StoreProfile profile = storeProfileDao.findByUserId(userId)
-                .orElseThrow(() -> new NotFoundException("Store profile not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_PROFILE_NOT_FOUND, "Store profile not found"));
 
         boolean isAdmin = profile.getRoles().contains(StoreRole.STORE_ADMIN);
         boolean isSeller = profile.getRoles().contains(StoreRole.SELLER);
 
         if (!isAdmin && !isSeller) {
-            throw new BadRequestException("User does not have permission to view inventory movements");
+            throw new BadRequestException(ErrorCode.INVENTORY_ACCESS_DENIED, "User does not have permission to view inventory movements");
         }
 
         Product product = productDao.findById(productId)
-                .orElseThrow(() -> new NotFoundException("Product not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Product not found"));
 
         if (!isAdmin) {
             membershipDao.findActiveByStoreIdAndUserId(product.getStore().getId(), userId)
-                    .orElseThrow(() -> new BadRequestException("Product does not belong to your store"));
+                    .orElseThrow(() -> new BadRequestException(ErrorCode.STORE_ACCESS_DENIED, "Product does not belong to your store"));
         }
 
         variantDao.findByIdAndProductId(variantId, productId)
-                .orElseThrow(() -> new NotFoundException("Variant not found for this product"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Variant not found for this product"));
 
         return movementDao.findByVariant(variantId, reason, pageable)
                 .map(this::toResponse);

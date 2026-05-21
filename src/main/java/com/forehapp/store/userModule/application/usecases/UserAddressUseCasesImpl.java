@@ -1,6 +1,7 @@
 package com.forehapp.store.userModule.application.usecases;
 
 import com.forehapp.store.general.exceptions.BadRequestException;
+import com.forehapp.store.general.exceptions.ErrorCode;
 import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.userModule.application.dto.AddressResponse;
 import com.forehapp.store.userModule.application.dto.CreateAddressDto;
@@ -48,7 +49,7 @@ public class UserAddressUseCasesImpl implements
 
         List<UserAddress> existing = addressRepository.findByStoreProfileId(profile.getId());
         if (existing.size() >= 10) {
-            throw new BadRequestException("Maximum of 10 addresses allowed per profile");
+            throw new BadRequestException(ErrorCode.USER_ADDRESS_LIMIT, "Maximum of 10 addresses allowed per profile");
         }
 
         if (Boolean.TRUE.equals(dto.getIsDefault())) {
@@ -91,7 +92,7 @@ public class UserAddressUseCasesImpl implements
         UserAddress address = findAddressForUser(userId, addressId);
 
         if (Boolean.TRUE.equals(address.getIsDefault())) {
-            throw new BadRequestException("Cannot delete the default address. Set another address as default first");
+            throw new BadRequestException(ErrorCode.USER_ADDRESS_DEFAULT_DELETE, "Cannot delete the default address. Set another address as default first");
         }
 
         addressRepository.delete(address);
@@ -110,16 +111,16 @@ public class UserAddressUseCasesImpl implements
 
     private StoreProfile findProfileOrThrow(Long userId) {
         return storeProfileDao.findByUserId(userId)
-                .orElseThrow(() -> new NotFoundException("Store profile not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_PROFILE_NOT_FOUND, "Store profile not found"));
     }
 
     private UserAddress findAddressForUser(Long userId, Long addressId) {
         StoreProfile profile = findProfileOrThrow(userId);
         UserAddress address = addressRepository.findById(addressId)
-                .orElseThrow(() -> new NotFoundException("Address not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_ADDRESS_NOT_FOUND, "Address not found"));
 
         if (!address.getStoreProfile().getId().equals(profile.getId())) {
-            throw new NotFoundException("Address not found");
+            throw new NotFoundException(ErrorCode.USER_ADDRESS_NOT_FOUND, "Address not found");
         }
 
         return address;

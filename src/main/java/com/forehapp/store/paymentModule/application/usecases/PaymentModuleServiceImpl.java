@@ -2,6 +2,11 @@ package com.forehapp.store.paymentModule.application.usecases;
 
 import com.mercadopago.client.payment.PaymentClient;
 import com.mercadopago.resources.payment.Payment;
+import com.forehapp.store.general.exceptions.BadRequestException;
+import com.forehapp.store.general.exceptions.ConflictException;
+import com.forehapp.store.general.exceptions.ErrorCode;
+import com.forehapp.store.general.exceptions.ForbiddenException;
+import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.orderModule.domain.events.OrderPaidEvent;
 import com.forehapp.store.orderModule.domain.model.Order;
 import com.forehapp.store.orderModule.domain.model.OrderSellerGroup;
@@ -19,10 +24,8 @@ import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class PaymentModuleServiceImpl implements IPaymentModuleService {
@@ -137,21 +140,21 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
         resolveAdmin(userId);
 
         Order order = orderDao.findBasicById(orderId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PAYMENT_ORDER_NOT_FOUND, "Order not found"));
 
         if (order.getStatus() != OrderStatus.PENDING) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Order is not in PENDING status");
+            throw new ConflictException(ErrorCode.PAYMENT_ORDER_NOT_PENDING, "Order is not in PENDING status");
         }
 
         String method = order.getPaymentMethod();
         if (!PaymentMethod.CASH.name().equals(method) && !PaymentMethod.TRANSFER.name().equals(method)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+            throw new BadRequestException(ErrorCode.PAYMENT_METHOD_MISMATCH,
                     "Only CASH or TRANSFER orders can be confirmed manually");
         }
 
         var paymentOpt = paymentRepository.findByOrderId(orderId);
         if (paymentOpt.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment record not found");
+            throw new NotFoundException(ErrorCode.PAYMENT_RECORD_NOT_FOUND, "Payment record not found");
         }
 
         com.forehapp.store.paymentModule.domain.model.Payment payment = paymentOpt.get();
@@ -187,9 +190,9 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
 
     private void resolveAdmin(Long userId) {
         StoreProfile profile = storeProfileDao.findByUserId(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Store profile not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_PROFILE_NOT_FOUND, "Store profile not found"));
         if (!profile.getRoles().contains(StoreRole.STORE_ADMIN)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: STORE_ADMIN role required");
+            throw new ForbiddenException(ErrorCode.PAYMENT_ACCESS_DENIED, "Access denied: STORE_ADMIN role required");
         }
     }
 }

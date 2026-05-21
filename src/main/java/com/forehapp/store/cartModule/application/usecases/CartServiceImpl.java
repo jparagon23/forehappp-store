@@ -10,6 +10,10 @@ import com.forehapp.store.cartModule.domain.model.CartItem;
 import com.forehapp.store.cartModule.domain.model.CartStatus;
 import com.forehapp.store.cartModule.domain.ports.in.ICartService;
 import com.forehapp.store.cartModule.domain.ports.out.ICartDao;
+import com.forehapp.store.general.exceptions.BadRequestException;
+import com.forehapp.store.general.exceptions.ErrorCode;
+import com.forehapp.store.general.exceptions.ForbiddenException;
+import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.productModule.domain.model.ProductStatus;
 import com.forehapp.store.productModule.domain.model.ProductVariant;
 import com.forehapp.store.productModule.domain.ports.out.IProductVariantDao;
@@ -17,10 +21,8 @@ import com.forehapp.store.storeModule.domain.model.Store;
 import com.forehapp.store.userModule.domain.model.StoreProfile;
 import com.forehapp.store.userModule.domain.model.StoreRole;
 import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -73,11 +75,11 @@ public class CartServiceImpl implements ICartService {
     @Transactional
     public CartResponse addItems(Long userId, List<AddItemRequestDto> dtos) {
         if (dtos == null || dtos.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Items list must not be empty");
+            throw new BadRequestException(ErrorCode.CART_ITEMS_EMPTY, "Items list must not be empty");
         }
         // BUG-BATCH-02: cap batch size to avoid N unbounded DB queries
         if (dtos.size() > 50) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+            throw new BadRequestException(ErrorCode.CART_ITEM_LIMIT_EXCEEDED,
                     "El batch no puede superar 50 ítems por solicitud");
         }
         StoreProfile buyer = requireBuyer(userId);
@@ -94,14 +96,14 @@ public class CartServiceImpl implements ICartService {
         // BUG-BATCH-01: @Valid does not cascade into List elements in Spring MVC —
         // validate manually so batch and single-add behave identically
         if (dto.variantId() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "variantId must not be null");
+            throw new BadRequestException(ErrorCode.CART_VARIANT_REQUIRED, "variantId must not be null");
         }
         if (dto.quantity() == null || dto.quantity() < 1 || dto.quantity() > MAX_ITEM_QUANTITY) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+            throw new BadRequestException(ErrorCode.CART_ITEM_LIMIT_EXCEEDED,
                     "quantity debe estar entre 1 y " + MAX_ITEM_QUANTITY);
         }
         ProductVariant variant = productVariantDao.findById(dto.variantId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                .orElseThrow(() -> new NotFoundException(ErrorCode.CART_VARIANT_NOT_FOUND,
                         "Variant not found: " + dto.variantId()));
 
         cart.getItems().stream()
@@ -111,7 +113,7 @@ public class CartServiceImpl implements ICartService {
                         existing -> {
                             int newQty = existing.getQuantity() + dto.quantity();
                             if (newQty > MAX_ITEM_QUANTITY) {
-                                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                throw new BadRequestException(ErrorCode.CART_ITEM_LIMIT_EXCEEDED,
                                         "La cantidad máxima por producto es " + MAX_ITEM_QUANTITY);
                             }
                             existing.setQuantity(newQty);
@@ -163,9 +165,9 @@ public class CartServiceImpl implements ICartService {
     // BUG-05: restrict cart usage to profiles with CUSTOMER role
     private StoreProfile requireBuyer(Long userId) {
         StoreProfile profile = storeProfileDao.findByUserId(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Store profile not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_PROFILE_NOT_FOUND, "Store profile not found"));
         if (!profile.getRoles().contains(StoreRole.CUSTOMER)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo compradores pueden usar el carrito");
+            throw new ForbiddenException(ErrorCode.CART_ACCESS_DENIED, "Solo compradores pueden usar el carrito");
         }
         return profile;
     }
@@ -183,7 +185,7 @@ public class CartServiceImpl implements ICartService {
 
     private Cart requireValidCart(Long buyerId) {
         return findValidCart(buyerId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cart not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.CART_NOT_FOUND, "Cart not found"));
     }
 
     private Cart saveCart(Cart cart) {
@@ -195,7 +197,7 @@ public class CartServiceImpl implements ICartService {
         return cart.getItems().stream()
                 .filter(i -> i.getId().equals(itemId))
                 .findFirst()
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found in cart"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.CART_ITEM_NOT_FOUND, "Item not found in cart"));
     }
 
     private CartResponse toResponse(Cart cart) {

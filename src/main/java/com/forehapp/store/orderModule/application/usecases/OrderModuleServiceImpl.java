@@ -1,5 +1,9 @@
 package com.forehapp.store.orderModule.application.usecases;
 
+import com.forehapp.store.general.exceptions.ConflictException;
+import com.forehapp.store.general.exceptions.ErrorCode;
+import com.forehapp.store.general.exceptions.ForbiddenException;
+import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.orderModule.domain.events.OrderStatusChangedEvent;
 import com.forehapp.store.orderModule.domain.model.Order;
 import com.forehapp.store.orderModule.domain.model.OrderItem;
@@ -17,10 +21,8 @@ import com.forehapp.store.paymentModule.domain.model.PaymentStatus;
 import com.forehapp.store.paymentModule.infrastructure.persistence.IPaymentRepository;
 import com.forehapp.store.storeModule.domain.ports.out.IStoreMembershipDao;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -71,7 +73,7 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
         OrderSellerGroup group = resolveGroup(groupId, storeId);
 
         if (group.getStatus() != OrderSellerGroupStatus.PENDING) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw new ConflictException(ErrorCode.ORDER_GROUP_INVALID_STATUS,
                     "Group must be in PENDING status to start preparing");
         }
 
@@ -89,7 +91,7 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
         OrderSellerGroup group = resolveGroup(groupId, storeId);
 
         if (group.getStatus() != OrderSellerGroupStatus.PREPARING) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw new ConflictException(ErrorCode.ORDER_GROUP_INVALID_STATUS,
                     "Group must be in PREPARING status to ship");
         }
 
@@ -108,7 +110,7 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
         OrderSellerGroup group = resolveGroup(groupId, storeId);
 
         if (group.getStatus() != OrderSellerGroupStatus.SHIPPED) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw new ConflictException(ErrorCode.ORDER_GROUP_INVALID_STATUS,
                     "Group must be in SHIPPED status to confirm delivery");
         }
 
@@ -144,7 +146,7 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
         if (group.getStatus() == OrderSellerGroupStatus.SHIPPED
                 || group.getStatus() == OrderSellerGroupStatus.DELIVERED
                 || group.getStatus() == OrderSellerGroupStatus.CANCELLED) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw new ConflictException(ErrorCode.ORDER_GROUP_INVALID_STATUS,
                     "Cannot cancel a group in " + group.getStatus() + " status");
         }
 
@@ -160,15 +162,15 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
 
     private void resolveStoreAccess(Long storeId, Long userId) {
         membershipDao.findActiveByStoreIdAndUserId(storeId, userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
+                .orElseThrow(() -> new ForbiddenException(ErrorCode.STORE_ACCESS_DENIED,
                         "You are not an active member of this store"));
     }
 
     private OrderSellerGroup resolveGroup(Long groupId, Long storeId) {
         OrderSellerGroup group = orderGroupDao.findByIdWithDetails(groupId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order group not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.ORDER_GROUP_NOT_FOUND, "Order group not found"));
         if (!group.getStore().getId().equals(storeId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to this order group");
+            throw new ForbiddenException(ErrorCode.ORDER_GROUP_ACCESS_DENIED, "Access denied to this order group");
         }
         return group;
     }

@@ -1,5 +1,10 @@
 package com.forehapp.store.promotionModule.application.usecases;
 
+import com.forehapp.store.general.exceptions.BadRequestException;
+import com.forehapp.store.general.exceptions.ConflictException;
+import com.forehapp.store.general.exceptions.ErrorCode;
+import com.forehapp.store.general.exceptions.ForbiddenException;
+import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.promotionModule.application.dto.CouponResponse;
 import com.forehapp.store.promotionModule.application.dto.CreateCouponRequestDto;
 import com.forehapp.store.promotionModule.application.dto.UpdateCouponRequestDto;
@@ -16,10 +21,8 @@ import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class PromotionModuleServiceImpl implements IPromotionModuleService {
@@ -42,10 +45,10 @@ public class PromotionModuleServiceImpl implements IPromotionModuleService {
         Store store = resolveStoreAccess(storeId, userId).getStore();
 
         if (couponDao.findByCode(dto.code().toUpperCase()).isPresent()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Coupon code already exists");
+            throw new ConflictException(ErrorCode.COUPON_CODE_DUPLICATE, "Coupon code already exists");
         }
         if (dto.validUntil() != null && dto.validUntil().isBefore(dto.validFrom())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "validUntil must be after validFrom");
+            throw new BadRequestException(ErrorCode.COUPON_DATE_INVALID, "validUntil must be after validFrom");
         }
 
         Coupon coupon = new Coupon();
@@ -112,24 +115,24 @@ public class PromotionModuleServiceImpl implements IPromotionModuleService {
 
     private StoreMembership resolveStoreAccess(Long storeId, Long userId) {
         return membershipDao.findActiveByStoreIdAndUserId(storeId, userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
+                .orElseThrow(() -> new ForbiddenException(ErrorCode.STORE_ACCESS_DENIED,
                         "You are not an active member of this store"));
     }
 
     private Coupon findStoreCoupon(Long couponId, Long storeId) {
         Coupon coupon = couponDao.findById(couponId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Coupon not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.COUPON_NOT_FOUND, "Coupon not found"));
         if (!coupon.getStore().getId().equals(storeId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This coupon does not belong to this store");
+            throw new ForbiddenException(ErrorCode.COUPON_ACCESS_DENIED, "This coupon does not belong to this store");
         }
         return coupon;
     }
 
     private void requireAdmin(Long userId) {
         StoreProfile profile = storeProfileDao.findByUserId(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Store profile not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_PROFILE_NOT_FOUND, "Store profile not found"));
         if (!profile.getRoles().contains(StoreRole.STORE_ADMIN)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin access required");
+            throw new ForbiddenException(ErrorCode.STORE_ADMIN_REQUIRED, "Admin access required");
         }
     }
 

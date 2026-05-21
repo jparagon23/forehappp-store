@@ -1,5 +1,6 @@
 package com.forehapp.store.productModule.application.usecases;
 
+import com.forehapp.store.general.exceptions.ErrorCode;
 import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.productModule.application.dto.BrandResponse;
 import com.forehapp.store.productModule.application.dto.CategoryAttributeResponse;
@@ -47,7 +48,7 @@ public class CatalogServiceImpl implements ICatalogService {
     @Override
     public List<LineResponse> findLinesByBrand(Long brandId) {
         brandDao.findById(brandId)
-                .orElseThrow(() -> new NotFoundException("Brand not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Brand not found"));
         return lineDao.findAllByBrandId(brandId).stream()
                 .map(LineResponse::new)
                 .toList();
@@ -56,9 +57,9 @@ public class CatalogServiceImpl implements ICatalogService {
     @Override
     public List<LineResponse> findLinesByBrandAndCategory(Long brandId, Long categoryId) {
         brandDao.findById(brandId)
-                .orElseThrow(() -> new NotFoundException("Brand not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Brand not found"));
         categoryDao.findById(categoryId)
-                .orElseThrow(() -> new NotFoundException("Category not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Category not found"));
         return lineDao.findAllByBrandIdAndCategoryId(brandId, categoryId).stream()
                 .map(LineResponse::new)
                 .toList();
@@ -75,7 +76,7 @@ public class CatalogServiceImpl implements ICatalogService {
     @Transactional(readOnly = true)
     public List<CategoryAttributeResponse> findCategoryAttributes(Long categoryId) {
         categoryDao.findById(categoryId)
-                .orElseThrow(() -> new NotFoundException("Category not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Category not found"));
 
         List<CategoryAttribute> categoryAttrs = categoryDao.findCategoryAttributes(categoryId);
         if (categoryAttrs.isEmpty()) return List.of();

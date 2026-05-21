@@ -1,6 +1,7 @@
 package com.forehapp.store.userModule.application.usecases;
 
 import com.forehapp.store.general.exceptions.BadRequestException;
+import com.forehapp.store.general.exceptions.ErrorCode;
 import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.userModule.application.dto.ChangePasswordDto;
 import com.forehapp.store.userModule.application.dto.UpdateUserRequestDto;
@@ -46,10 +47,10 @@ public class UserUseCasesImpl implements GetUserUseCase, UpdateUserUseCase, Chan
         User user = findOrThrow(userId);
 
         if (!passwordEncoder.matches(dto.getCurrentPassword(), user.getPassword())) {
-            throw new BadRequestException("La contraseña actual es incorrecta");
+            throw new BadRequestException(ErrorCode.USER_PASSWORD_INCORRECT, "La contraseña actual es incorrecta");
         }
         if (passwordEncoder.matches(dto.getNewPassword(), user.getPassword())) {
-            throw new BadRequestException("La nueva contraseña debe ser diferente a la actual");
+            throw new BadRequestException(ErrorCode.USER_PASSWORD_SAME, "La nueva contraseña debe ser diferente a la actual");
         }
 
         user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
@@ -58,6 +59,6 @@ public class UserUseCasesImpl implements GetUserUseCase, UpdateUserUseCase, Chan
 
     private User findOrThrow(Long userId) {
         return userRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException("Usuario no encontrado"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_PROFILE_NOT_FOUND, "Usuario no encontrado"));
     }
 }

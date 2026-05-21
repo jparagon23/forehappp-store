@@ -5,10 +5,10 @@ import com.forehapp.store.reportModule.application.dto.TopProductResponse;
 import com.forehapp.store.reportModule.domain.ports.in.ISellerReportService;
 import com.forehapp.store.reportModule.domain.ports.out.IReportDao;
 import com.forehapp.store.storeModule.domain.ports.out.IStoreMembershipDao;
-import org.springframework.http.HttpStatus;
+import com.forehapp.store.general.exceptions.ErrorCode;
+import com.forehapp.store.general.exceptions.ForbiddenException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -58,7 +58,7 @@ public class SellerReportServiceImpl implements ISellerReportService {
 
     private void resolveStoreAccess(Long storeId, Long userId) {
         membershipDao.findActiveByStoreIdAndUserId(storeId, userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
+                .orElseThrow(() -> new ForbiddenException(ErrorCode.STORE_ACCESS_DENIED,
                         "You are not an active member of this store"));
     }
 }

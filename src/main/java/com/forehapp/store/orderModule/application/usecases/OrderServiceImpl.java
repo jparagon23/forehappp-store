@@ -4,6 +4,11 @@ import com.forehapp.store.cartModule.domain.model.Cart;
 import com.forehapp.store.cartModule.domain.model.CartItem;
 import com.forehapp.store.cartModule.domain.model.CartStatus;
 import com.forehapp.store.cartModule.domain.ports.out.ICartDao;
+import com.forehapp.store.general.exceptions.BadRequestException;
+import com.forehapp.store.general.exceptions.ConflictException;
+import com.forehapp.store.general.exceptions.ErrorCode;
+import com.forehapp.store.general.exceptions.ForbiddenException;
+import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.orderModule.application.mappers.OrderMapper;
 import com.forehapp.store.orderModule.domain.events.LowStockEvent;
 import com.forehapp.store.orderModule.domain.events.OrderCreatedEvent;
@@ -30,10 +35,8 @@ import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
 import com.forehapp.store.userModule.domain.ports.out.IUserAddressRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -83,19 +86,19 @@ public class OrderServiceImpl implements IOrderService {
         StoreProfile buyer = resolveProfile(userId);
 
         Cart cart = cartDao.findActiveByBuyerId(buyer.getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Active cart not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.ORDER_CART_NOT_FOUND, "Active cart not found"));
 
         if (cart.getItems().isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Cart is empty");
+            throw new BadRequestException(ErrorCode.ORDER_CART_EMPTY, "Cart is empty");
         }
 
         UserAddress address = addressRepository.findById(dto.addressId())
                 .filter(a -> a.getStoreProfile().getId().equals(buyer.getId()))
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Address not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.ORDER_ADDRESS_NOT_FOUND, "Address not found"));
 
         if (dto.paymentMethod() == PaymentMethod.CASH_ON_DELIVERY
                 && !address.getCity().equalsIgnoreCase("Cali")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+            throw new BadRequestException(ErrorCode.ORDER_ADDRESS_STORE_MISMATCH,
                     "Cash on delivery is only available for orders shipped to Cali");
         }
 
@@ -133,7 +136,7 @@ public class OrderServiceImpl implements IOrderService {
         StoreProfile buyer = resolveProfile(userId);
         Order order = orderDao.findById(orderId)
                 .filter(o -> o.getBuyer().getId().equals(buyer.getId()))
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.ORDER_NOT_FOUND, "Order not found"));
         return orderMapper.toResponse(order, null);
     }
 
@@ -161,7 +164,7 @@ public class OrderServiceImpl implements IOrderService {
         for (CartItem item : items) {
             ProductVariant variant = item.getVariant();
             if (variant.getStock() < item.getQuantity()) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                throw new ConflictException(ErrorCode.ORDER_INSUFFICIENT_STOCK,
                         "Insufficient stock for: " + variant.getProduct().getTitle() + " (SKU: " + variant.getSku() + ")");
             }
         }
@@ -199,10 +202,10 @@ public class OrderServiceImpl implements IOrderService {
 
         for (CartItem cartItem : items) {
             ProductVariant variant = productVariantDao.findByIdForUpdate(cartItem.getVariant().getId())
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Variant not found"));
+                    .orElseThrow(() -> new NotFoundException(ErrorCode.ORDER_VARIANT_NOT_FOUND, "Variant not found"));
 
             if (variant.getStock() < cartItem.getQuantity()) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                throw new ConflictException(ErrorCode.ORDER_INSUFFICIENT_STOCK,
                         "Insufficient stock for: " + variant.getProduct().getTitle());
             }
 
@@ -276,9 +279,9 @@ public class OrderServiceImpl implements IOrderService {
 
     private StoreProfile resolveProfile(Long userId) {
         StoreProfile profile = storeProfileDao.findByUserId(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Store profile not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_PROFILE_NOT_FOUND, "Store profile not found"));
         if (!profile.getRoles().contains(StoreRole.CUSTOMER)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "User does not have CUSTOMER role");
+            throw new ForbiddenException(ErrorCode.ORDER_CUSTOMER_ROLE_REQUIRED, "User does not have CUSTOMER role");
         }
         return profile;
     }
