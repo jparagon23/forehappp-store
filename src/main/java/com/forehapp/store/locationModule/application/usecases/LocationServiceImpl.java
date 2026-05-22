@@ -14,6 +14,8 @@ import com.forehapp.store.locationModule.infrastructure.web.dto.*;
 import com.forehapp.store.userModule.domain.model.StoreProfile;
 import com.forehapp.store.userModule.domain.model.StoreRole;
 import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +39,7 @@ public class LocationServiceImpl implements ILocationService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "location-countries", allEntries = true)
     public CountryResponse createCountry(CreateCountryDto dto, Long userId) {
         requireAdmin(userId);
         Country country = new Country();
@@ -47,12 +50,14 @@ public class LocationServiceImpl implements ILocationService {
 
     @Override
     @Transactional(readOnly = true)
+    @Cacheable("location-countries")
     public List<CountryResponse> getCountries() {
         return countryDao.findAllActive().stream().map(CountryResponse::from).toList();
     }
 
     @Override
     @Transactional
+    @CacheEvict(value = "location-states", allEntries = true)
     public StateResponse createState(CreateStateDto dto, Long userId) {
         requireAdmin(userId);
         Country country = countryDao.findById(dto.countryId())
@@ -65,12 +70,14 @@ public class LocationServiceImpl implements ILocationService {
 
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(value = "location-states", key = "#countryId")
     public List<StateResponse> getStatesByCountry(Long countryId) {
         return stateDao.findActiveByCountryId(countryId).stream().map(StateResponse::from).toList();
     }
 
     @Override
     @Transactional
+    @CacheEvict(value = "location-cities", allEntries = true)
     public CityResponse createCity(CreateCityDto dto, Long userId) {
         requireAdmin(userId);
         State state = stateDao.findById(dto.stateId())
@@ -83,6 +90,7 @@ public class LocationServiceImpl implements ILocationService {
 
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(value = "location-cities", key = "#stateId")
     public List<CityResponse> getCitiesByState(Long stateId) {
         return cityDao.findActiveByStateId(stateId).stream().map(CityResponse::from).toList();
     }

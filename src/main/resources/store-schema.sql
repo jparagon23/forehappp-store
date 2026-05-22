@@ -457,7 +457,7 @@ CREATE TABLE IF NOT EXISTS cities (
 -- Migration: Shipping Zones
 -- =====================
 
-CREATE TABLE IF NOT EXISTS shipping_zones (
+CREATE TABLE IF NOT EXISTS store_shipping_zones (
     id         BIGINT AUTO_INCREMENT PRIMARY KEY,
     name       VARCHAR(150)   NOT NULL,
     cost       DECIMAL(14, 2) NOT NULL,
@@ -465,11 +465,11 @@ CREATE TABLE IF NOT EXISTS shipping_zones (
     active     TINYINT(1)     NOT NULL DEFAULT 1
 );
 
-CREATE TABLE IF NOT EXISTS shipping_zone_city_map (
+CREATE TABLE IF NOT EXISTS store_shipping_zone_city_map (
     zone_id BIGINT NOT NULL,
     city_id BIGINT NOT NULL,
     PRIMARY KEY (zone_id, city_id),
-    CONSTRAINT fk_szcm_zone FOREIGN KEY (zone_id) REFERENCES shipping_zones(id),
+    CONSTRAINT fk_szcm_zone FOREIGN KEY (zone_id) REFERENCES store_shipping_zones(id),
     CONSTRAINT fk_szcm_city FOREIGN KEY (city_id) REFERENCES cities(id)
 );
 

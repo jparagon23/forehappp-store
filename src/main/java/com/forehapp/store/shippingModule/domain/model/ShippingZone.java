@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "shipping_zones")
+@Table(name = "store_shipping_zones")
 @Getter @Setter @NoArgsConstructor
 public class ShippingZone {
 
@@ -24,7 +24,7 @@ public class ShippingZone {
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
-            name = "shipping_zone_city_map",
+            name = "store_shipping_zone_city_map",
             joinColumns = @JoinColumn(name = "zone_id"),
             inverseJoinColumns = @JoinColumn(name = "city_id")
     )
