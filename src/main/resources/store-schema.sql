@@ -473,6 +473,25 @@ CREATE TABLE IF NOT EXISTS shipping_zone_city_map (
     CONSTRAINT fk_szcm_city FOREIGN KEY (city_id) REFERENCES cities(id)
 );
 
+-- Add active column to location tables if missing (table may have been created by Hibernate without it)
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE countries ADD COLUMN active TINYINT(1) NOT NULL DEFAULT 1',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'countries' AND COLUMN_NAME = 'active');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE states ADD COLUMN active TINYINT(1) NOT NULL DEFAULT 1',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'states' AND COLUMN_NAME = 'active');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE cities ADD COLUMN active TINYINT(1) NOT NULL DEFAULT 1',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cities' AND COLUMN_NAME = 'active');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
 -- Drop old string-based shipping_zone_cities table if it exists
 SET @s = (SELECT IF(COUNT(*) > 0,
   'DROP TABLE shipping_zone_cities',
