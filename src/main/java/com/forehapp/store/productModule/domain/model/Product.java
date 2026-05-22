@@ -48,6 +48,9 @@ public class Product {
     @Column(length = 20, nullable = false)
     private ProductStatus status = ProductStatus.ACTIVE;
 
+    @Column(name = "free_shipping", nullable = false)
+    private Boolean freeShipping = false;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

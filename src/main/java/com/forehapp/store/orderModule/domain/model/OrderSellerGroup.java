@@ -38,6 +38,9 @@ public class OrderSellerGroup {
     @Column(nullable = false, precision = 14, scale = 2)
     private BigDecimal subtotal;
 
+    @Column(name = "shipping_cost", nullable = false, precision = 14, scale = 2)
+    private BigDecimal shippingCost = BigDecimal.ZERO;
+
     @Column(name = "tracking_number", length = 100)
     private String trackingNumber;
 

@@ -20,6 +20,7 @@ public class ProductResponse {
     private final String status;
     private final LocalDateTime createdAt;
     private final List<ProductVariantResponse> variants;
+    private final boolean freeShipping;
     private final String thumbnailUrl;
 
     public ProductResponse(Product product) {
@@ -40,6 +41,7 @@ public class ProductResponse {
         this.variants = product.getVariants().stream()
                 .map(ProductVariantResponse::new)
                 .toList();
+        this.freeShipping = Boolean.TRUE.equals(product.getFreeShipping());
         this.thumbnailUrl = thumbnailUrl;
     }
 }

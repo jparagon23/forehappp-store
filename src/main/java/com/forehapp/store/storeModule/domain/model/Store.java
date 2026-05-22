@@ -1,6 +1,7 @@
 package com.forehapp.store.storeModule.domain.model;
 
 import jakarta.persistence.*;
+import java.math.BigDecimal;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -30,6 +31,9 @@ public class Store {
 
     @Column(name = "logo_s3_key", length = 500)
     private String logoS3Key;
+
+    @Column(name = "free_shipping_min_amount", precision = 14, scale = 2)
+    private BigDecimal freeShippingMinAmount;
 
     @Enumerated(EnumType.STRING)
     @Column(length = 20, nullable = false)

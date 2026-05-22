@@ -72,6 +72,7 @@ public class OrderMapper {
                 group.getStore().getName(),
                 group.getStatus().name(),
                 group.getSubtotal(),
+                group.getShippingCost(),
                 group.getTrackingNumber(),
                 group.getPreparedAt(),
                 group.getShippedAt(),

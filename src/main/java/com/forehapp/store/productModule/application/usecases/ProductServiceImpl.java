@@ -127,6 +127,9 @@ public class ProductServiceImpl implements IProductService {
             }
             product.setLine(line);
         }
+        if (dto.getFreeShipping() != null) {
+            product.setFreeShipping(dto.getFreeShipping());
+        }
 
         return new ProductResponse(productDao.save(product));
     }

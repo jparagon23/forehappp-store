@@ -1,7 +1,10 @@
 package com.forehapp.store.storeModule.application.dto;
 
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
+
+import java.math.BigDecimal;
 
 @Getter
 public class UpdateStoreRequestDto {
@@ -11,4 +14,7 @@ public class UpdateStoreRequestDto {
 
     @Size(max = 1000)
     private String description;
+
+    @DecimalMin("0")
+    private BigDecimal freeShippingMinAmount;
 }

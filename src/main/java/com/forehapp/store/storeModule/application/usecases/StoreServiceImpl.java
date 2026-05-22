@@ -96,6 +96,7 @@ public class StoreServiceImpl implements IStoreService {
         Store store = membership.getStore();
         if (dto.getName() != null) store.setName(dto.getName().trim());
         if (dto.getDescription() != null) store.setDescription(dto.getDescription());
+        if (dto.getFreeShippingMinAmount() != null) store.setFreeShippingMinAmount(dto.getFreeShippingMinAmount());
 
         return new StoreResponse(storeDao.save(store));
     }

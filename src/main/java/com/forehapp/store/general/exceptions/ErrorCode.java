@@ -130,6 +130,10 @@ public enum ErrorCode {
     WISHLIST_NOT_FOUND,
     WISHLIST_ITEM_NOT_FOUND,
 
+    // Shipping zones
+    SHIPPING_ZONE_NOT_FOUND,
+    SHIPPING_ZONE_DEFAULT_DUPLICATE,
+
     // Generic fallbacks
     VALIDATION_ERROR,
     DATA_INTEGRITY_VIOLATION,

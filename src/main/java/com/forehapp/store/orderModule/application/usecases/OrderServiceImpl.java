@@ -28,6 +28,7 @@ import com.forehapp.store.productModule.domain.model.ProductStatus;
 import com.forehapp.store.productModule.domain.model.ProductVariant;
 import com.forehapp.store.productModule.domain.ports.out.IProductDao;
 import com.forehapp.store.productModule.domain.ports.out.IProductVariantDao;
+import com.forehapp.store.shippingModule.domain.ports.out.IShippingZoneDao;
 import com.forehapp.store.storeModule.domain.model.Store;
 import com.forehapp.store.storeModule.domain.model.StoreMemberRole;
 import com.forehapp.store.storeModule.domain.ports.out.IStoreMembershipDao;
@@ -63,6 +64,7 @@ public class OrderServiceImpl implements IOrderService {
     private final IPaymentService paymentService;
     private final OrderMapper orderMapper;
     private final ApplicationEventPublisher eventPublisher;
+    private final IShippingZoneDao shippingZoneDao;
 
     @Value("${app.inventory.low-stock-threshold:5}")
     private int lowStockThreshold;
@@ -76,7 +78,8 @@ public class OrderServiceImpl implements IOrderService {
                             IProductDao productDao,
                             IPaymentService paymentService,
                             OrderMapper orderMapper,
-                            ApplicationEventPublisher eventPublisher) {
+                            ApplicationEventPublisher eventPublisher,
+                            IShippingZoneDao shippingZoneDao) {
         this.cartDao = cartDao;
         this.orderDao = orderDao;
         this.storeProfileDao = storeProfileDao;
@@ -87,6 +90,7 @@ public class OrderServiceImpl implements IOrderService {
         this.paymentService = paymentService;
         this.orderMapper = orderMapper;
         this.eventPublisher = eventPublisher;
+        this.shippingZoneDao = shippingZoneDao;
     }
 
     @Override
@@ -196,7 +200,7 @@ public class OrderServiceImpl implements IOrderService {
             Store store = entry.getValue().get(0).getVariant().getProduct().getStore();
             OrderSellerGroup group = buildStoreGroup(order, store, entry.getValue());
             order.getSellerGroups().add(group);
-            total = total.add(group.getSubtotal());
+            total = total.add(group.getSubtotal()).add(group.getShippingCost());
         }
 
         order.setTotal(total);
@@ -262,7 +266,24 @@ public class OrderServiceImpl implements IOrderService {
         }
 
         group.setSubtotal(subtotal);
+        group.setShippingCost(resolveShippingCost(order.getShippingCity(), store, subtotal, items));
         return group;
+    }
+
+    private BigDecimal resolveShippingCost(String city, Store store, BigDecimal subtotal, List<CartItem> items) {
+        if (store.getFreeShippingMinAmount() != null
+                && subtotal.compareTo(store.getFreeShippingMinAmount()) >= 0) {
+            return BigDecimal.ZERO;
+        }
+        boolean allItemsFreeShipping = items.stream()
+                .allMatch(i -> Boolean.TRUE.equals(i.getVariant().getProduct().getFreeShipping()));
+        if (allItemsFreeShipping) {
+            return BigDecimal.ZERO;
+        }
+        return shippingZoneDao.findActiveByCityName(city)
+                .or(shippingZoneDao::findActiveDefault)
+                .map(com.forehapp.store.shippingModule.domain.model.ShippingZone::getCost)
+                .orElse(BigDecimal.ZERO);
     }
 
     private OrderCreatedEvent buildOrderCreatedEvent(Order order, StoreProfile buyer) {
