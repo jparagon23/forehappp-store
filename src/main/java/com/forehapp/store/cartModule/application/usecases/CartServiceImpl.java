@@ -232,6 +232,8 @@ public class CartServiceImpl implements ICartService {
         BigDecimal currentPrice = variant.getPrice() != null ? variant.getPrice() : BigDecimal.ZERO;
         boolean priceChanged = currentPrice.compareTo(item.getPriceAtAdd()) != 0;
         BigDecimal subtotal = currentPrice.multiply(BigDecimal.valueOf(item.getQuantity()));
+        List<com.forehapp.store.productModule.domain.model.ProductImage> images = variant.getProduct().getImages();
+        String thumbnailUrl = images.isEmpty() ? null : images.get(0).getUrl();
 
         return new CartItemResponse(
                 item.getId(),
@@ -242,7 +244,8 @@ public class CartServiceImpl implements ICartService {
                 currentPrice,
                 subtotal,
                 priceChanged,
-                priceChanged ? item.getPriceAtAdd() : null
+                priceChanged ? item.getPriceAtAdd() : null,
+                thumbnailUrl
         );
     }
 
