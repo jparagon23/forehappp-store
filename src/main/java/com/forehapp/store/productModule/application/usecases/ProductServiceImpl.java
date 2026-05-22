@@ -94,6 +94,7 @@ public class ProductServiceImpl implements IProductService {
         product.setLine(line);
         product.setCategory(category);
         product.setStatus(ProductStatus.DRAFT);
+        product.setFreeShipping(Boolean.TRUE.equals(dto.getFreeShipping()));
 
         return new ProductResponse(productDao.save(product));
     }

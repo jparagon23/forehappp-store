@@ -22,4 +22,6 @@ public class CreateProductRequestDto {
 
     @NotNull(message = "Category is required")
     private Long categoryId;
+
+    private Boolean freeShipping = false;
 }

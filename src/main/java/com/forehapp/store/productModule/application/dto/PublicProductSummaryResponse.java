@@ -18,6 +18,7 @@ public class PublicProductSummaryResponse {
     private final BigDecimal minPrice;
     private final BigDecimal compareAtPrice;
     private final int variantCount;
+    private final boolean freeShipping;
     private final String thumbnailUrl;
 
     public PublicProductSummaryResponse(Product product, String thumbnailUrl) {
@@ -37,6 +38,7 @@ public class PublicProductSummaryResponse {
                 .filter(p -> p != null)
                 .max(BigDecimal::compareTo)
                 .orElse(null);
+        this.freeShipping = Boolean.TRUE.equals(product.getFreeShipping());
         this.thumbnailUrl = thumbnailUrl;
     }
 }

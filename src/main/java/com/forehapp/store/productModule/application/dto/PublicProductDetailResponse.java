@@ -23,6 +23,7 @@ public class PublicProductDetailResponse {
     private final String line;
     private final String category;
     private final LocalDateTime createdAt;
+    private final boolean freeShipping;
     private final List<ProductVariantResponse> variants;
     private final List<ProductImageResponse> images;
     private final SellerInfo store;
@@ -35,6 +36,7 @@ public class PublicProductDetailResponse {
         this.line = product.getLine() != null ? product.getLine().getDescription() : null;
         this.category = product.getCategory().getDescription();
         this.createdAt = product.getCreatedAt();
+        this.freeShipping = Boolean.TRUE.equals(product.getFreeShipping());
         this.variants = product.getVariants().stream()
                 .map(ProductVariantResponse::new)
                 .toList();
