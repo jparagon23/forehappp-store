@@ -2,6 +2,7 @@ package com.forehapp.store.cartModule.domain.ports.in;
 
 import com.forehapp.store.cartModule.application.dto.AddItemRequestDto;
 import com.forehapp.store.cartModule.application.dto.CartResponse;
+import com.forehapp.store.cartModule.application.dto.ShippingEstimateResponse;
 import com.forehapp.store.cartModule.application.dto.UpdateCartItemDto;
 
 import java.util.List;
@@ -13,4 +14,5 @@ public interface ICartService {
     CartResponse updateItem(Long userId, Long itemId, UpdateCartItemDto dto);
     void removeItem(Long userId, Long itemId);
     void clearCart(Long userId);
+    ShippingEstimateResponse estimateShipping(Long userId, Long addressId);
 }

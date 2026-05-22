@@ -4,6 +4,8 @@ import com.forehapp.store.cartModule.application.dto.AddItemRequestDto;
 import com.forehapp.store.cartModule.application.dto.CartItemResponse;
 import com.forehapp.store.cartModule.application.dto.CartResponse;
 import com.forehapp.store.cartModule.application.dto.CartSellerGroupResponse;
+import com.forehapp.store.cartModule.application.dto.ShippingEstimateGroupResponse;
+import com.forehapp.store.cartModule.application.dto.ShippingEstimateResponse;
 import com.forehapp.store.cartModule.application.dto.UpdateCartItemDto;
 import com.forehapp.store.cartModule.domain.model.Cart;
 import com.forehapp.store.cartModule.domain.model.CartItem;
@@ -18,10 +20,14 @@ import com.forehapp.store.general.storage.StorageService;
 import com.forehapp.store.productModule.domain.model.ProductStatus;
 import com.forehapp.store.productModule.domain.model.ProductVariant;
 import com.forehapp.store.productModule.domain.ports.out.IProductVariantDao;
+import com.forehapp.store.shippingModule.domain.model.ShippingZone;
+import com.forehapp.store.shippingModule.domain.ports.out.IShippingZoneDao;
 import com.forehapp.store.storeModule.domain.model.Store;
 import com.forehapp.store.userModule.domain.model.StoreProfile;
 import com.forehapp.store.userModule.domain.model.StoreRole;
+import com.forehapp.store.userModule.domain.model.UserAddress;
 import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
+import com.forehapp.store.userModule.domain.ports.out.IUserAddressRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,15 +48,21 @@ public class CartServiceImpl implements ICartService {
     private final IProductVariantDao productVariantDao;
     private final IStoreProfileDao storeProfileDao;
     private final StorageService storageService;
+    private final IShippingZoneDao shippingZoneDao;
+    private final IUserAddressRepository addressRepository;
 
     public CartServiceImpl(ICartDao cartDao,
                            IProductVariantDao productVariantDao,
                            IStoreProfileDao storeProfileDao,
-                           StorageService storageService) {
+                           StorageService storageService,
+                           IShippingZoneDao shippingZoneDao,
+                           IUserAddressRepository addressRepository) {
         this.cartDao = cartDao;
         this.productVariantDao = productVariantDao;
         this.storeProfileDao = storeProfileDao;
         this.storageService = storageService;
+        this.shippingZoneDao = shippingZoneDao;
+        this.addressRepository = addressRepository;
     }
 
     @Override
@@ -162,6 +174,68 @@ public class CartServiceImpl implements ICartService {
                 saveCart(cart);
             }
         });
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ShippingEstimateResponse estimateShipping(Long userId, Long addressId) {
+        StoreProfile buyer = requireBuyer(userId);
+
+        Cart cart = findValidCart(buyer.getId())
+                .orElseThrow(() -> new NotFoundException(ErrorCode.CART_NOT_FOUND, "Active cart not found"));
+
+        UserAddress address = addressRepository.findById(addressId)
+                .filter(a -> a.getStoreProfile().getId().equals(buyer.getId()))
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_ADDRESS_NOT_FOUND, "Address not found"));
+
+        Long cityId = address.getCity().getId();
+
+        Map<Long, List<CartItem>> byStore = cart.getItems().stream()
+                .filter(i -> i.getVariant().getProduct().getStatus() == ProductStatus.ACTIVE)
+                .collect(Collectors.groupingBy(i -> i.getVariant().getProduct().getStore().getId()));
+
+        List<ShippingEstimateGroupResponse> groups = byStore.entrySet().stream()
+                .map(entry -> {
+                    Store store = entry.getValue().get(0).getVariant().getProduct().getStore();
+                    List<CartItem> items = entry.getValue();
+                    BigDecimal subtotal = items.stream()
+                            .map(i -> i.getVariant().getPrice().multiply(BigDecimal.valueOf(i.getQuantity())))
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    BigDecimal shippingCost = resolveShippingCost(cityId, store, subtotal, items);
+                    return new ShippingEstimateGroupResponse(
+                            store.getId(),
+                            store.getName(),
+                            subtotal,
+                            shippingCost,
+                            shippingCost.compareTo(BigDecimal.ZERO) == 0
+                    );
+                })
+                .toList();
+
+        BigDecimal itemsTotal = groups.stream()
+                .map(ShippingEstimateGroupResponse::subtotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal shippingTotal = groups.stream()
+                .map(ShippingEstimateGroupResponse::shippingCost)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        return new ShippingEstimateResponse(groups, itemsTotal, shippingTotal, itemsTotal.add(shippingTotal));
+    }
+
+    private BigDecimal resolveShippingCost(Long cityId, Store store, BigDecimal subtotal, List<CartItem> items) {
+        if (store.getFreeShippingMinAmount() != null
+                && subtotal.compareTo(store.getFreeShippingMinAmount()) >= 0) {
+            return BigDecimal.ZERO;
+        }
+        boolean allFree = items.stream()
+                .allMatch(i -> Boolean.TRUE.equals(i.getVariant().getProduct().getFreeShipping()));
+        if (allFree) {
+            return BigDecimal.ZERO;
+        }
+        return shippingZoneDao.findActiveByCityId(cityId)
+                .or(shippingZoneDao::findActiveDefault)
+                .map(ShippingZone::getCost)
+                .orElse(BigDecimal.ZERO);
     }
 
     // ── helpers ────────────────────────────────────────────────────────────
