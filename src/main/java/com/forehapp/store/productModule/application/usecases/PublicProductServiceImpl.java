@@ -61,6 +61,13 @@ public class PublicProductServiceImpl implements IPublicProductService {
 
         List<ProductImageResponse> images = imageService.getByProduct(productId);
 
-        return new PublicProductDetailResponse(product, images);
+        String logoUrl = null;
+        if (product.getStore().getLogoS3Key() != null) {
+            String signed = storageService.presign(product.getStore().getLogoS3Key(), Duration.ofDays(7));
+            logoUrl = signed.isBlank() ? null : signed;
+        }
+
+        PublicProductDetailResponse.SellerInfo seller = PublicProductDetailResponse.SellerInfo.from(product.getStore(), logoUrl);
+        return new PublicProductDetailResponse(product, images, seller);
     }
 }
