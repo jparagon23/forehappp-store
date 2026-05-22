@@ -314,7 +314,14 @@ public class ProductServiceImpl implements IProductService {
     public List<ProductResponse> getStoreProducts(Long storeId, Long userId) {
         resolveStoreAccess(storeId, userId);
         return productDao.findAllByStoreId(storeId).stream()
-                .map(ProductResponse::new)
+                .map(p -> {
+                    String thumbnail = p.getImages().stream()
+                            .findFirst()
+                            .map(img -> storageService.presign(img.getS3Key(), Duration.ofDays(7)))
+                            .filter(url -> !url.isBlank())
+                            .orElse(null);
+                    return new ProductResponse(p, thumbnail);
+                })
                 .toList();
     }
 

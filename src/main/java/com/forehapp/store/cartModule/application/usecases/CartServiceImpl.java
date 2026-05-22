@@ -14,6 +14,7 @@ import com.forehapp.store.general.exceptions.BadRequestException;
 import com.forehapp.store.general.exceptions.ErrorCode;
 import com.forehapp.store.general.exceptions.ForbiddenException;
 import com.forehapp.store.general.exceptions.NotFoundException;
+import com.forehapp.store.general.storage.StorageService;
 import com.forehapp.store.productModule.domain.model.ProductStatus;
 import com.forehapp.store.productModule.domain.model.ProductVariant;
 import com.forehapp.store.productModule.domain.ports.out.IProductVariantDao;
@@ -40,13 +41,16 @@ public class CartServiceImpl implements ICartService {
     private final ICartDao cartDao;
     private final IProductVariantDao productVariantDao;
     private final IStoreProfileDao storeProfileDao;
+    private final StorageService storageService;
 
     public CartServiceImpl(ICartDao cartDao,
                            IProductVariantDao productVariantDao,
-                           IStoreProfileDao storeProfileDao) {
+                           IStoreProfileDao storeProfileDao,
+                           StorageService storageService) {
         this.cartDao = cartDao;
         this.productVariantDao = productVariantDao;
         this.storeProfileDao = storeProfileDao;
+        this.storageService = storageService;
     }
 
     @Override
@@ -233,7 +237,11 @@ public class CartServiceImpl implements ICartService {
         boolean priceChanged = currentPrice.compareTo(item.getPriceAtAdd()) != 0;
         BigDecimal subtotal = currentPrice.multiply(BigDecimal.valueOf(item.getQuantity()));
         List<com.forehapp.store.productModule.domain.model.ProductImage> images = variant.getProduct().getImages();
-        String thumbnailUrl = images.isEmpty() ? null : images.get(0).getUrl();
+        String thumbnailUrl = null;
+        if (!images.isEmpty()) {
+            String signed = storageService.presign(images.get(0).getS3Key(), java.time.Duration.ofDays(7));
+            thumbnailUrl = signed.isBlank() ? null : signed;
+        }
 
         return new CartItemResponse(
                 item.getId(),
