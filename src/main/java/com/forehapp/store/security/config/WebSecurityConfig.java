@@ -104,6 +104,7 @@ public class WebSecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/brands/*/lines").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/products/*/reviews").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/products/*/reviews/summary").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/locations/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session ->

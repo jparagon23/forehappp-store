@@ -8,7 +8,7 @@ import java.util.List;
 
 public record UpdateShippingZoneDto(
         @Size(min = 1, max = 150) String name,
-        List<String> cities,
+        List<Long> cityIds,
         @DecimalMin("0") BigDecimal cost,
         Boolean isDefault,
         Boolean active

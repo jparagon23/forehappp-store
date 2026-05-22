@@ -1,6 +1,7 @@
 package com.forehapp.store.userModule.application.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
@@ -15,16 +16,8 @@ public class CreateAddressDto {
     @Size(max = 255)
     private String street;
 
-    @NotBlank
-    @Size(max = 100)
-    private String city;
-
-    @Size(max = 100)
-    private String state;
-
-    @NotBlank
-    @Size(max = 100)
-    private String country;
+    @NotNull
+    private Long cityId;
 
     @Size(max = 20)
     private String zipCode;

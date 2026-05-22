@@ -111,7 +111,7 @@ public class OrderServiceImpl implements IOrderService {
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ORDER_ADDRESS_NOT_FOUND, "Address not found"));
 
         if (dto.paymentMethod() == PaymentMethod.CASH_ON_DELIVERY
-                && !address.getCity().equalsIgnoreCase("Cali")) {
+                && !address.getCity().getName().equalsIgnoreCase("Cali")) {
             throw new BadRequestException(ErrorCode.ORDER_ADDRESS_STORE_MISMATCH,
                     "Cash on delivery is only available for orders shipped to Cali");
         }
@@ -188,17 +188,18 @@ public class OrderServiceImpl implements IOrderService {
         Order order = new Order();
         order.setBuyer(buyer);
         order.setShippingAddress(address.getStreet());
-        order.setShippingCity(address.getCity());
-        order.setShippingCountry(address.getCountry());
+        order.setShippingCity(address.getCity().getName());
+        order.setShippingCountry(address.getCity().getState().getCountry().getName());
 
         Map<Long, List<CartItem>> byStore = cartItems.stream()
                 .collect(Collectors.groupingBy(i -> i.getVariant().getProduct().getStore().getId()));
 
         BigDecimal total = BigDecimal.ZERO;
 
+        Long cityId = address.getCity().getId();
         for (Map.Entry<Long, List<CartItem>> entry : byStore.entrySet()) {
             Store store = entry.getValue().get(0).getVariant().getProduct().getStore();
-            OrderSellerGroup group = buildStoreGroup(order, store, entry.getValue());
+            OrderSellerGroup group = buildStoreGroup(order, store, entry.getValue(), cityId);
             order.getSellerGroups().add(group);
             total = total.add(group.getSubtotal()).add(group.getShippingCost());
         }
@@ -207,7 +208,7 @@ public class OrderServiceImpl implements IOrderService {
         return order;
     }
 
-    private OrderSellerGroup buildStoreGroup(Order order, Store store, List<CartItem> items) {
+    private OrderSellerGroup buildStoreGroup(Order order, Store store, List<CartItem> items, Long cityId) {
         OrderSellerGroup group = new OrderSellerGroup();
         group.setOrder(order);
         group.setStore(store);
@@ -266,11 +267,11 @@ public class OrderServiceImpl implements IOrderService {
         }
 
         group.setSubtotal(subtotal);
-        group.setShippingCost(resolveShippingCost(order.getShippingCity(), store, subtotal, items));
+        group.setShippingCost(resolveShippingCost(cityId, store, subtotal, items));
         return group;
     }
 
-    private BigDecimal resolveShippingCost(String city, Store store, BigDecimal subtotal, List<CartItem> items) {
+    private BigDecimal resolveShippingCost(Long cityId, Store store, BigDecimal subtotal, List<CartItem> items) {
         if (store.getFreeShippingMinAmount() != null
                 && subtotal.compareTo(store.getFreeShippingMinAmount()) >= 0) {
             return BigDecimal.ZERO;
@@ -280,7 +281,7 @@ public class OrderServiceImpl implements IOrderService {
         if (allItemsFreeShipping) {
             return BigDecimal.ZERO;
         }
-        return shippingZoneDao.findActiveByCityName(city)
+        return shippingZoneDao.findActiveByCityId(cityId)
                 .or(shippingZoneDao::findActiveDefault)
                 .map(com.forehapp.store.shippingModule.domain.model.ShippingZone::getCost)
                 .orElse(BigDecimal.ZERO);

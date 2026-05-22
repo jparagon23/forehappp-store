@@ -19,7 +19,7 @@ public class ShippingZoneRepositoryImpl implements IShippingZoneDao {
     @Override public ShippingZone save(ShippingZone zone) { return jpaRepository.save(zone); }
     @Override public Optional<ShippingZone> findById(Long id) { return jpaRepository.findById(id); }
     @Override public List<ShippingZone> findAll() { return jpaRepository.findAll(); }
-    @Override public Optional<ShippingZone> findActiveByCityName(String city) { return jpaRepository.findActiveByCityName(city); }
+    @Override public Optional<ShippingZone> findActiveByCityId(Long cityId) { return jpaRepository.findActiveByCityId(cityId); }
     @Override public Optional<ShippingZone> findActiveDefault() { return jpaRepository.findActiveDefault(); }
     @Override public boolean existsAnotherDefault(Long excludeId) { return jpaRepository.existsAnotherDefault(excludeId); }
     @Override public void delete(ShippingZone zone) { jpaRepository.delete(zone); }

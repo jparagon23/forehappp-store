@@ -3,6 +3,8 @@ package com.forehapp.store.userModule.application.usecases;
 import com.forehapp.store.general.exceptions.BadRequestException;
 import com.forehapp.store.general.exceptions.ErrorCode;
 import com.forehapp.store.general.exceptions.NotFoundException;
+import com.forehapp.store.locationModule.domain.model.City;
+import com.forehapp.store.locationModule.domain.ports.out.ICityDao;
 import com.forehapp.store.userModule.application.dto.AddressResponse;
 import com.forehapp.store.userModule.application.dto.CreateAddressDto;
 import com.forehapp.store.userModule.application.dto.UpdateAddressDto;
@@ -26,11 +28,14 @@ public class UserAddressUseCasesImpl implements
 
     private final IUserAddressRepository addressRepository;
     private final IStoreProfileDao storeProfileDao;
+    private final ICityDao cityDao;
 
     public UserAddressUseCasesImpl(IUserAddressRepository addressRepository,
-                                   IStoreProfileDao storeProfileDao) {
+                                   IStoreProfileDao storeProfileDao,
+                                   ICityDao cityDao) {
         this.addressRepository = addressRepository;
         this.storeProfileDao = storeProfileDao;
+        this.cityDao = cityDao;
     }
 
     @Override
@@ -58,13 +63,14 @@ public class UserAddressUseCasesImpl implements
 
         boolean isFirstAddress = existing.isEmpty();
 
+        City city = cityDao.findById(dto.getCityId())
+                .orElseThrow(() -> new NotFoundException(ErrorCode.LOCATION_CITY_NOT_FOUND, "City not found"));
+
         UserAddress address = new UserAddress();
         address.setStoreProfile(profile);
         address.setAlias(dto.getAlias());
         address.setStreet(dto.getStreet().trim());
-        address.setCity(dto.getCity().trim());
-        address.setState(dto.getState() != null ? dto.getState().trim() : null);
-        address.setCountry(dto.getCountry().trim());
+        address.setCity(city);
         address.setZipCode(dto.getZipCode() != null ? dto.getZipCode().trim() : null);
         address.setIsDefault(isFirstAddress || Boolean.TRUE.equals(dto.getIsDefault()));
 
@@ -78,9 +84,11 @@ public class UserAddressUseCasesImpl implements
 
         if (dto.getAlias() != null) address.setAlias(dto.getAlias().trim());
         if (dto.getStreet() != null) address.setStreet(dto.getStreet().trim());
-        if (dto.getCity() != null) address.setCity(dto.getCity().trim());
-        if (dto.getState() != null) address.setState(dto.getState().trim());
-        if (dto.getCountry() != null) address.setCountry(dto.getCountry().trim());
+        if (dto.getCityId() != null) {
+            City city = cityDao.findById(dto.getCityId())
+                    .orElseThrow(() -> new NotFoundException(ErrorCode.LOCATION_CITY_NOT_FOUND, "City not found"));
+            address.setCity(city);
+        }
         if (dto.getZipCode() != null) address.setZipCode(dto.getZipCode().trim());
 
         return new AddressResponse(addressRepository.save(address));

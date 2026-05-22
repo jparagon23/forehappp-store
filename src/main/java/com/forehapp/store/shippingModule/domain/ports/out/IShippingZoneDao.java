@@ -9,7 +9,7 @@ public interface IShippingZoneDao {
     ShippingZone save(ShippingZone zone);
     Optional<ShippingZone> findById(Long id);
     List<ShippingZone> findAll();
-    Optional<ShippingZone> findActiveByCityName(String city);
+    Optional<ShippingZone> findActiveByCityId(Long cityId);
     Optional<ShippingZone> findActiveDefault();
     boolean existsAnotherDefault(Long excludeId);
     void delete(ShippingZone zone);

@@ -1,5 +1,6 @@
 package com.forehapp.store.shippingModule.domain.model;
 
+import com.forehapp.store.locationModule.domain.model.City;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -21,10 +22,13 @@ public class ShippingZone {
     @Column(nullable = false, length = 150)
     private String name;
 
-    @ElementCollection
-    @CollectionTable(name = "shipping_zone_cities", joinColumns = @JoinColumn(name = "zone_id"))
-    @Column(name = "city", nullable = false, length = 150)
-    private List<String> cities = new ArrayList<>();
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "shipping_zone_city_map",
+            joinColumns = @JoinColumn(name = "zone_id"),
+            inverseJoinColumns = @JoinColumn(name = "city_id")
+    )
+    private List<City> cities = new ArrayList<>();
 
     @Column(nullable = false, precision = 14, scale = 2)
     private BigDecimal cost;

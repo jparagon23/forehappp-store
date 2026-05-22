@@ -9,8 +9,8 @@ import java.util.Optional;
 
 public interface IShippingZoneRepository extends JpaRepository<ShippingZone, Long> {
 
-    @Query("SELECT z FROM ShippingZone z JOIN z.cities c WHERE LOWER(c) = LOWER(:city) AND z.active = true")
-    Optional<ShippingZone> findActiveByCityName(@Param("city") String city);
+    @Query("SELECT z FROM ShippingZone z JOIN z.cities c WHERE c.id = :cityId AND z.active = true")
+    Optional<ShippingZone> findActiveByCityId(@Param("cityId") Long cityId);
 
     @Query("SELECT z FROM ShippingZone z WHERE z.isDefault = true AND z.active = true")
     Optional<ShippingZone> findActiveDefault();

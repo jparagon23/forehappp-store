@@ -4,6 +4,8 @@ import com.forehapp.store.general.exceptions.BadRequestException;
 import com.forehapp.store.general.exceptions.ErrorCode;
 import com.forehapp.store.general.exceptions.ForbiddenException;
 import com.forehapp.store.general.exceptions.NotFoundException;
+import com.forehapp.store.locationModule.domain.model.City;
+import com.forehapp.store.locationModule.domain.ports.out.ICityDao;
 import com.forehapp.store.shippingModule.domain.model.ShippingZone;
 import com.forehapp.store.shippingModule.domain.ports.in.IShippingZoneService;
 import com.forehapp.store.shippingModule.domain.ports.out.IShippingZoneDao;
@@ -24,10 +26,12 @@ public class ShippingZoneServiceImpl implements IShippingZoneService {
 
     private final IShippingZoneDao zoneDao;
     private final IStoreProfileDao storeProfileDao;
+    private final ICityDao cityDao;
 
-    public ShippingZoneServiceImpl(IShippingZoneDao zoneDao, IStoreProfileDao storeProfileDao) {
+    public ShippingZoneServiceImpl(IShippingZoneDao zoneDao, IStoreProfileDao storeProfileDao, ICityDao cityDao) {
         this.zoneDao = zoneDao;
         this.storeProfileDao = storeProfileDao;
+        this.cityDao = cityDao;
     }
 
     @Override
@@ -41,7 +45,7 @@ public class ShippingZoneServiceImpl implements IShippingZoneService {
         }
         ShippingZone zone = new ShippingZone();
         zone.setName(dto.name().trim());
-        zone.setCities(dto.cities() != null ? new ArrayList<>(dto.cities()) : new ArrayList<>());
+        zone.setCities(resolveCities(dto.cityIds()));
         zone.setCost(dto.cost());
         zone.setIsDefault(wantsDefault);
         return ShippingZoneResponse.from(zoneDao.save(zone));
@@ -53,7 +57,7 @@ public class ShippingZoneServiceImpl implements IShippingZoneService {
         requireAdmin(userId);
         ShippingZone zone = requireZone(zoneId);
         if (dto.name() != null) zone.setName(dto.name().trim());
-        if (dto.cities() != null) zone.setCities(new ArrayList<>(dto.cities()));
+        if (dto.cityIds() != null) zone.setCities(resolveCities(dto.cityIds()));
         if (dto.cost() != null) zone.setCost(dto.cost());
         if (dto.active() != null) zone.setActive(dto.active());
         if (dto.isDefault() != null) {
@@ -85,6 +89,11 @@ public class ShippingZoneServiceImpl implements IShippingZoneService {
     public void delete(Long zoneId, Long userId) {
         requireAdmin(userId);
         zoneDao.delete(requireZone(zoneId));
+    }
+
+    private List<City> resolveCities(List<Long> cityIds) {
+        if (cityIds == null || cityIds.isEmpty()) return new ArrayList<>();
+        return new ArrayList<>(cityDao.findAllByIds(cityIds));
     }
 
     private ShippingZone requireZone(Long zoneId) {

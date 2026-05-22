@@ -10,7 +10,7 @@ import java.util.List;
 
 public record CreateShippingZoneDto(
         @NotBlank @Size(max = 150) String name,
-        List<String> cities,
+        List<Long> cityIds,
         @NotNull @DecimalMin("0") BigDecimal cost,
         Boolean isDefault
 ) {}
