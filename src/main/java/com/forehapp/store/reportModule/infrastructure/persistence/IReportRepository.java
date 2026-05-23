@@ -1,6 +1,7 @@
 package com.forehapp.store.reportModule.infrastructure.persistence;
 
 import com.forehapp.store.orderModule.domain.model.Order;
+import com.forehapp.store.orderModule.domain.model.OrderSellerGroupStatus;
 import com.forehapp.store.orderModule.domain.model.OrderStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -164,6 +165,35 @@ public interface IReportRepository extends JpaRepository<Order, Long> {
                                   @Param("from") LocalDateTime from,
                                   @Param("to") LocalDateTime to);
 
+    // ── Seller: group status counts ──────────────────────────────────────────
+
+    @Query("SELECT COUNT(g) FROM com.forehapp.store.orderModule.domain.model.OrderSellerGroup g " +
+           "WHERE g.store.id = :storeId " +
+           "AND g.status = :status " +
+           "AND g.order.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PAID " +
+           "AND g.order.createdAt BETWEEN :from AND :to")
+    Long countSellerGroupsByStatus(@Param("storeId") Long storeId,
+                                    @Param("status") OrderSellerGroupStatus status,
+                                    @Param("from") LocalDateTime from,
+                                    @Param("to") LocalDateTime to);
+
+    // ── Seller: low stock ─────────────────────────────────────────────────────
+
+    @Query(value = """
+            SELECT pv.variant_id AS variantId,
+                   p.product_id  AS productId,
+                   p.title       AS productTitle,
+                   pv.sku        AS sku,
+                   pv.stock      AS stock
+            FROM store_product_variants pv
+            INNER JOIN store_products p ON pv.product_id = p.product_id
+            WHERE p.store_id = :storeId
+              AND pv.stock <= :threshold
+            ORDER BY pv.stock ASC
+            """, nativeQuery = true)
+    List<LowStockProjection> getLowStockByStore(@Param("storeId") Long storeId,
+                                                 @Param("threshold") int threshold);
+
     // ── Seller: top products ──────────────────────────────────────────────────
 
     @Query(value = """
@@ -208,5 +238,13 @@ public interface IReportRepository extends JpaRepository<Order, Long> {
         String getStoreName();
         Long getTotalOrders();
         java.math.BigDecimal getTotalRevenue();
+    }
+
+    interface LowStockProjection {
+        Long getVariantId();
+        Long getProductId();
+        String getProductTitle();
+        String getSku();
+        Integer getStock();
     }
 }

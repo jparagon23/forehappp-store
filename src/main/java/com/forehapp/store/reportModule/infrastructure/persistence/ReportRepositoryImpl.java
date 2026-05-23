@@ -1,6 +1,8 @@
 package com.forehapp.store.reportModule.infrastructure.persistence;
 
+import com.forehapp.store.orderModule.domain.model.OrderSellerGroupStatus;
 import com.forehapp.store.orderModule.domain.model.OrderStatus;
+import com.forehapp.store.reportModule.application.dto.LowStockItemResponse;
 import com.forehapp.store.reportModule.application.dto.RevenuePointResponse;
 import com.forehapp.store.reportModule.application.dto.SellerSalesResponse;
 import com.forehapp.store.reportModule.application.dto.TopProductResponse;
@@ -107,6 +109,18 @@ public class ReportRepositoryImpl implements IReportDao {
     @Override
     public BigDecimal sumSellerRefunded(Long storeId, LocalDateTime from, LocalDateTime to) {
         return repository.sumSellerRefunded(storeId, from, to);
+    }
+
+    @Override
+    public Long countSellerGroupsByStatus(Long storeId, OrderSellerGroupStatus status, LocalDateTime from, LocalDateTime to) {
+        return repository.countSellerGroupsByStatus(storeId, status, from, to);
+    }
+
+    @Override
+    public List<LowStockItemResponse> getLowStockByStore(Long storeId, int threshold) {
+        return repository.getLowStockByStore(storeId, threshold).stream()
+                .map(p -> new LowStockItemResponse(p.getVariantId(), p.getProductId(), p.getProductTitle(), p.getSku(), p.getStock()))
+                .toList();
     }
 
     @Override

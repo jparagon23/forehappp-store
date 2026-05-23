@@ -1,6 +1,8 @@
 package com.forehapp.store.reportModule.application.usecases;
 
-import com.forehapp.store.reportModule.application.dto.BusinessSummaryResponse;
+import com.forehapp.store.orderModule.domain.model.OrderSellerGroupStatus;
+import com.forehapp.store.reportModule.application.dto.LowStockItemResponse;
+import com.forehapp.store.reportModule.application.dto.SellerSummaryResponse;
 import com.forehapp.store.reportModule.application.dto.TopProductResponse;
 import com.forehapp.store.reportModule.domain.ports.in.ISellerReportService;
 import com.forehapp.store.reportModule.domain.ports.out.IReportDao;
@@ -28,20 +30,33 @@ public class SellerReportServiceImpl implements ISellerReportService {
 
     @Override
     @Transactional(readOnly = true)
-    public BusinessSummaryResponse getMySummary(Long storeId, Long userId, LocalDate from, LocalDate to) {
+    public SellerSummaryResponse getMySummary(Long storeId, Long userId, LocalDate from, LocalDate to) {
         resolveStoreAccess(storeId, userId);
         LocalDateTime fromDt = from.atStartOfDay();
         LocalDateTime toDt = to.atTime(LocalTime.MAX);
 
-        return new BusinessSummaryResponse(
+        long pendingToShip =
+                reportDao.countSellerGroupsByStatus(storeId, OrderSellerGroupStatus.PENDING, fromDt, toDt) +
+                reportDao.countSellerGroupsByStatus(storeId, OrderSellerGroupStatus.PREPARING, fromDt, toDt);
+
+        List<LowStockItemResponse> lowStockItems = reportDao.getLowStockByStore(storeId, LOW_STOCK_THRESHOLD);
+
+        return new SellerSummaryResponse(
                 reportDao.countSellerOrders(storeId, fromDt, toDt),
                 reportDao.sumSellerRevenue(storeId, fromDt, toDt),
                 reportDao.avgSellerTicket(storeId, fromDt, toDt),
-                0L,
+                pendingToShip,
+                reportDao.countSellerGroupsByStatus(storeId, OrderSellerGroupStatus.SHIPPED, fromDt, toDt),
+                reportDao.countSellerGroupsByStatus(storeId, OrderSellerGroupStatus.DELIVERED, fromDt, toDt),
+                reportDao.countSellerGroupsByStatus(storeId, OrderSellerGroupStatus.CANCELLED, fromDt, toDt),
                 reportDao.countSellerReturns(storeId, fromDt, toDt),
-                reportDao.sumSellerRefunded(storeId, fromDt, toDt)
+                reportDao.sumSellerRefunded(storeId, fromDt, toDt),
+                (long) lowStockItems.size(),
+                lowStockItems
         );
     }
+
+    private static final int LOW_STOCK_THRESHOLD = 5;
 
     @Override
     @Transactional(readOnly = true)

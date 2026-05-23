@@ -1,6 +1,8 @@
 package com.forehapp.store.reportModule.domain.ports.out;
 
+import com.forehapp.store.orderModule.domain.model.OrderSellerGroupStatus;
 import com.forehapp.store.orderModule.domain.model.OrderStatus;
+import com.forehapp.store.reportModule.application.dto.LowStockItemResponse;
 import com.forehapp.store.reportModule.application.dto.RevenuePointResponse;
 import com.forehapp.store.reportModule.application.dto.SellerSalesResponse;
 import com.forehapp.store.reportModule.application.dto.TopProductResponse;
@@ -33,6 +35,12 @@ public interface IReportDao {
     BigDecimal avgSellerTicket(Long storeId, LocalDateTime from, LocalDateTime to);
     Long countSellerReturns(Long storeId, LocalDateTime from, LocalDateTime to);
     BigDecimal sumSellerRefunded(Long storeId, LocalDateTime from, LocalDateTime to);
+
+    // --- Seller: group status counts ---
+    Long countSellerGroupsByStatus(Long storeId, OrderSellerGroupStatus status, LocalDateTime from, LocalDateTime to);
+
+    // --- Seller: low stock ---
+    List<LowStockItemResponse> getLowStockByStore(Long storeId, int threshold);
 
     // --- Seller: rankings ---
     List<TopProductResponse> getSellerTopProducts(Long storeId, LocalDateTime from, LocalDateTime to, int limit);
