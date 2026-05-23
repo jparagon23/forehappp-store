@@ -22,4 +22,6 @@ public interface IProductService {
     SellerProductDetailResponse getStoreProductById(Long productId, Long storeId, Long userId);
     void deleteProduct(Long productId, Long storeId, Long userId);
     void deleteVariant(Long productId, Long variantId, Long storeId, Long userId);
+    ProductVariantResponse deactivateVariant(Long productId, Long variantId, Long storeId, Long userId);
+    ProductVariantResponse activateVariant(Long productId, Long variantId, Long storeId, Long userId);
 }

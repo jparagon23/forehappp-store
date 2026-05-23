@@ -94,6 +94,24 @@ public class ProductController {
         return ResponseEntity.ok(productService.updateVariant(productId, variantId, dto, storeId, Long.parseLong(userId)));
     }
 
+    @PatchMapping("/{productId}/variants/{variantId}/deactivate")
+    public ResponseEntity<ProductVariantResponse> deactivateVariant(
+            @PathVariable Long storeId,
+            @PathVariable Long productId,
+            @PathVariable Long variantId,
+            @AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(productService.deactivateVariant(productId, variantId, storeId, Long.parseLong(userId)));
+    }
+
+    @PatchMapping("/{productId}/variants/{variantId}/activate")
+    public ResponseEntity<ProductVariantResponse> activateVariant(
+            @PathVariable Long storeId,
+            @PathVariable Long productId,
+            @PathVariable Long variantId,
+            @AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(productService.activateVariant(productId, variantId, storeId, Long.parseLong(userId)));
+    }
+
     @DeleteMapping("/{productId}/variants/{variantId}")
     public ResponseEntity<Void> deleteVariant(
             @PathVariable Long storeId,

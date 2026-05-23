@@ -122,6 +122,11 @@ public class CartServiceImpl implements ICartService {
                 .orElseThrow(() -> new NotFoundException(ErrorCode.CART_VARIANT_NOT_FOUND,
                         "Variant not found: " + dto.variantId()));
 
+        if (!Boolean.TRUE.equals(variant.getActive()) ||
+                variant.getProduct().getStatus() != com.forehapp.store.productModule.domain.model.ProductStatus.ACTIVE) {
+            throw new BadRequestException(ErrorCode.CART_INACTIVE_PRODUCT, "This item is no longer available");
+        }
+
         cart.getItems().stream()
                 .filter(i -> i.getVariant().getId().equals(variant.getId()))
                 .findFirst()
@@ -191,7 +196,8 @@ public class CartServiceImpl implements ICartService {
         Long cityId = address.getCity().getId();
 
         Map<Long, List<CartItem>> byStore = cart.getItems().stream()
-                .filter(i -> i.getVariant().getProduct().getStatus() == ProductStatus.ACTIVE)
+                .filter(i -> i.getVariant().getProduct().getStatus() == ProductStatus.ACTIVE
+                        && Boolean.TRUE.equals(i.getVariant().getActive()))
                 .collect(Collectors.groupingBy(i -> i.getVariant().getProduct().getStore().getId()));
 
         List<ShippingEstimateGroupResponse> groups = byStore.entrySet().stream()
@@ -281,7 +287,8 @@ public class CartServiceImpl implements ICartService {
     private CartResponse toResponse(Cart cart) {
         // BUG-06: exclude items whose product is no longer ACTIVE
         Map<Long, List<CartItem>> byStore = cart.getItems().stream()
-                .filter(i -> i.getVariant().getProduct().getStatus() == ProductStatus.ACTIVE)
+                .filter(i -> i.getVariant().getProduct().getStatus() == ProductStatus.ACTIVE
+                        && Boolean.TRUE.equals(i.getVariant().getActive()))
                 .collect(Collectors.groupingBy(i -> i.getVariant().getProduct().getStore().getId()));
 
         List<CartSellerGroupResponse> groups = byStore.entrySet().stream()

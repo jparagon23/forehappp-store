@@ -28,12 +28,15 @@ public class PublicProductSummaryResponse {
         this.line = product.getLine() != null ? product.getLine().getDescription() : null;
         this.category = product.getCategory().getDescription();
         this.createdAt = product.getCreatedAt();
-        this.variantCount = product.getVariants().size();
-        this.minPrice = product.getVariants().stream()
+        var activeVariants = product.getVariants().stream()
+                .filter(v -> Boolean.TRUE.equals(v.getActive()))
+                .toList();
+        this.variantCount = activeVariants.size();
+        this.minPrice = activeVariants.stream()
                 .map(v -> v.getPrice())
                 .min(BigDecimal::compareTo)
                 .orElse(null);
-        this.compareAtPrice = product.getVariants().stream()
+        this.compareAtPrice = activeVariants.stream()
                 .map(v -> v.getCompareAtPrice())
                 .filter(p -> p != null)
                 .max(BigDecimal::compareTo)

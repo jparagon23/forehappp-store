@@ -38,6 +38,7 @@ public class PublicProductDetailResponse {
         this.createdAt = product.getCreatedAt();
         this.freeShipping = Boolean.TRUE.equals(product.getFreeShipping());
         this.variants = product.getVariants().stream()
+                .filter(v -> Boolean.TRUE.equals(v.getActive()))
                 .map(ProductVariantResponse::new)
                 .toList();
         this.images = images;

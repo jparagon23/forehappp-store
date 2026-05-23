@@ -38,6 +38,9 @@ public class ProductVariant {
     @Column(nullable = false)
     private Integer stock = 0;
 
+    @Column(nullable = false)
+    private Boolean active = true;
+
     @BatchSize(size = 25)
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(

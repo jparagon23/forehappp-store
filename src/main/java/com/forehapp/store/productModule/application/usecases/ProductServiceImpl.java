@@ -218,9 +218,10 @@ public class ProductServiceImpl implements IProductService {
         if (!productImageDao.existsByProductId(productId)) {
             throw new BadRequestException(ErrorCode.PRODUCT_NO_IMAGES, "Product must have at least one image before publishing");
         }
-        boolean hasStock = product.getVariants().stream().anyMatch(v -> v.getStock() > 0);
+        boolean hasStock = product.getVariants().stream()
+                .anyMatch(v -> Boolean.TRUE.equals(v.getActive()) && v.getStock() > 0);
         if (!hasStock) {
-            throw new BadRequestException(ErrorCode.PRODUCT_NO_STOCK_IN_VARIANTS, "Product must have at least one variant with stock before publishing");
+            throw new BadRequestException(ErrorCode.PRODUCT_NO_STOCK_IN_VARIANTS, "Product must have at least one active variant with stock before publishing");
         }
 
         product.setStatus(ProductStatus.ACTIVE);
@@ -295,7 +296,7 @@ public class ProductServiceImpl implements IProductService {
 
         boolean hasStock = product.getVariants().stream()
                 .filter(v -> !v.getId().equals(variantId))
-                .anyMatch(v -> v.getStock() > 0);
+                .anyMatch(v -> Boolean.TRUE.equals(v.getActive()) && v.getStock() > 0);
         if (!hasStock && product.getStatus() == ProductStatus.ACTIVE) {
             product.setStatus(ProductStatus.OUT_OF_STOCK);
             productDao.save(product);
@@ -327,6 +328,58 @@ public class ProductServiceImpl implements IProductService {
                     return new ProductResponse(p, thumbnail);
                 })
                 .toList();
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = "public-products", allEntries = true)
+    public ProductVariantResponse deactivateVariant(Long productId, Long variantId, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        Product product = resolveStoreProduct(productId, storeId);
+        ProductVariant variant = variantDao.findByIdAndProductId(variantId, productId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Variant not found"));
+
+        if (!Boolean.TRUE.equals(variant.getActive())) {
+            throw new BadRequestException(ErrorCode.PRODUCT_VARIANT_ALREADY_INACTIVE, "Variant is already inactive");
+        }
+
+        long activeCount = product.getVariants().stream()
+                .filter(v -> Boolean.TRUE.equals(v.getActive()))
+                .count();
+        if (activeCount <= 1) {
+            throw new BadRequestException(ErrorCode.PRODUCT_VARIANT_LAST_ACTIVE,
+                    "Cannot deactivate the last active variant. Deactivate the product instead.");
+        }
+
+        variant.setActive(false);
+        ProductVariant saved = variantDao.save(variant);
+
+        boolean hasStock = product.getVariants().stream()
+                .filter(v -> !v.getId().equals(variantId))
+                .anyMatch(v -> Boolean.TRUE.equals(v.getActive()) && v.getStock() > 0);
+        if (!hasStock && product.getStatus() == ProductStatus.ACTIVE) {
+            product.setStatus(ProductStatus.OUT_OF_STOCK);
+            productDao.save(product);
+        }
+
+        return new ProductVariantResponse(saved);
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = "public-products", allEntries = true)
+    public ProductVariantResponse activateVariant(Long productId, Long variantId, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        resolveStoreProduct(productId, storeId);
+        ProductVariant variant = variantDao.findByIdAndProductId(variantId, productId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Variant not found"));
+
+        if (Boolean.TRUE.equals(variant.getActive())) {
+            throw new BadRequestException(ErrorCode.PRODUCT_VARIANT_ALREADY_ACTIVE, "Variant is already active");
+        }
+
+        variant.setActive(true);
+        return new ProductVariantResponse(variantDao.save(variant));
     }
 
     private StoreMembership resolveStoreAccess(Long storeId, Long userId) {
