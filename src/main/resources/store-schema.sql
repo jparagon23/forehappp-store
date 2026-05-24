@@ -162,7 +162,7 @@ CREATE TABLE IF NOT EXISTS store_product_images (
 CREATE TABLE IF NOT EXISTS store_product_variants (
     variant_id       BIGINT AUTO_INCREMENT PRIMARY KEY,
     product_id       BIGINT NOT NULL,
-    sku              VARCHAR(100) NOT NULL,
+    sku              VARCHAR(100) NULL,
     price            DECIMAL(14, 2) NOT NULL,
     compare_at_price DECIMAL(14, 2),
     stock            INT NOT NULL DEFAULT 0,
