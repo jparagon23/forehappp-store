@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS store_confirmation_token (
     expires_at  DATETIME,
     confirmed_at DATETIME,
     user_id     BIGINT NOT NULL,
-    CONSTRAINT fk_sct_user FOREIGN KEY (user_id) REFERENCES users(user_id)
+    CONSTRAINT store_fk_sct_user FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
 
 CREATE TABLE IF NOT EXISTS store_fcm_tokens (
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS store_profiles (
     loyalty_points   INT NOT NULL DEFAULT 0,
     active           TINYINT(1) NOT NULL DEFAULT 1,
     CONSTRAINT uk_store_profile_user UNIQUE (user_id),
-    CONSTRAINT fk_sp_user FOREIGN KEY (user_id) REFERENCES users(user_id)
+    CONSTRAINT store_fk_sp_user FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
 
 CREATE TABLE IF NOT EXISTS store_profile_addresses (
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS store_profile_addresses (
     country          VARCHAR(100) NOT NULL,
     zip_code         VARCHAR(20),
     is_default       TINYINT(1) NOT NULL DEFAULT 0,
-    CONSTRAINT fk_spa_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id)
+    CONSTRAINT store_fk_spa_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id)
 );
 
 CREATE TABLE IF NOT EXISTS store_roles (
@@ -60,8 +60,8 @@ CREATE TABLE IF NOT EXISTS store_roles (
 CREATE TABLE IF NOT EXISTS store_profile_roles (
     store_profile_id BIGINT      NOT NULL,
     role             VARCHAR(20) NOT NULL,
-    CONSTRAINT fk_spr_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id),
-    CONSTRAINT fk_spr_role    FOREIGN KEY (role)             REFERENCES store_roles(role_name)
+    CONSTRAINT store_fk_spr_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id),
+    CONSTRAINT store_fk_spr_role    FOREIGN KEY (role)             REFERENCES store_roles(role_name)
 );
 
 -- =====================
@@ -86,8 +86,8 @@ CREATE TABLE IF NOT EXISTS store_memberships (
     joined_at        DATETIME NOT NULL,
     active           TINYINT(1) NOT NULL DEFAULT 1,
     CONSTRAINT uk_store_membership UNIQUE (store_id, store_profile_id),
-    CONSTRAINT fk_sm_store   FOREIGN KEY (store_id)         REFERENCES stores(store_id),
-    CONSTRAINT fk_sm_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id)
+    CONSTRAINT store_fk_sm_store   FOREIGN KEY (store_id)         REFERENCES stores(store_id),
+    CONSTRAINT store_fk_sm_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id)
 );
 
 CREATE TABLE IF NOT EXISTS store_brands (
@@ -268,7 +268,7 @@ CREATE TABLE IF NOT EXISTS store_carts (
     status           VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
     creation_date    DATETIME NOT NULL,
     updated_at       DATETIME NOT NULL,
-    CONSTRAINT fk_cart_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id)
+    CONSTRAINT store_fk_cart_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id)
 );
 
 CREATE TABLE IF NOT EXISTS store_cart_items (
@@ -279,8 +279,8 @@ CREATE TABLE IF NOT EXISTS store_cart_items (
     price_at_add DECIMAL(14, 2) NOT NULL,
     added_date   DATETIME NOT NULL,
     CONSTRAINT uk_cart_variant UNIQUE (cart_id, variant_id),
-    CONSTRAINT fk_ci_cart      FOREIGN KEY (cart_id)    REFERENCES store_carts(cart_id),
-    CONSTRAINT fk_ci_variant   FOREIGN KEY (variant_id) REFERENCES store_product_variants(variant_id)
+    CONSTRAINT store_fk_ci_cart      FOREIGN KEY (cart_id)    REFERENCES store_carts(cart_id),
+    CONSTRAINT store_fk_ci_variant   FOREIGN KEY (variant_id) REFERENCES store_product_variants(variant_id)
 );
 
 CREATE TABLE IF NOT EXISTS store_wishlists (
@@ -288,7 +288,7 @@ CREATE TABLE IF NOT EXISTS store_wishlists (
     store_profile_id BIGINT NOT NULL,
     created_at       DATETIME NOT NULL,
     CONSTRAINT uk_wishlist_profile UNIQUE (store_profile_id),
-    CONSTRAINT fk_wl_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id)
+    CONSTRAINT store_fk_wl_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id)
 );
 
 CREATE TABLE IF NOT EXISTS store_wishlist_items (
@@ -297,8 +297,8 @@ CREATE TABLE IF NOT EXISTS store_wishlist_items (
     product_id       BIGINT NOT NULL,
     added_at         DATETIME NOT NULL,
     CONSTRAINT uk_wishlist_product UNIQUE (wishlist_id, product_id),
-    CONSTRAINT fk_wi_wishlist FOREIGN KEY (wishlist_id) REFERENCES store_wishlists(wishlist_id),
-    CONSTRAINT fk_wi_product  FOREIGN KEY (product_id)  REFERENCES store_products(product_id)
+    CONSTRAINT store_fk_wi_wishlist FOREIGN KEY (wishlist_id) REFERENCES store_wishlists(wishlist_id),
+    CONSTRAINT store_fk_wi_product  FOREIGN KEY (product_id)  REFERENCES store_products(product_id)
 );
 
 CREATE TABLE IF NOT EXISTS store_product_reviews (
@@ -313,8 +313,8 @@ CREATE TABLE IF NOT EXISTS store_product_reviews (
     updated_at       DATETIME,
     CONSTRAINT uk_review_product_profile UNIQUE (product_id, store_profile_id),
     CONSTRAINT chk_review_rating CHECK (rating BETWEEN 1 AND 5),
-    CONSTRAINT fk_review_product FOREIGN KEY (product_id)       REFERENCES store_products(product_id),
-    CONSTRAINT fk_review_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id)
+    CONSTRAINT store_fk_review_product FOREIGN KEY (product_id)       REFERENCES store_products(product_id),
+    CONSTRAINT store_fk_review_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id)
 );
 
 CREATE TABLE IF NOT EXISTS store_coupons (
@@ -333,7 +333,7 @@ CREATE TABLE IF NOT EXISTS store_coupons (
     status            VARCHAR(20) NOT NULL DEFAULT 'ACTIVA',
     created_at        DATETIME NOT NULL,
     CONSTRAINT uk_coupon_code UNIQUE (code),
-    CONSTRAINT fk_coupon_store FOREIGN KEY (store_id) REFERENCES stores(store_id)
+    CONSTRAINT store_fk_coupon_store FOREIGN KEY (store_id) REFERENCES stores(store_id)
 );
 
 CREATE TABLE IF NOT EXISTS store_coupon_redemptions (
@@ -343,8 +343,8 @@ CREATE TABLE IF NOT EXISTS store_coupon_redemptions (
     order_id         BIGINT,
     discount_applied DECIMAL(14,2) NOT NULL,
     used_at          DATETIME NOT NULL,
-    CONSTRAINT fk_cr_coupon  FOREIGN KEY (coupon_id)        REFERENCES store_coupons(coupon_id),
-    CONSTRAINT fk_cr_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id)
+    CONSTRAINT store_fk_cr_coupon  FOREIGN KEY (coupon_id)        REFERENCES store_coupons(coupon_id),
+    CONSTRAINT store_fk_cr_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id)
 );
 
 CREATE TABLE IF NOT EXISTS store_return_requests (
@@ -358,8 +358,8 @@ CREATE TABLE IF NOT EXISTS store_return_requests (
     status      VARCHAR(20) NOT NULL DEFAULT 'PENDIENTE',
     created_at  DATETIME NOT NULL,
     updated_at  DATETIME,
-    CONSTRAINT fk_rr_group  FOREIGN KEY (group_id)  REFERENCES store_order_seller_groups(group_id),
-    CONSTRAINT fk_rr_buyer  FOREIGN KEY (buyer_id)  REFERENCES store_profiles(store_profile_id)
+    CONSTRAINT store_fk_rr_group  FOREIGN KEY (group_id)  REFERENCES store_order_seller_groups(group_id),
+    CONSTRAINT store_fk_rr_buyer  FOREIGN KEY (buyer_id)  REFERENCES store_profiles(store_profile_id)
 );
 
 CREATE TABLE IF NOT EXISTS store_return_items (
@@ -367,8 +367,8 @@ CREATE TABLE IF NOT EXISTS store_return_items (
     return_id           BIGINT NOT NULL,
     order_item_id       BIGINT NOT NULL,
     quantity_to_return  INT NOT NULL,
-    CONSTRAINT fk_ri_return     FOREIGN KEY (return_id)     REFERENCES store_return_requests(return_id),
-    CONSTRAINT fk_ri_order_item FOREIGN KEY (order_item_id) REFERENCES store_order_items(item_id)
+    CONSTRAINT store_fk_ri_return     FOREIGN KEY (return_id)     REFERENCES store_return_requests(return_id),
+    CONSTRAINT store_fk_ri_order_item FOREIGN KEY (order_item_id) REFERENCES store_order_items(item_id)
 );
 
 -- =====================
@@ -413,7 +413,7 @@ PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
 
 -- Migrate store_coupons: seller_id → store_id
 SET @s = (SELECT IF(COUNT(*)=0,
-  'ALTER TABLE store_coupons ADD COLUMN store_id BIGINT NOT NULL DEFAULT 0, ADD CONSTRAINT fk_coupon_store FOREIGN KEY (store_id) REFERENCES stores(store_id)',
+  'ALTER TABLE store_coupons ADD COLUMN store_id BIGINT NOT NULL DEFAULT 0, ADD CONSTRAINT store_fk_coupon_store FOREIGN KEY (store_id) REFERENCES stores(store_id)',
   'SELECT 1')
   FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_coupons' AND COLUMN_NAME='store_id');
 PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
@@ -447,7 +447,7 @@ CREATE TABLE IF NOT EXISTS states (
     name       VARCHAR(150) NOT NULL,
     country_id BIGINT       NOT NULL,
     active     TINYINT(1)   NOT NULL DEFAULT 1,
-    CONSTRAINT fk_state_country FOREIGN KEY (country_id) REFERENCES countries(id)
+    CONSTRAINT store_fk_state_country FOREIGN KEY (country_id) REFERENCES countries(id)
 );
 
 CREATE TABLE IF NOT EXISTS cities (
@@ -455,7 +455,7 @@ CREATE TABLE IF NOT EXISTS cities (
     name     VARCHAR(150) NOT NULL,
     state_id BIGINT       NOT NULL,
     active   TINYINT(1)   NOT NULL DEFAULT 1,
-    CONSTRAINT fk_city_state FOREIGN KEY (state_id) REFERENCES states(id)
+    CONSTRAINT store_fk_city_state FOREIGN KEY (state_id) REFERENCES states(id)
 );
 
 -- =====================
@@ -474,8 +474,8 @@ CREATE TABLE IF NOT EXISTS store_shipping_zone_city_map (
     zone_id BIGINT NOT NULL,
     city_id BIGINT NOT NULL,
     PRIMARY KEY (zone_id, city_id),
-    CONSTRAINT fk_szcm_zone FOREIGN KEY (zone_id) REFERENCES store_shipping_zones(id),
-    CONSTRAINT fk_szcm_city FOREIGN KEY (city_id) REFERENCES cities(id)
+    CONSTRAINT store_fk_szcm_zone FOREIGN KEY (zone_id) REFERENCES store_shipping_zones(id),
+    CONSTRAINT store_fk_szcm_city FOREIGN KEY (city_id) REFERENCES cities(id)
 );
 
 -- Add missing columns to location tables (table may have been created by Hibernate with incomplete schema)
@@ -516,7 +516,7 @@ PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
 
 -- Add city_id (nullable so existing rows without city data don't block the migration)
 SET @s = (SELECT IF(COUNT(*) = 0,
-  'ALTER TABLE store_profile_addresses ADD COLUMN city_id BIGINT, ADD CONSTRAINT fk_address_city FOREIGN KEY (city_id) REFERENCES cities(id)',
+  'ALTER TABLE store_profile_addresses ADD COLUMN city_id BIGINT, ADD CONSTRAINT store_fk_address_city FOREIGN KEY (city_id) REFERENCES cities(id)',
   'SELECT 1')
   FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_profile_addresses' AND COLUMN_NAME = 'city_id');
 PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
