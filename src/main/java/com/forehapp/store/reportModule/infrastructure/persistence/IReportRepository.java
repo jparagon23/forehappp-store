@@ -170,7 +170,7 @@ public interface IReportRepository extends JpaRepository<Order, Long> {
     @Query("SELECT COUNT(g) FROM com.forehapp.store.orderModule.domain.model.OrderSellerGroup g " +
            "WHERE g.store.id = :storeId " +
            "AND g.status = :status " +
-           "AND g.order.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PAID " +
+           "AND g.order.status != com.forehapp.store.orderModule.domain.model.OrderStatus.CANCELLED " +
            "AND g.order.createdAt BETWEEN :from AND :to")
     Long countSellerGroupsByStatus(@Param("storeId") Long storeId,
                                     @Param("status") OrderSellerGroupStatus status,
