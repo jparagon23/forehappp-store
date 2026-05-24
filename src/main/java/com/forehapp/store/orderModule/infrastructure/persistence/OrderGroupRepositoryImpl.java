@@ -22,8 +22,8 @@ public class OrderGroupRepositoryImpl implements IOrderGroupDao {
     }
 
     @Override
-    public List<OrderSellerGroup> findAllBySellerIdWithDetails(Long sellerId) {
-        return jpaRepository.findAllBySellerIdWithDetails(sellerId);
+    public List<OrderSellerGroup> findAllByStoreIdWithDetails(Long storeId) {
+        return jpaRepository.findAllByStoreIdWithDetails(storeId);
     }
 
     @Override

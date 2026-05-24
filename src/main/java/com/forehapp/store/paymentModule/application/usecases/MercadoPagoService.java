@@ -11,7 +11,6 @@ import com.forehapp.store.orderModule.domain.model.Order;
 import com.forehapp.store.paymentModule.domain.model.Payment;
 import com.forehapp.store.paymentModule.domain.model.PaymentMethod;
 import com.forehapp.store.paymentModule.domain.model.PaymentStatus;
-import com.forehapp.store.paymentModule.domain.ports.in.IPaymentService;
 import com.forehapp.store.paymentModule.infrastructure.persistence.IPaymentRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,7 +23,7 @@ import java.math.RoundingMode;
 import java.util.List;
 
 @Service
-public class MercadoPagoService implements IPaymentService {
+public class MercadoPagoService {
 
     private static final Logger log = LoggerFactory.getLogger(MercadoPagoService.class);
 
@@ -49,8 +48,7 @@ public class MercadoPagoService implements IPaymentService {
         this.paymentRepository = paymentRepository;
     }
 
-    @Override
-    public String createMercadoPagoPreference(Order order) {
+    public String createPreference(Order order) {
         List<PreferenceItemRequest> items = order.getSellerGroups().stream()
                 .flatMap(group -> group.getItems().stream())
                 .map(item -> PreferenceItemRequest.builder()
@@ -82,8 +80,8 @@ public class MercadoPagoService implements IPaymentService {
 
             Payment payment = new Payment();
             payment.setOrder(order);
-            payment.setMethod(PaymentMethod.MERCADOPAGO.name());
-            payment.setStatus(PaymentStatus.PENDIENTE.name());
+            payment.setMethod(PaymentMethod.MERCADO_PAGO.name());
+            payment.setStatus(PaymentStatus.PENDING.name());
             payment.setAmount(order.getTotal());
             payment.setReference(preference.getId());
             paymentRepository.save(payment);

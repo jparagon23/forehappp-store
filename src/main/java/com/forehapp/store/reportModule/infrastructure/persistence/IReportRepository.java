@@ -1,6 +1,7 @@
 package com.forehapp.store.reportModule.infrastructure.persistence;
 
 import com.forehapp.store.orderModule.domain.model.Order;
+import com.forehapp.store.orderModule.domain.model.OrderSellerGroupStatus;
 import com.forehapp.store.orderModule.domain.model.OrderStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -102,19 +103,18 @@ public interface IReportRepository extends JpaRepository<Order, Long> {
                                                @Param("to") LocalDateTime to,
                                                @Param("limit") int limit);
 
-    // ── Admin: seller sales ───────────────────────────────────────────────────
+    // ── Admin: store sales ────────────────────────────────────────────────────
 
     @Query(value = """
-            SELECT sp.store_profile_id                     AS sellerId,
-                   CONCAT(u.name, ' ', u.lastname)        AS sellerName,
-                   COUNT(DISTINCT o.order_id)             AS totalOrders,
-                   SUM(osg.subtotal)                      AS totalRevenue
+            SELECT s.store_id              AS storeId,
+                   s.name                 AS storeName,
+                   COUNT(DISTINCT o.order_id) AS totalOrders,
+                   SUM(osg.subtotal)      AS totalRevenue
             FROM store_order_seller_groups osg
-            INNER JOIN store_orders   o  ON osg.order_id = o.order_id
-            INNER JOIN store_profiles sp ON osg.seller_id = sp.store_profile_id
-            INNER JOIN users          u  ON sp.user_id   = u.user_id
+            INNER JOIN store_orders o ON osg.order_id = o.order_id
+            INNER JOIN stores       s ON osg.store_id = s.store_id
             WHERE o.status = 'PAID' AND o.created_at BETWEEN :from AND :to
-            GROUP BY sp.store_profile_id, u.name, u.lastname
+            GROUP BY s.store_id, s.name
             ORDER BY totalRevenue DESC
             """, nativeQuery = true)
     List<SellerSalesProjection> getSellerSales(@Param("from") LocalDateTime from,
@@ -123,47 +123,76 @@ public interface IReportRepository extends JpaRepository<Order, Long> {
     // ── Seller: summary ───────────────────────────────────────────────────────
 
     @Query("SELECT COUNT(DISTINCT g.order) FROM com.forehapp.store.orderModule.domain.model.OrderSellerGroup g " +
-           "WHERE g.seller.id = :sellerId " +
+           "WHERE g.store.id = :storeId " +
            "AND g.order.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PAID " +
            "AND g.order.createdAt BETWEEN :from AND :to")
-    Long countSellerOrders(@Param("sellerId") Long sellerId,
+    Long countSellerOrders(@Param("storeId") Long storeId,
                             @Param("from") LocalDateTime from,
                             @Param("to") LocalDateTime to);
 
     @Query("SELECT COALESCE(SUM(g.subtotal), 0) FROM com.forehapp.store.orderModule.domain.model.OrderSellerGroup g " +
-           "WHERE g.seller.id = :sellerId " +
+           "WHERE g.store.id = :storeId " +
            "AND g.order.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PAID " +
            "AND g.order.createdAt BETWEEN :from AND :to")
-    BigDecimal sumSellerRevenue(@Param("sellerId") Long sellerId,
+    BigDecimal sumSellerRevenue(@Param("storeId") Long storeId,
                                  @Param("from") LocalDateTime from,
                                  @Param("to") LocalDateTime to);
 
     @Query("SELECT COALESCE(AVG(g.subtotal), 0) FROM com.forehapp.store.orderModule.domain.model.OrderSellerGroup g " +
-           "WHERE g.seller.id = :sellerId " +
+           "WHERE g.store.id = :storeId " +
            "AND g.order.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PAID " +
            "AND g.order.createdAt BETWEEN :from AND :to")
-    BigDecimal avgSellerTicket(@Param("sellerId") Long sellerId,
+    BigDecimal avgSellerTicket(@Param("storeId") Long storeId,
                                 @Param("from") LocalDateTime from,
                                 @Param("to") LocalDateTime to);
 
     @Query("SELECT COUNT(r) FROM com.forehapp.store.returnModule.domain.model.ReturnRequest r " +
            "JOIN r.orderGroup g " +
-           "WHERE g.seller.id = :sellerId " +
+           "WHERE g.store.id = :storeId " +
            "AND r.status IN (com.forehapp.store.returnModule.domain.model.ReturnStatus.APROBADA, " +
            "com.forehapp.store.returnModule.domain.model.ReturnStatus.REEMBOLSADA) " +
            "AND r.createdAt BETWEEN :from AND :to")
-    Long countSellerReturns(@Param("sellerId") Long sellerId,
+    Long countSellerReturns(@Param("storeId") Long storeId,
                              @Param("from") LocalDateTime from,
                              @Param("to") LocalDateTime to);
 
     @Query("SELECT COALESCE(SUM(r.refundAmount), 0) FROM com.forehapp.store.returnModule.domain.model.ReturnRequest r " +
            "JOIN r.orderGroup g " +
-           "WHERE g.seller.id = :sellerId " +
+           "WHERE g.store.id = :storeId " +
            "AND r.status = com.forehapp.store.returnModule.domain.model.ReturnStatus.REEMBOLSADA " +
            "AND r.createdAt BETWEEN :from AND :to")
-    BigDecimal sumSellerRefunded(@Param("sellerId") Long sellerId,
+    BigDecimal sumSellerRefunded(@Param("storeId") Long storeId,
                                   @Param("from") LocalDateTime from,
                                   @Param("to") LocalDateTime to);
+
+    // ── Seller: group status counts ──────────────────────────────────────────
+
+    @Query("SELECT COUNT(g) FROM com.forehapp.store.orderModule.domain.model.OrderSellerGroup g " +
+           "WHERE g.store.id = :storeId " +
+           "AND g.status = :status " +
+           "AND g.order.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PAID " +
+           "AND g.order.createdAt BETWEEN :from AND :to")
+    Long countSellerGroupsByStatus(@Param("storeId") Long storeId,
+                                    @Param("status") OrderSellerGroupStatus status,
+                                    @Param("from") LocalDateTime from,
+                                    @Param("to") LocalDateTime to);
+
+    // ── Seller: low stock ─────────────────────────────────────────────────────
+
+    @Query(value = """
+            SELECT pv.variant_id AS variantId,
+                   p.product_id  AS productId,
+                   p.title       AS productTitle,
+                   pv.sku        AS sku,
+                   pv.stock      AS stock
+            FROM store_product_variants pv
+            INNER JOIN store_products p ON pv.product_id = p.product_id
+            WHERE p.store_id = :storeId
+              AND pv.stock <= :threshold
+            ORDER BY pv.stock ASC
+            """, nativeQuery = true)
+    List<LowStockProjection> getLowStockByStore(@Param("storeId") Long storeId,
+                                                 @Param("threshold") int threshold);
 
     // ── Seller: top products ──────────────────────────────────────────────────
 
@@ -178,12 +207,12 @@ public interface IReportRepository extends JpaRepository<Order, Long> {
             INNER JOIN store_orders              o   ON osg.order_id  = o.order_id
             INNER JOIN store_product_variants    pv  ON oi.variant_id = pv.variant_id
             INNER JOIN store_products            p   ON pv.product_id = p.product_id
-            WHERE o.status = 'PAID' AND osg.seller_id = :sellerId AND o.created_at BETWEEN :from AND :to
+            WHERE o.status = 'PAID' AND osg.store_id = :storeId AND o.created_at BETWEEN :from AND :to
             GROUP BY p.product_id, p.title, pv.sku
             ORDER BY unitsSold DESC
             LIMIT :limit
             """, nativeQuery = true)
-    List<TopProductProjection> getSellerTopProducts(@Param("sellerId") Long sellerId,
+    List<TopProductProjection> getSellerTopProducts(@Param("storeId") Long storeId,
                                                      @Param("from") LocalDateTime from,
                                                      @Param("to") LocalDateTime to,
                                                      @Param("limit") int limit);
@@ -205,9 +234,17 @@ public interface IReportRepository extends JpaRepository<Order, Long> {
     }
 
     interface SellerSalesProjection {
-        Long getSellerId();
-        String getSellerName();
+        Long getStoreId();
+        String getStoreName();
         Long getTotalOrders();
         java.math.BigDecimal getTotalRevenue();
+    }
+
+    interface LowStockProjection {
+        Long getVariantId();
+        Long getProductId();
+        String getProductTitle();
+        String getSku();
+        Integer getStock();
     }
 }

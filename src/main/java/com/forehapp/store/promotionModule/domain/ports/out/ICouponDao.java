@@ -11,7 +11,7 @@ public interface ICouponDao {
     Optional<Coupon> findById(Long id);
     Optional<Coupon> findByCode(String code);
     Page<Coupon> findAll(Pageable pageable);
-    Page<Coupon> findBySellerId(Long sellerId, Pageable pageable);
+    Page<Coupon> findByStoreId(Long storeId, Pageable pageable);
     Coupon save(Coupon coupon);
     void delete(Coupon coupon);
     long countRedemptionsByCouponId(Long couponId);

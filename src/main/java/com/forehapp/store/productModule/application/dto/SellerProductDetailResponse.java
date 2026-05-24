@@ -10,6 +10,8 @@ import java.util.List;
 public class SellerProductDetailResponse {
 
     private final Long id;
+    private final Long storeId;
+    private final String storeName;
     private final String title;
     private final String description;
     private final String brand;
@@ -22,6 +24,8 @@ public class SellerProductDetailResponse {
 
     public SellerProductDetailResponse(Product product, List<ProductImageResponse> images) {
         this.id = product.getId();
+        this.storeId = product.getStore().getId();
+        this.storeName = product.getStore().getName();
         this.title = product.getTitle();
         this.description = product.getDescription();
         this.brand = product.getBrand().getDescription();

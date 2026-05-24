@@ -8,6 +8,7 @@ import com.forehapp.store.authModule.domain.ports.in.ResendCodeUseCase;
 import com.forehapp.store.authModule.domain.ports.in.VerifyCodeUseCase;
 import com.forehapp.store.general.constants.Constants;
 import com.forehapp.store.general.exceptions.BadRequestException;
+import com.forehapp.store.general.exceptions.ErrorCode;
 import com.forehapp.store.mail.EmailSender;
 import com.forehapp.store.security.config.UserDetailsImpl;
 import com.forehapp.store.security.jwt.JwtUtil;
@@ -59,7 +60,7 @@ public class AuthUseCasesImpl implements RegisterUseCase, VerifyCodeUseCase, Res
         String email = dto.getEmail().trim().toLowerCase();
 
         if (userRepository.findByEmail(email).isPresent()) {
-            throw new BadRequestException("El email ya está registrado");
+            throw new BadRequestException(ErrorCode.AUTH_EMAIL_ALREADY_REGISTERED, "El email ya está registrado");
         }
 
         Role userRole = roleRepository.findById((long) Constants.USER_ROLE_ID)
@@ -86,16 +87,16 @@ public class AuthUseCasesImpl implements RegisterUseCase, VerifyCodeUseCase, Res
     @Transactional
     public LoginResponseDto verifyCode(VerifyCodeRequestDto dto) {
         ConfirmationToken token = confirmationTokenService.findByCode(dto.getCode())
-                .orElseThrow(() -> new BadRequestException("Código inválido"));
+                .orElseThrow(() -> new BadRequestException(ErrorCode.AUTH_CODE_INVALID, "Código inválido"));
 
         if (token.getConfirmedAt() != null) {
-            throw new BadRequestException("El código ya fue utilizado");
+            throw new BadRequestException(ErrorCode.AUTH_CODE_ALREADY_USED, "El código ya fue utilizado");
         }
         if (!token.getUser().getId().equals(dto.getUserId())) {
-            throw new BadRequestException("Código inválido");
+            throw new BadRequestException(ErrorCode.AUTH_CODE_INVALID, "Código inválido");
         }
         if (token.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new BadRequestException("El código expiró. Solicitá uno nuevo");
+            throw new BadRequestException(ErrorCode.AUTH_CODE_EXPIRED, "El código expiró. Solicitá uno nuevo");
         }
 
         confirmationTokenService.markAsConfirmed(dto.getCode());
@@ -115,17 +116,17 @@ public class AuthUseCasesImpl implements RegisterUseCase, VerifyCodeUseCase, Res
         String accessToken = JwtUtil.createToken(String.valueOf(user.getId()), userDetails.getAuthorities());
         String refreshToken = JwtUtil.createRefreshToken(String.valueOf(user.getId()), userDetails.getAuthorities());
 
-        return new LoginResponseDto(accessToken, refreshToken, user.getId(), user.getName(), user.getEmail());
+        return new LoginResponseDto(accessToken, refreshToken, user.getId(), user.getName(), user.getEmail(), profile.getRoles());
     }
 
     @Override
     @Transactional
     public void resendCode(Long userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BadRequestException("Usuario no encontrado"));
+                .orElseThrow(() -> new BadRequestException(ErrorCode.USER_PROFILE_NOT_FOUND, "Usuario no encontrado"));
 
         if (user.getUserStatus() == Constants.ACTIVE_USER_STATUS) {
-            throw new BadRequestException("La cuenta ya está verificada");
+            throw new BadRequestException(ErrorCode.AUTH_ACCOUNT_ALREADY_VERIFIED, "La cuenta ya está verificada");
         }
 
         sendVerificationCode(user);

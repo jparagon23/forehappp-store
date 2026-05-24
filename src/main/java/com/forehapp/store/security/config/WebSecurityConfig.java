@@ -4,6 +4,7 @@ import com.forehapp.store.security.filter.RateLimitFilter;
 import com.forehapp.store.security.jwt.JwtAuthenticationFilter;
 import com.forehapp.store.security.jwt.JwtAuthorizationFilter;
 import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -21,11 +22,16 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 @EnableMethodSecurity
 public class WebSecurityConfig {
+
+    @Value("${cors.allowed-origins:}")
+    private String extraAllowedOrigins;
 
     private final JwtAuthorizationFilter jwtAuthorizationFilter;
     private final RateLimitFilter rateLimitFilter;
@@ -51,14 +57,22 @@ public class WebSecurityConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(Arrays.asList(
+        List<String> origins = new ArrayList<>(Arrays.asList(
                 "http://localhost:4200",
                 "http://localhost:3000",
                 "https://forehapp.netlify.app",
+                "https://forehappstore.netlify.app",
                 "https://devforehapp.netlify.app",
                 "https://forehapp.com"
         ));
+        if (extraAllowedOrigins != null && !extraAllowedOrigins.isBlank()) {
+            Arrays.stream(extraAllowedOrigins.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .forEach(origins::add);
+        }
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(origins);
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         config.setAllowedHeaders(Arrays.asList("Authorization", "Cache-Control", "Content-Type"));
         config.setAllowCredentials(true);
@@ -82,7 +96,7 @@ public class WebSecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/v1/login", "/api/v1/auth/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhook").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/products/public/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/products/public", "/api/v1/products/public/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/products/*/images").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories/*/attributes").permitAll()
@@ -90,6 +104,7 @@ public class WebSecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/brands/*/lines").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/products/*/reviews").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/products/*/reviews/summary").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/locations/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session ->

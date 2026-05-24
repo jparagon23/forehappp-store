@@ -2,6 +2,7 @@ package com.forehapp.store.cartModule.infrastructure.web;
 
 import com.forehapp.store.cartModule.application.dto.AddItemRequestDto;
 import com.forehapp.store.cartModule.application.dto.CartResponse;
+import com.forehapp.store.cartModule.application.dto.ShippingEstimateResponse;
 import com.forehapp.store.cartModule.application.dto.UpdateCartItemDto;
 import com.forehapp.store.cartModule.domain.ports.in.ICartService;
 import jakarta.validation.Valid;
@@ -63,5 +64,12 @@ public class CartController {
     public ResponseEntity<Void> clearCart(@AuthenticationPrincipal String userId) {
         cartService.clearCart(Long.parseLong(userId));
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/shipping-estimate")
+    public ResponseEntity<ShippingEstimateResponse> estimateShipping(
+            @RequestParam Long addressId,
+            @AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(cartService.estimateShipping(Long.parseLong(userId), addressId));
     }
 }

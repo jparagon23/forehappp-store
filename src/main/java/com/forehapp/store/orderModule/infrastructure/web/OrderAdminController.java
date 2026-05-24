@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/seller/order-groups")
+@RequestMapping("/api/v1/stores/{storeId}/order-groups")
 public class OrderAdminController {
 
     private final IOrderModuleService orderModuleService;
@@ -23,48 +23,54 @@ public class OrderAdminController {
 
     @GetMapping
     public ResponseEntity<List<SellerOrderGroupDto>> getMyGroups(
+            @PathVariable Long storeId,
             @AuthenticationPrincipal String userId) {
-        return ResponseEntity.ok(orderModuleService.getSellerGroups(Long.parseLong(userId)));
+        return ResponseEntity.ok(orderModuleService.getSellerGroups(storeId, Long.parseLong(userId)));
     }
 
     @GetMapping("/{groupId}")
     public ResponseEntity<SellerOrderGroupDto> getGroupById(
-            @AuthenticationPrincipal String userId,
-            @PathVariable Long groupId) {
-        return ResponseEntity.ok(orderModuleService.getSellerGroupById(Long.parseLong(userId), groupId));
+            @PathVariable Long storeId,
+            @PathVariable Long groupId,
+            @AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(orderModuleService.getSellerGroupById(storeId, groupId, Long.parseLong(userId)));
     }
 
     @PatchMapping("/{groupId}/prepare")
     public ResponseEntity<Void> prepare(
-            @AuthenticationPrincipal String userId,
-            @PathVariable Long groupId) {
-        orderModuleService.prepareGroup(Long.parseLong(userId), groupId);
+            @PathVariable Long storeId,
+            @PathVariable Long groupId,
+            @AuthenticationPrincipal String userId) {
+        orderModuleService.prepareGroup(storeId, groupId, Long.parseLong(userId));
         return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/{groupId}/ship")
     public ResponseEntity<Void> ship(
-            @AuthenticationPrincipal String userId,
+            @PathVariable Long storeId,
             @PathVariable Long groupId,
-            @Valid @RequestBody ShipGroupRequestDto dto) {
-        orderModuleService.shipGroup(Long.parseLong(userId), groupId, dto.trackingNumber());
+            @Valid @RequestBody ShipGroupRequestDto dto,
+            @AuthenticationPrincipal String userId) {
+        orderModuleService.shipGroup(storeId, groupId, dto.trackingNumber(), Long.parseLong(userId));
         return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/{groupId}/deliver")
     public ResponseEntity<Void> deliver(
-            @AuthenticationPrincipal String userId,
-            @PathVariable Long groupId) {
-        orderModuleService.deliverGroup(Long.parseLong(userId), groupId);
+            @PathVariable Long storeId,
+            @PathVariable Long groupId,
+            @AuthenticationPrincipal String userId) {
+        orderModuleService.deliverGroup(storeId, groupId, Long.parseLong(userId));
         return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/{groupId}/cancel")
     public ResponseEntity<Void> cancel(
-            @AuthenticationPrincipal String userId,
+            @PathVariable Long storeId,
             @PathVariable Long groupId,
-            @Valid @RequestBody CancelGroupRequestDto dto) {
-        orderModuleService.cancelGroup(Long.parseLong(userId), groupId, dto.reason());
+            @Valid @RequestBody CancelGroupRequestDto dto,
+            @AuthenticationPrincipal String userId) {
+        orderModuleService.cancelGroup(storeId, groupId, dto.reason(), Long.parseLong(userId));
         return ResponseEntity.noContent().build();
     }
 }

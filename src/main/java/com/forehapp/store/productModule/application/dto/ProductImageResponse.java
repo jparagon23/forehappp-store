@@ -13,10 +13,10 @@ public class ProductImageResponse {
     private final Integer displayOrder;
     private final LocalDateTime createdAt;
 
-    public ProductImageResponse(ProductImage image) {
+    public ProductImageResponse(ProductImage image, String presignedUrl) {
         this.id = image.getId();
         this.productId = image.getProduct().getId();
-        this.url = image.getUrl();
+        this.url = presignedUrl;
         this.displayOrder = image.getDisplayOrder();
         this.createdAt = image.getCreatedAt();
     }

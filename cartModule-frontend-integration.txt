@@ -1,6 +1,6 @@
 ================================================================================
   FOREHAPP STORE — CART MODULE: GUÍA DE INTEGRACIÓN FRONTEND
-  (actualizado tras corrección de bugs — v3)
+  (actualizado tras corrección de bugs — v4)
 ================================================================================
 
 BASE URL: http://localhost:8082
@@ -118,12 +118,69 @@ ERRORES:
 
 NOTA 409 Conflict (BUG-03):
   Ocurre en el caso raro de dos requests simultáneos agregando la misma variante.
-  Mensaje: "El ítem ya existe en el carrito. Recarga e intenta de nuevo."
+  Mensaje: "El ítem ya existe. Recarga e intenta de nuevo."
   Acción recomendada UI: mostrar el mensaje y refrescar el carrito con GET /cart.
 
 
 ================================================================================
-  ENDPOINT 3 — ACTUALIZAR CANTIDAD DE UN ÍTEM
+  ENDPOINT 3 — AGREGAR MÚLTIPLES ÍTEMS EN BATCH (sincronización guest → login)
+================================================================================
+
+POST /api/v1/cart/items/batch
+Authorization: Bearer <token>
+Content-Type: application/json
+
+REQUEST BODY:
+[
+  { "variantId": 5, "quantity": 2 },
+  { "variantId": 8, "quantity": 1 },
+  { "variantId": 12, "quantity": 3 }
+]
+
+  Máximo 50 ítems por request.
+  Cada ítem: variantId (Long, requerido) y quantity (Integer, 1–9999, requerido).
+
+RESPUESTA EXITOSA 201 Created:
+  Retorna el CartResponse completo con todos los ítems resultantes.
+
+COMPORTAMIENTO:
+  - Operación atómica (todo-o-nada): si falla un ítem, ninguno se persiste.
+  - Cada ítem sigue las mismas reglas que POST /items:
+      · Variante nueva en el carrito → se agrega
+      · Variante ya en el carrito   → se SUMA la cantidad
+      · Suma acumulada > 9999       → 400 y rollback de todo el batch
+  - Si el carrito no existe → se crea automáticamente.
+  - Si el carrito expiró   → se crea uno nuevo.
+
+USO PRINCIPAL — Sincronizar carrito local (guest) al hacer login:
+  1. Usuario navega sin login y agrega ítems al carrito local (localStorage/sessionStorage).
+  2. Al hacer login, tomar todos los ítems locales y enviarlos en un solo batch.
+  3. El backend los merge con el carrito existente del usuario (si lo tenía).
+  4. El front descarta el carrito local y usa el CartResponse retornado como estado definitivo.
+
+LÍMITES:
+  - Máximo 50 ítems por request → 400 "El batch no puede superar 50 ítems por solicitud"
+  - Lista vacía o null          → 400 "Items list must not be empty"
+  - quantity fuera de rango     → 400 "quantity debe estar entre 1 y 9999"
+  - Suma acumulada > 9999       → 400 "La cantidad máxima por producto es 9999"
+
+ERRORES:
+  400 → Lista vacía, más de 50 ítems, variantId null, quantity inválido,
+        o acumulación supera 9999 en alguna variante
+  403 → El usuario no tiene rol CUSTOMER
+  404 → Alguna de las variantes no fue encontrada
+        (el mensaje indica cuál: "Variant not found: {variantId}")
+  404 → StoreProfile no encontrado
+  409 → Race condition con otro request simultáneo
+
+RECOMENDACIÓN — Manejo de error 404 por variante inexistente:
+  Si algún producto del carrito local ya no existe como variante, el batch falla completo.
+  Estrategia: intentar primero el batch completo; si hay 404, filtrar el ítem problemático
+  (usando el variantId del mensaje de error) y reintentar sin él.
+
+
+================================================================================
+  ENDPOINT 5 — ACTUALIZAR CANTIDAD DE UN ÍTEM
 ================================================================================
 
 PATCH /api/v1/cart/items/{itemId}
@@ -159,7 +216,7 @@ ERRORES:
 
 
 ================================================================================
-  ENDPOINT 4 — ELIMINAR UN ÍTEM DEL CARRITO
+  ENDPOINT 6 — ELIMINAR UN ÍTEM DEL CARRITO
 ================================================================================
 
 DELETE /api/v1/cart/items/{itemId}
@@ -178,7 +235,7 @@ ERRORES:
 
 
 ================================================================================
-  ENDPOINT 5 — VACIAR CARRITO COMPLETO
+  ENDPOINT 7 — VACIAR CARRITO COMPLETO
 ================================================================================
 
 DELETE /api/v1/cart

@@ -1,5 +1,10 @@
 package com.forehapp.store.wishlistModule.application.usecases;
 
+import com.forehapp.store.general.exceptions.BadRequestException;
+import com.forehapp.store.general.exceptions.ConflictException;
+import com.forehapp.store.general.exceptions.ErrorCode;
+import com.forehapp.store.general.exceptions.NotFoundException;
+import com.forehapp.store.general.storage.StorageService;
 import com.forehapp.store.productModule.domain.model.Product;
 import com.forehapp.store.productModule.domain.model.ProductStatus;
 import com.forehapp.store.productModule.domain.ports.out.IProductDao;
@@ -12,12 +17,11 @@ import com.forehapp.store.wishlistModule.domain.model.Wishlist;
 import com.forehapp.store.wishlistModule.domain.model.WishlistItem;
 import com.forehapp.store.wishlistModule.domain.ports.in.IWishlistService;
 import com.forehapp.store.wishlistModule.domain.ports.out.IWishlistDao;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.List;
 
 @Service
@@ -28,13 +32,16 @@ public class WishlistServiceImpl implements IWishlistService {
     private final IWishlistDao wishlistDao;
     private final IProductDao productDao;
     private final IStoreProfileDao storeProfileDao;
+    private final StorageService storageService;
 
     public WishlistServiceImpl(IWishlistDao wishlistDao,
                                IProductDao productDao,
-                               IStoreProfileDao storeProfileDao) {
+                               IStoreProfileDao storeProfileDao,
+                               StorageService storageService) {
         this.wishlistDao = wishlistDao;
         this.productDao = productDao;
         this.storeProfileDao = storeProfileDao;
+        this.storageService = storageService;
     }
 
     @Override
@@ -51,7 +58,7 @@ public class WishlistServiceImpl implements IWishlistService {
     public WishlistResponse addItem(Long userId, AddToWishlistDto dto) {
         StoreProfile owner = resolveProfile(userId);
         Product product = productDao.findById(dto.productId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.WISHLIST_PRODUCT_NOT_FOUND, "Product not found"));
 
         Wishlist wishlist = wishlistDao.findByOwnerId(owner.getId()).orElseGet(() -> {
             Wishlist w = new Wishlist();
@@ -62,12 +69,12 @@ public class WishlistServiceImpl implements IWishlistService {
         boolean alreadyAdded = wishlist.getItems().stream()
                 .anyMatch(i -> i.getProduct().getId().equals(product.getId()));
         if (alreadyAdded) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Product already in wishlist");
+            throw new ConflictException(ErrorCode.WISHLIST_ITEM_DUPLICATE, "Product already in wishlist");
         }
 
         // BUG-E: cap wishlist size to avoid unbounded growth
         if (wishlist.getItems().size() >= MAX_WISHLIST_ITEMS) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+            throw new BadRequestException(ErrorCode.WISHLIST_LIMIT_EXCEEDED,
                     "La wishlist no puede superar los " + MAX_WISHLIST_ITEMS + " productos");
         }
 
@@ -106,19 +113,19 @@ public class WishlistServiceImpl implements IWishlistService {
 
     private StoreProfile resolveProfile(Long userId) {
         return storeProfileDao.findByUserId(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Store profile not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_PROFILE_NOT_FOUND, "Store profile not found"));
     }
 
     private Wishlist requireWishlist(Long ownerId) {
         return wishlistDao.findByOwnerId(ownerId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Wishlist not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.WISHLIST_NOT_FOUND, "Wishlist not found"));
     }
 
     private WishlistItem findItem(Wishlist wishlist, Long itemId) {
         return wishlist.getItems().stream()
                 .filter(i -> i.getId().equals(itemId))
                 .findFirst()
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found in wishlist"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.WISHLIST_ITEM_NOT_FOUND, "Item not found in wishlist"));
     }
 
     private WishlistResponse toResponse(Wishlist wishlist) {
@@ -136,7 +143,8 @@ public class WishlistServiceImpl implements IWishlistService {
                 .map(v -> v.getPrice())
                 .min(BigDecimal::compareTo)
                 .orElse(BigDecimal.ZERO);
-        String thumbnailUrl = product.getImages().isEmpty() ? null : product.getImages().get(0).getUrl();
+        String thumbnailUrl = product.getImages().isEmpty() ? null
+                : storageService.presign(product.getImages().get(0).getS3Key(), Duration.ofDays(7));
         return new WishlistItemResponse(
                 item.getId(),
                 product.getId(),

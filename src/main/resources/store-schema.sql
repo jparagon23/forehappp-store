@@ -64,6 +64,32 @@ CREATE TABLE IF NOT EXISTS store_profile_roles (
     CONSTRAINT fk_spr_role    FOREIGN KEY (role)             REFERENCES store_roles(role_name)
 );
 
+-- =====================
+-- Store Management
+-- =====================
+CREATE TABLE IF NOT EXISTS stores (
+    store_id    BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(150) NOT NULL,
+    slug        VARCHAR(100) NOT NULL,
+    description TEXT,
+    logo_s3_key VARCHAR(500),
+    status      VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    created_at  DATETIME NOT NULL,
+    CONSTRAINT uk_store_slug UNIQUE (slug)
+);
+
+CREATE TABLE IF NOT EXISTS store_memberships (
+    membership_id    BIGINT AUTO_INCREMENT PRIMARY KEY,
+    store_id         BIGINT NOT NULL,
+    store_profile_id BIGINT NOT NULL,
+    role             VARCHAR(20) NOT NULL,
+    joined_at        DATETIME NOT NULL,
+    active           TINYINT(1) NOT NULL DEFAULT 1,
+    CONSTRAINT uk_store_membership UNIQUE (store_id, store_profile_id),
+    CONSTRAINT fk_sm_store   FOREIGN KEY (store_id)         REFERENCES stores(store_id),
+    CONSTRAINT fk_sm_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id)
+);
+
 CREATE TABLE IF NOT EXISTS store_brands (
     brand_id    BIGINT AUTO_INCREMENT PRIMARY KEY,
     description VARCHAR(150) NOT NULL
@@ -107,7 +133,7 @@ CREATE TABLE IF NOT EXISTS store_category_attributes (
 
 CREATE TABLE IF NOT EXISTS store_products (
     product_id   BIGINT AUTO_INCREMENT PRIMARY KEY,
-    seller_id    BIGINT NOT NULL,
+    store_id     BIGINT NOT NULL,
     title        VARCHAR(255) NOT NULL,
     description  TEXT,
     brand_id     BIGINT NOT NULL,
@@ -115,7 +141,7 @@ CREATE TABLE IF NOT EXISTS store_products (
     category_id  BIGINT NOT NULL,
     status       VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
     created_at   DATETIME NOT NULL,
-    CONSTRAINT store_fk_prod_seller   FOREIGN KEY (seller_id)   REFERENCES store_profiles(store_profile_id),
+    CONSTRAINT store_fk_prod_store    FOREIGN KEY (store_id)    REFERENCES stores(store_id),
     CONSTRAINT store_fk_prod_brand    FOREIGN KEY (brand_id)    REFERENCES store_brands(brand_id),
     CONSTRAINT store_fk_prod_line     FOREIGN KEY (line_id)     REFERENCES store_lines(line_id),
     CONSTRAINT store_fk_prod_category FOREIGN KEY (category_id) REFERENCES store_categories(category_id)
@@ -175,15 +201,15 @@ CREATE TABLE IF NOT EXISTS store_orders (
 CREATE TABLE IF NOT EXISTS store_order_seller_groups (
     group_id        BIGINT AUTO_INCREMENT PRIMARY KEY,
     order_id        BIGINT NOT NULL,
-    seller_id       BIGINT NOT NULL,
+    store_id        BIGINT NOT NULL,
     status          VARCHAR(20) NOT NULL DEFAULT 'PENDING',
     subtotal        DECIMAL(14,2) NOT NULL,
     tracking_number VARCHAR(100),
     prepared_at     DATETIME,
     shipped_at      DATETIME,
     delivered_at    DATETIME,
-    CONSTRAINT store_fk_osg_order  FOREIGN KEY (order_id)  REFERENCES store_orders(order_id),
-    CONSTRAINT store_fk_osg_seller FOREIGN KEY (seller_id) REFERENCES store_profiles(store_profile_id)
+    CONSTRAINT store_fk_osg_order FOREIGN KEY (order_id) REFERENCES store_orders(order_id),
+    CONSTRAINT store_fk_osg_store FOREIGN KEY (store_id) REFERENCES stores(store_id)
 );
 
 SET @s = (SELECT IF(COUNT(*)=0,'ALTER TABLE store_order_seller_groups ADD COLUMN tracking_number VARCHAR(100)','SELECT 1') FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_order_seller_groups' AND COLUMN_NAME='tracking_number');
@@ -212,6 +238,16 @@ EXECUTE _stmt;
 DEALLOCATE PREPARE _stmt;
 
 SET @s = (SELECT IF(COUNT(*)=0,'ALTER TABLE store_order_seller_groups ADD COLUMN cancellation_reason VARCHAR(500)','SELECT 1') FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_order_seller_groups' AND COLUMN_NAME='cancellation_reason');
+PREPARE _stmt FROM @s;
+EXECUTE _stmt;
+DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*)=0,'ALTER TABLE store_orders ADD COLUMN payment_method VARCHAR(30) NOT NULL DEFAULT ''MERCADO_PAGO''','SELECT 1') FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_orders' AND COLUMN_NAME='payment_method');
+PREPARE _stmt FROM @s;
+EXECUTE _stmt;
+DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*)=0,'ALTER TABLE store_product_variants ADD COLUMN active TINYINT(1) NOT NULL DEFAULT 1','SELECT 1') FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_product_variants' AND COLUMN_NAME='active');
 PREPARE _stmt FROM @s;
 EXECUTE _stmt;
 DEALLOCATE PREPARE _stmt;
@@ -283,7 +319,7 @@ CREATE TABLE IF NOT EXISTS store_product_reviews (
 
 CREATE TABLE IF NOT EXISTS store_coupons (
     coupon_id         BIGINT AUTO_INCREMENT PRIMARY KEY,
-    seller_id         BIGINT NOT NULL,
+    store_id          BIGINT NOT NULL,
     code              VARCHAR(50) NOT NULL,
     description       VARCHAR(255),
     discount_type     VARCHAR(20) NOT NULL,
@@ -297,7 +333,7 @@ CREATE TABLE IF NOT EXISTS store_coupons (
     status            VARCHAR(20) NOT NULL DEFAULT 'ACTIVA',
     created_at        DATETIME NOT NULL,
     CONSTRAINT uk_coupon_code UNIQUE (code),
-    CONSTRAINT fk_coupon_seller FOREIGN KEY (seller_id) REFERENCES store_profiles(store_profile_id)
+    CONSTRAINT fk_coupon_store FOREIGN KEY (store_id) REFERENCES stores(store_id)
 );
 
 CREATE TABLE IF NOT EXISTS store_coupon_redemptions (
@@ -334,3 +370,202 @@ CREATE TABLE IF NOT EXISTS store_return_items (
     CONSTRAINT fk_ri_return     FOREIGN KEY (return_id)     REFERENCES store_return_requests(return_id),
     CONSTRAINT fk_ri_order_item FOREIGN KEY (order_item_id) REFERENCES store_order_items(item_id)
 );
+
+-- =====================
+-- Migration: seller_id → store_id (existing DBs)
+-- =====================
+
+SET @s = (SELECT IF(COUNT(*)=0,
+  'ALTER TABLE store_products ADD COLUMN store_id BIGINT, ADD CONSTRAINT store_fk_prod_store FOREIGN KEY (store_id) REFERENCES stores(store_id)',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_products' AND COLUMN_NAME='store_id');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*)>0,
+  'ALTER TABLE store_products DROP FOREIGN KEY store_fk_prod_seller',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_products' AND CONSTRAINT_NAME='store_fk_prod_seller');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*)>0,
+  'ALTER TABLE store_products DROP COLUMN seller_id',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_products' AND COLUMN_NAME='seller_id');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*)=0,
+  'ALTER TABLE store_order_seller_groups ADD COLUMN store_id BIGINT, ADD CONSTRAINT store_fk_osg_store FOREIGN KEY (store_id) REFERENCES stores(store_id)',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_order_seller_groups' AND COLUMN_NAME='store_id');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*)>0,
+  'ALTER TABLE store_order_seller_groups DROP FOREIGN KEY store_fk_osg_seller',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_order_seller_groups' AND CONSTRAINT_NAME='store_fk_osg_seller');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*)>0,
+  'ALTER TABLE store_order_seller_groups DROP COLUMN seller_id',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_order_seller_groups' AND COLUMN_NAME='seller_id');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- Migrate store_coupons: seller_id → store_id
+SET @s = (SELECT IF(COUNT(*)=0,
+  'ALTER TABLE store_coupons ADD COLUMN store_id BIGINT NOT NULL DEFAULT 0, ADD CONSTRAINT fk_coupon_store FOREIGN KEY (store_id) REFERENCES stores(store_id)',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_coupons' AND COLUMN_NAME='store_id');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*)>0,
+  'ALTER TABLE store_coupons DROP FOREIGN KEY fk_coupon_seller',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_coupons' AND CONSTRAINT_NAME='fk_coupon_seller');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*)>0,
+  'ALTER TABLE store_coupons DROP COLUMN seller_id',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='store_coupons' AND COLUMN_NAME='seller_id');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- =====================
+-- Migration: Location Catalog (countries, states, cities)
+-- =====================
+
+CREATE TABLE IF NOT EXISTS countries (
+    id     BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name   VARCHAR(100) NOT NULL,
+    code   VARCHAR(3)   NOT NULL,
+    active TINYINT(1)   NOT NULL DEFAULT 1,
+    CONSTRAINT uk_country_code UNIQUE (code)
+);
+
+CREATE TABLE IF NOT EXISTS states (
+    id         BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name       VARCHAR(150) NOT NULL,
+    country_id BIGINT       NOT NULL,
+    active     TINYINT(1)   NOT NULL DEFAULT 1,
+    CONSTRAINT fk_state_country FOREIGN KEY (country_id) REFERENCES countries(id)
+);
+
+CREATE TABLE IF NOT EXISTS cities (
+    id       BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name     VARCHAR(150) NOT NULL,
+    state_id BIGINT       NOT NULL,
+    active   TINYINT(1)   NOT NULL DEFAULT 1,
+    CONSTRAINT fk_city_state FOREIGN KEY (state_id) REFERENCES states(id)
+);
+
+-- =====================
+-- Migration: Shipping Zones
+-- =====================
+
+CREATE TABLE IF NOT EXISTS store_shipping_zones (
+    id         BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name       VARCHAR(150)   NOT NULL,
+    cost       DECIMAL(14, 2) NOT NULL,
+    is_default TINYINT(1)     NOT NULL DEFAULT 0,
+    active     TINYINT(1)     NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS store_shipping_zone_city_map (
+    zone_id BIGINT NOT NULL,
+    city_id BIGINT NOT NULL,
+    PRIMARY KEY (zone_id, city_id),
+    CONSTRAINT fk_szcm_zone FOREIGN KEY (zone_id) REFERENCES store_shipping_zones(id),
+    CONSTRAINT fk_szcm_city FOREIGN KEY (city_id) REFERENCES cities(id)
+);
+
+-- Add missing columns to location tables (table may have been created by Hibernate with incomplete schema)
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE countries ADD COLUMN active TINYINT(1) NOT NULL DEFAULT 1',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'countries' AND COLUMN_NAME = 'active');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE countries ADD COLUMN code VARCHAR(3) NOT NULL DEFAULT ''''',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'countries' AND COLUMN_NAME = 'code');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE states ADD COLUMN active TINYINT(1) NOT NULL DEFAULT 1',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'states' AND COLUMN_NAME = 'active');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE cities ADD COLUMN active TINYINT(1) NOT NULL DEFAULT 1',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cities' AND COLUMN_NAME = 'active');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- Drop old string-based shipping_zone_cities table if it exists
+SET @s = (SELECT IF(COUNT(*) > 0,
+  'DROP TABLE shipping_zone_cities',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'shipping_zone_cities');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- =====================
+-- Migration: store_profile_addresses — replace city/state/country strings with city_id FK
+-- =====================
+
+-- Add city_id (nullable so existing rows without city data don't block the migration)
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_profile_addresses ADD COLUMN city_id BIGINT, ADD CONSTRAINT fk_address_city FOREIGN KEY (city_id) REFERENCES cities(id)',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_profile_addresses' AND COLUMN_NAME = 'city_id');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- Drop old free-text columns once city_id is in place
+SET @s = (SELECT IF(COUNT(*) > 0,
+  'ALTER TABLE store_profile_addresses DROP COLUMN city',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_profile_addresses' AND COLUMN_NAME = 'city');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*) > 0,
+  'ALTER TABLE store_profile_addresses DROP COLUMN state',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_profile_addresses' AND COLUMN_NAME = 'state');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*) > 0,
+  'ALTER TABLE store_profile_addresses DROP COLUMN country',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_profile_addresses' AND COLUMN_NAME = 'country');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- =====================
+-- Migration: store_products — add free_shipping flag
+-- =====================
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_products ADD COLUMN free_shipping TINYINT(1) NOT NULL DEFAULT 0',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_products' AND COLUMN_NAME = 'free_shipping');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- =====================
+-- Migration: stores — add free_shipping_min_amount
+-- =====================
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE stores ADD COLUMN free_shipping_min_amount DECIMAL(14,2)',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'stores' AND COLUMN_NAME = 'free_shipping_min_amount');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- =====================
+-- Migration: store_order_seller_groups — add shipping_cost
+-- =====================
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_order_seller_groups ADD COLUMN shipping_cost DECIMAL(14,2) NOT NULL DEFAULT 0',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_order_seller_groups' AND COLUMN_NAME = 'shipping_cost');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;

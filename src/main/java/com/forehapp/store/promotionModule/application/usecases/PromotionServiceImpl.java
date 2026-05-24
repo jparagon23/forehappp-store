@@ -1,5 +1,8 @@
 package com.forehapp.store.promotionModule.application.usecases;
 
+import com.forehapp.store.general.exceptions.BadRequestException;
+import com.forehapp.store.general.exceptions.ErrorCode;
+import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.promotionModule.application.dto.CouponValidationResponse;
 import com.forehapp.store.promotionModule.application.dto.RedeemCouponRequestDto;
 import com.forehapp.store.promotionModule.application.dto.ValidateCouponRequestDto;
@@ -11,10 +14,8 @@ import com.forehapp.store.promotionModule.domain.ports.in.IPromotionService;
 import com.forehapp.store.promotionModule.domain.ports.out.ICouponDao;
 import com.forehapp.store.userModule.domain.model.StoreProfile;
 import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -36,11 +37,11 @@ public class PromotionServiceImpl implements IPromotionService {
     public CouponValidationResponse validateCoupon(Long userId, ValidateCouponRequestDto dto) {
         StoreProfile profile = resolveProfile(userId);
         Coupon coupon = couponDao.findByCode(dto.code().toUpperCase())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Coupon not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.COUPON_NOT_FOUND, "Coupon not found"));
 
-        String error = checkCouponRules(coupon, dto.sellerId(), dto.orderAmount(), profile.getId());
+        String error = checkCouponRules(coupon, dto.storeId(), dto.orderAmount(), profile.getId());
         if (error != null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error);
+            throw new BadRequestException(ErrorCode.COUPON_INVALID, error);
         }
 
         BigDecimal discountAmount = calculateDiscount(coupon, dto.orderAmount());
@@ -63,11 +64,11 @@ public class PromotionServiceImpl implements IPromotionService {
     public CouponValidationResponse redeemCoupon(Long userId, RedeemCouponRequestDto dto) {
         StoreProfile profile = resolveProfile(userId);
         Coupon coupon = couponDao.findByCode(dto.code().toUpperCase())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Coupon not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.COUPON_NOT_FOUND, "Coupon not found"));
 
-        String error = checkCouponRules(coupon, dto.sellerId(), dto.orderAmount(), profile.getId());
+        String error = checkCouponRules(coupon, dto.storeId(), dto.orderAmount(), profile.getId());
         if (error != null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error);
+            throw new BadRequestException(ErrorCode.COUPON_INVALID, error);
         }
 
         BigDecimal discountAmount = calculateDiscount(coupon, dto.orderAmount());
@@ -95,9 +96,9 @@ public class PromotionServiceImpl implements IPromotionService {
         );
     }
 
-    private String checkCouponRules(Coupon coupon, Long sellerId, BigDecimal orderAmount, Long profileId) {
-        if (!coupon.getSeller().getId().equals(sellerId)) {
-            return "Coupon is not valid for this seller";
+    private String checkCouponRules(Coupon coupon, Long storeId, BigDecimal orderAmount, Long profileId) {
+        if (!coupon.getStore().getId().equals(storeId)) {
+            return "Coupon is not valid for this store";
         }
         if (coupon.getStatus() != PromotionStatus.ACTIVA) {
             return "Coupon is not active";
@@ -133,6 +134,6 @@ public class PromotionServiceImpl implements IPromotionService {
 
     private StoreProfile resolveProfile(Long userId) {
         return storeProfileDao.findByUserId(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Store profile not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_PROFILE_NOT_FOUND, "Store profile not found"));
     }
 }

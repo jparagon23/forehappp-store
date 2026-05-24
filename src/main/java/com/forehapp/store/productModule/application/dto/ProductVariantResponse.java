@@ -14,6 +14,7 @@ public class ProductVariantResponse {
     private final BigDecimal price;
     private final BigDecimal compareAtPrice;
     private final Integer stock;
+    private final Boolean active;
     private final List<AttributeValueInfo> attributes;
 
     public ProductVariantResponse(ProductVariant variant) {
@@ -22,6 +23,7 @@ public class ProductVariantResponse {
         this.price = variant.getPrice();
         this.compareAtPrice = variant.getCompareAtPrice();
         this.stock = variant.getStock();
+        this.active = variant.getActive();
         this.attributes = variant.getAttributeValues().stream()
                 .map(av -> new AttributeValueInfo(
                         av.getId(),

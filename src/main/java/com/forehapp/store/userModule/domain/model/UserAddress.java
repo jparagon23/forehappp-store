@@ -1,5 +1,6 @@
 package com.forehapp.store.userModule.domain.model;
 
+import com.forehapp.store.locationModule.domain.model.City;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -26,14 +27,9 @@ public class UserAddress {
     @Column(nullable = false, length = 255)
     private String street;
 
-    @Column(nullable = false, length = 100)
-    private String city;
-
-    @Column(length = 100)
-    private String state;
-
-    @Column(nullable = false, length = 100)
-    private String country;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "city_id", nullable = false)
+    private City city;
 
     @Column(name = "zip_code", length = 20)
     private String zipCode;

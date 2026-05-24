@@ -11,5 +11,6 @@ public record CartItemResponse(
         BigDecimal unitPrice,
         BigDecimal subtotal,
         boolean priceChanged,
-        BigDecimal previousPrice
+        BigDecimal previousPrice,
+        String thumbnailUrl
 ) {}

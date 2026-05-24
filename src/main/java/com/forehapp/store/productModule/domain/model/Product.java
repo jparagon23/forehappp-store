@@ -1,6 +1,6 @@
 package com.forehapp.store.productModule.domain.model;
 
-import com.forehapp.store.userModule.domain.model.StoreProfile;
+import com.forehapp.store.storeModule.domain.model.Store;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -23,8 +23,8 @@ public class Product {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "seller_id", nullable = false)
-    private StoreProfile seller;
+    @JoinColumn(name = "store_id", nullable = false)
+    private Store store;
 
     @Column(nullable = false, length = 255)
     private String title;
@@ -47,6 +47,9 @@ public class Product {
     @Enumerated(EnumType.STRING)
     @Column(length = 20, nullable = false)
     private ProductStatus status = ProductStatus.ACTIVE;
+
+    @Column(name = "free_shipping", nullable = false)
+    private Boolean freeShipping = false;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;

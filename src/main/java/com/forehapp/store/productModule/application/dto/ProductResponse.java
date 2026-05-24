@@ -10,6 +10,8 @@ import java.util.List;
 public class ProductResponse {
 
     private final Long id;
+    private final Long storeId;
+    private final String storeName;
     private final String title;
     private final String description;
     private final String brand;
@@ -18,9 +20,17 @@ public class ProductResponse {
     private final String status;
     private final LocalDateTime createdAt;
     private final List<ProductVariantResponse> variants;
+    private final boolean freeShipping;
+    private final String thumbnailUrl;
 
     public ProductResponse(Product product) {
+        this(product, null);
+    }
+
+    public ProductResponse(Product product, String thumbnailUrl) {
         this.id = product.getId();
+        this.storeId = product.getStore().getId();
+        this.storeName = product.getStore().getName();
         this.title = product.getTitle();
         this.description = product.getDescription();
         this.brand = product.getBrand().getDescription();
@@ -31,5 +41,7 @@ public class ProductResponse {
         this.variants = product.getVariants().stream()
                 .map(ProductVariantResponse::new)
                 .toList();
+        this.freeShipping = Boolean.TRUE.equals(product.getFreeShipping());
+        this.thumbnailUrl = thumbnailUrl;
     }
 }

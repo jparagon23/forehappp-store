@@ -1,6 +1,8 @@
 package com.forehapp.store.productModule.application.usecases;
 
 import com.forehapp.store.general.exceptions.BadRequestException;
+import com.forehapp.store.general.exceptions.ErrorCode;
+import com.forehapp.store.general.exceptions.ForbiddenException;
 import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.productModule.application.dto.CreateProductRequestDto;
 import com.forehapp.store.productModule.application.dto.CreateVariantDto;
@@ -14,12 +16,15 @@ import com.forehapp.store.productModule.domain.model.*;
 import com.forehapp.store.general.storage.StorageService;
 import com.forehapp.store.productModule.domain.ports.in.IProductService;
 import com.forehapp.store.productModule.domain.ports.out.*;
-import com.forehapp.store.userModule.domain.model.StoreProfile;
-import com.forehapp.store.userModule.domain.model.StoreRole;
-import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
+import com.forehapp.store.storeModule.domain.model.Store;
+import com.forehapp.store.storeModule.domain.model.StoreMembership;
+import com.forehapp.store.storeModule.domain.model.StoreMemberRole;
+import com.forehapp.store.storeModule.domain.ports.out.IStoreMembershipDao;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -33,7 +38,7 @@ public class ProductServiceImpl implements IProductService {
     private final ILineDao lineDao;
     private final ICategoryDao categoryDao;
     private final IAttributeValueDao attributeValueDao;
-    private final IStoreProfileDao storeProfileDao;
+    private final IStoreMembershipDao membershipDao;
     private final IProductImageDao productImageDao;
     private final IProductVariantDao variantDao;
     private final IInventoryMovementDao movementDao;
@@ -44,7 +49,7 @@ public class ProductServiceImpl implements IProductService {
                               ILineDao lineDao,
                               ICategoryDao categoryDao,
                               IAttributeValueDao attributeValueDao,
-                              IStoreProfileDao storeProfileDao,
+                              IStoreMembershipDao membershipDao,
                               IProductImageDao productImageDao,
                               IProductVariantDao variantDao,
                               IInventoryMovementDao movementDao,
@@ -54,7 +59,7 @@ public class ProductServiceImpl implements IProductService {
         this.lineDao = lineDao;
         this.categoryDao = categoryDao;
         this.attributeValueDao = attributeValueDao;
-        this.storeProfileDao = storeProfileDao;
+        this.membershipDao = membershipDao;
         this.productImageDao = productImageDao;
         this.variantDao = variantDao;
         this.movementDao = movementDao;
@@ -63,40 +68,43 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    public ProductResponse createProduct(CreateProductRequestDto dto, Long userId) {
-        StoreProfile seller = resolveSeller(userId);
+    public ProductResponse createProduct(CreateProductRequestDto dto, Long storeId, Long userId) {
+        Store store = resolveStoreAccess(storeId, userId).getStore();
 
         Brand brand = brandDao.findById(dto.getBrandId())
-                .orElseThrow(() -> new NotFoundException("Brand not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Brand not found"));
 
         Line line = null;
         if (dto.getLineId() != null) {
             line = lineDao.findById(dto.getLineId())
-                    .orElseThrow(() -> new NotFoundException("Line not found"));
+                    .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Line not found"));
             if (!line.getBrand().getId().equals(brand.getId())) {
-                throw new BadRequestException("Line does not belong to the specified brand");
+                throw new BadRequestException(ErrorCode.PRODUCT_LINE_BRAND_MISMATCH, "Line does not belong to the specified brand");
             }
         }
 
         Category category = categoryDao.findById(dto.getCategoryId())
-                .orElseThrow(() -> new NotFoundException("Category not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Category not found"));
 
         Product product = new Product();
-        product.setSeller(seller);
+        product.setStore(store);
         product.setTitle(dto.getTitle().trim());
         product.setDescription(dto.getDescription() != null ? dto.getDescription().trim() : null);
         product.setBrand(brand);
         product.setLine(line);
         product.setCategory(category);
         product.setStatus(ProductStatus.DRAFT);
+        product.setFreeShipping(Boolean.TRUE.equals(dto.getFreeShipping()));
 
         return new ProductResponse(productDao.save(product));
     }
 
     @Override
     @Transactional
-    public ProductResponse updateProduct(Long productId, UpdateProductRequestDto dto, Long userId) {
-        Product product = resolveOwnedProduct(productId, userId);
+    @CacheEvict(value = "public-products", allEntries = true)
+    public ProductResponse updateProduct(Long productId, UpdateProductRequestDto dto, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        Product product = resolveStoreProduct(productId, storeId);
 
         if (dto.getTitle() != null) {
             product.setTitle(dto.getTitle().trim());
@@ -106,7 +114,7 @@ public class ProductServiceImpl implements IProductService {
         }
         if (dto.getBrandId() != null) {
             Brand brand = brandDao.findById(dto.getBrandId())
-                    .orElseThrow(() -> new NotFoundException("Brand not found"));
+                    .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Brand not found"));
             product.setBrand(brand);
             if (product.getLine() != null && !product.getLine().getBrand().getId().equals(brand.getId())) {
                 product.setLine(null);
@@ -114,11 +122,14 @@ public class ProductServiceImpl implements IProductService {
         }
         if (dto.getLineId() != null) {
             Line line = lineDao.findById(dto.getLineId())
-                    .orElseThrow(() -> new NotFoundException("Line not found"));
+                    .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Line not found"));
             if (!line.getBrand().getId().equals(product.getBrand().getId())) {
-                throw new BadRequestException("Line does not belong to the product's brand");
+                throw new BadRequestException(ErrorCode.PRODUCT_LINE_BRAND_MISMATCH, "Line does not belong to the product's brand");
             }
             product.setLine(line);
+        }
+        if (dto.getFreeShipping() != null) {
+            product.setFreeShipping(dto.getFreeShipping());
         }
 
         return new ProductResponse(productDao.save(product));
@@ -126,11 +137,13 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    public ProductVariantResponse addVariant(Long productId, CreateVariantDto dto, Long userId) {
-        Product product = resolveOwnedProduct(productId, userId);
+    @CacheEvict(value = "public-products", allEntries = true)
+    public ProductVariantResponse addVariant(Long productId, CreateVariantDto dto, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        Product product = resolveStoreProduct(productId, storeId);
 
         if (variantDao.existsBySku(dto.getSku().trim())) {
-            throw new BadRequestException("SKU already exists: " + dto.getSku());
+            throw new BadRequestException(ErrorCode.PRODUCT_SKU_DUPLICATE, "SKU already exists: " + dto.getSku());
         }
 
         validateCompareAtPrice(dto);
@@ -163,11 +176,13 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    public ProductVariantResponse updateVariant(Long productId, Long variantId, UpdateVariantDto dto, Long userId) {
-        resolveOwnedProduct(productId, userId);
+    @CacheEvict(value = "public-products", allEntries = true)
+    public ProductVariantResponse updateVariant(Long productId, Long variantId, UpdateVariantDto dto, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        resolveStoreProduct(productId, storeId);
 
         ProductVariant variant = variantDao.findByIdAndProductId(variantId, productId)
-                .orElseThrow(() -> new NotFoundException("Variant not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Variant not found"));
 
         if (dto.getPrice() != null) {
             variant.setPrice(dto.getPrice());
@@ -176,7 +191,7 @@ public class ProductServiceImpl implements IProductService {
             variant.setCompareAtPrice(null);
         } else if (dto.getCompareAtPrice() != null) {
             if (dto.getCompareAtPrice().compareTo(variant.getPrice()) <= 0) {
-                throw new BadRequestException("Compare-at price must be greater than sale price");
+                throw new BadRequestException(ErrorCode.PRODUCT_COMPARE_PRICE_INVALID, "Compare-at price must be greater than sale price");
             }
             variant.setCompareAtPrice(dto.getCompareAtPrice());
         }
@@ -186,24 +201,27 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    public ProductResponse publish(Long productId, Long userId) {
-        Product product = resolveOwnedProduct(productId, userId);
+    @CacheEvict(value = "public-products", allEntries = true)
+    public ProductResponse publish(Long productId, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        Product product = resolveStoreProduct(productId, storeId);
 
         if (product.getStatus() == ProductStatus.ACTIVE) {
-            throw new BadRequestException("Product is already active");
+            throw new BadRequestException(ErrorCode.PRODUCT_ALREADY_ACTIVE, "Product is already active");
         }
         if (product.getStatus() == ProductStatus.OUT_OF_STOCK) {
-            throw new BadRequestException("Product is out of stock and cannot be published");
+            throw new BadRequestException(ErrorCode.PRODUCT_OUT_OF_STOCK, "Product is out of stock and cannot be published");
         }
         if (product.getVariants().isEmpty()) {
-            throw new BadRequestException("Product must have at least one variant before publishing");
+            throw new BadRequestException(ErrorCode.PRODUCT_NO_VARIANTS, "Product must have at least one variant before publishing");
         }
         if (!productImageDao.existsByProductId(productId)) {
-            throw new BadRequestException("Product must have at least one image before publishing");
+            throw new BadRequestException(ErrorCode.PRODUCT_NO_IMAGES, "Product must have at least one image before publishing");
         }
-        boolean hasStock = product.getVariants().stream().anyMatch(v -> v.getStock() > 0);
+        boolean hasStock = product.getVariants().stream()
+                .anyMatch(v -> Boolean.TRUE.equals(v.getActive()) && v.getStock() > 0);
         if (!hasStock) {
-            throw new BadRequestException("Product must have at least one variant with stock before publishing");
+            throw new BadRequestException(ErrorCode.PRODUCT_NO_STOCK_IN_VARIANTS, "Product must have at least one active variant with stock before publishing");
         }
 
         product.setStatus(ProductStatus.ACTIVE);
@@ -212,14 +230,16 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    public ProductResponse deactivate(Long productId, Long userId) {
-        Product product = resolveOwnedProduct(productId, userId);
+    @CacheEvict(value = "public-products", allEntries = true)
+    public ProductResponse deactivate(Long productId, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        Product product = resolveStoreProduct(productId, storeId);
 
         if (product.getStatus() == ProductStatus.DRAFT) {
-            throw new BadRequestException("Product is still a draft — delete it instead");
+            throw new BadRequestException(ErrorCode.PRODUCT_NOT_DRAFT, "Product is still a draft — delete it instead");
         }
         if (product.getStatus() == ProductStatus.INACTIVE) {
-            throw new BadRequestException("Product is already inactive");
+            throw new BadRequestException(ErrorCode.PRODUCT_ALREADY_INACTIVE, "Product is already inactive");
         }
 
         product.setStatus(ProductStatus.INACTIVE);
@@ -228,14 +248,16 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    public ProductResponse activate(Long productId, Long userId) {
-        Product product = resolveOwnedProduct(productId, userId);
+    @CacheEvict(value = "public-products", allEntries = true)
+    public ProductResponse activate(Long productId, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        Product product = resolveStoreProduct(productId, storeId);
 
         if (product.getStatus() == ProductStatus.DRAFT) {
-            throw new BadRequestException("Use the publish endpoint to activate a draft product");
+            throw new BadRequestException(ErrorCode.PRODUCT_USE_PUBLISH_ENDPOINT, "Use the publish endpoint to activate a draft product");
         }
         if (product.getStatus() == ProductStatus.ACTIVE) {
-            throw new BadRequestException("Product is already active");
+            throw new BadRequestException(ErrorCode.PRODUCT_ALREADY_ACTIVE, "Product is already active");
         }
 
         product.setStatus(ProductStatus.ACTIVE);
@@ -244,10 +266,12 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    public void deleteProduct(Long productId, Long userId) {
-        Product product = resolveOwnedProduct(productId, userId);
+    @CacheEvict(value = "public-products", allEntries = true)
+    public void deleteProduct(Long productId, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        Product product = resolveStoreProduct(productId, storeId);
         if (product.getStatus() != ProductStatus.DRAFT) {
-            throw new BadRequestException("Only DRAFT products can be deleted. Deactivate it instead.");
+            throw new BadRequestException(ErrorCode.PRODUCT_DELETE_REQUIRES_DRAFT, "Only DRAFT products can be deleted. Deactivate it instead.");
         }
         productImageDao.findByProductId(productId)
                 .forEach(img -> storageService.delete(img.getS3Key()));
@@ -257,20 +281,22 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    public void deleteVariant(Long productId, Long variantId, Long userId) {
-        Product product = resolveOwnedProduct(productId, userId);
+    @CacheEvict(value = "public-products", allEntries = true)
+    public void deleteVariant(Long productId, Long variantId, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        Product product = resolveStoreProduct(productId, storeId);
         ProductVariant variant = variantDao.findByIdAndProductId(variantId, productId)
-                .orElseThrow(() -> new NotFoundException("Variant not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Variant not found"));
 
         if (product.getVariants().size() == 1) {
-            throw new BadRequestException("Cannot delete the last variant. Delete the product instead.");
+            throw new BadRequestException(ErrorCode.PRODUCT_LAST_VARIANT, "Cannot delete the last variant. Delete the product instead.");
         }
 
         variantDao.delete(variant);
 
         boolean hasStock = product.getVariants().stream()
                 .filter(v -> !v.getId().equals(variantId))
-                .anyMatch(v -> v.getStock() > 0);
+                .anyMatch(v -> Boolean.TRUE.equals(v.getActive()) && v.getStock() > 0);
         if (!hasStock && product.getStatus() == ProductStatus.ACTIVE) {
             product.setStatus(ProductStatus.OUT_OF_STOCK);
             productDao.save(product);
@@ -279,42 +305,98 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional(readOnly = true)
-    public SellerProductDetailResponse getSellerProductById(Long productId, Long userId) {
-        Product product = resolveOwnedProduct(productId, userId);
+    public SellerProductDetailResponse getStoreProductById(Long productId, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        Product product = resolveStoreProduct(productId, storeId);
         List<ProductImageResponse> images = productImageDao.findByProductId(productId).stream()
-                .map(ProductImageResponse::new)
+                .map(img -> new ProductImageResponse(img, storageService.presign(img.getS3Key(), Duration.ofDays(7))))
                 .toList();
         return new SellerProductDetailResponse(product, images);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<ProductResponse> getSellerProducts(Long userId) {
-        StoreProfile seller = resolveSeller(userId);
-        return productDao.findAllBySellerId(seller.getId()).stream()
-                .map(ProductResponse::new)
+    public List<ProductResponse> getStoreProducts(Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        return productDao.findAllByStoreId(storeId).stream()
+                .map(p -> {
+                    String thumbnail = p.getImages().stream()
+                            .findFirst()
+                            .map(img -> storageService.presign(img.getS3Key(), Duration.ofDays(7)))
+                            .filter(url -> !url.isBlank())
+                            .orElse(null);
+                    return new ProductResponse(p, thumbnail);
+                })
                 .toList();
     }
 
-    private StoreProfile resolveSeller(Long userId) {
-        StoreProfile seller = storeProfileDao.findByUserId(userId)
-                .orElseThrow(() -> new NotFoundException("Store profile not found"));
-        if (!seller.getRoles().contains(StoreRole.SELLER)) {
-            throw new BadRequestException("User does not have SELLER role");
+    @Override
+    @Transactional
+    @CacheEvict(value = "public-products", allEntries = true)
+    public ProductVariantResponse deactivateVariant(Long productId, Long variantId, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        Product product = resolveStoreProduct(productId, storeId);
+        ProductVariant variant = variantDao.findByIdAndProductId(variantId, productId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Variant not found"));
+
+        if (!Boolean.TRUE.equals(variant.getActive())) {
+            throw new BadRequestException(ErrorCode.PRODUCT_VARIANT_ALREADY_INACTIVE, "Variant is already inactive");
         }
-        return seller;
+
+        long activeCount = product.getVariants().stream()
+                .filter(v -> Boolean.TRUE.equals(v.getActive()))
+                .count();
+        if (activeCount <= 1) {
+            throw new BadRequestException(ErrorCode.PRODUCT_VARIANT_LAST_ACTIVE,
+                    "Cannot deactivate the last active variant. Deactivate the product instead.");
+        }
+
+        variant.setActive(false);
+        ProductVariant saved = variantDao.save(variant);
+
+        boolean hasStock = product.getVariants().stream()
+                .filter(v -> !v.getId().equals(variantId))
+                .anyMatch(v -> Boolean.TRUE.equals(v.getActive()) && v.getStock() > 0);
+        if (!hasStock && product.getStatus() == ProductStatus.ACTIVE) {
+            product.setStatus(ProductStatus.OUT_OF_STOCK);
+            productDao.save(product);
+        }
+
+        return new ProductVariantResponse(saved);
     }
 
-    private Product resolveOwnedProduct(Long productId, Long userId) {
-        StoreProfile seller = resolveSeller(userId);
-        return productDao.findByIdAndSellerId(productId, seller.getId())
-                .orElseThrow(() -> new NotFoundException("Product not found"));
+    @Override
+    @Transactional
+    @CacheEvict(value = "public-products", allEntries = true)
+    public ProductVariantResponse activateVariant(Long productId, Long variantId, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        resolveStoreProduct(productId, storeId);
+        ProductVariant variant = variantDao.findByIdAndProductId(variantId, productId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Variant not found"));
+
+        if (Boolean.TRUE.equals(variant.getActive())) {
+            throw new BadRequestException(ErrorCode.PRODUCT_VARIANT_ALREADY_ACTIVE, "Variant is already active");
+        }
+
+        variant.setActive(true);
+        return new ProductVariantResponse(variantDao.save(variant));
+    }
+
+    private StoreMembership resolveStoreAccess(Long storeId, Long userId) {
+        return membershipDao.findActiveByStoreIdAndUserId(storeId, userId)
+                .filter(m -> m.getRole() != StoreMemberRole.STAFF)
+                .orElseThrow(() -> new ForbiddenException(ErrorCode.STORE_ACCESS_DENIED, "You do not have permission to manage this store's products"));
+    }
+
+    private Product resolveStoreProduct(Long productId, Long storeId) {
+        return productDao.findByIdAndStoreId(productId, storeId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Product not found"));
     }
 
     private void validateCompareAtPrice(CreateVariantDto dto) {
         if (dto.getCompareAtPrice() != null
                 && dto.getCompareAtPrice().compareTo(dto.getPrice()) <= 0) {
-            throw new BadRequestException(
+            throw new BadRequestException(ErrorCode.PRODUCT_COMPARE_PRICE_INVALID,
                     "Compare-at price must be greater than sale price for SKU: " + dto.getSku());
         }
     }
@@ -331,7 +413,7 @@ public class ProductServiceImpl implements IProductService {
         return ids.stream()
                 .map(id -> {
                     AttributeValue av = attrValueMap.get(id);
-                    if (av == null) throw new NotFoundException("Attribute value not found: " + id);
+                    if (av == null) throw new NotFoundException(ErrorCode.PRODUCT_ATTRIBUTE_VALUE_NOT_FOUND, "Attribute value not found: " + id);
                     return av;
                 })
                 .toList();
@@ -353,7 +435,7 @@ public class ProductServiceImpl implements IProductService {
 
         for (AttributeValue av : attrValues) {
             if (!allowedIds.contains(av.getAttribute().getId())) {
-                throw new BadRequestException(
+                throw new BadRequestException(ErrorCode.PRODUCT_ATTRIBUTE_VALUE_NOT_FOUND,
                         "Attribute '" + av.getAttribute().getDescription() + "' does not apply to this category");
             }
         }
@@ -370,7 +452,7 @@ public class ProductServiceImpl implements IProductService {
                             .filter(ca -> ca.getAttribute().getId().equals(missingId))
                             .map(ca -> ca.getAttribute().getDescription())
                             .findFirst().orElse("unknown");
-                    throw new BadRequestException(
+                    throw new BadRequestException(ErrorCode.PRODUCT_ATTRIBUTE_VALUE_NOT_FOUND,
                             "Required attribute missing in variant '" + sku + "': " + attrName);
                 });
     }

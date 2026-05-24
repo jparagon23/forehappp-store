@@ -11,15 +11,17 @@ import com.forehapp.store.productModule.application.dto.UpdateVariantDto;
 import java.util.List;
 
 public interface IProductService {
-    ProductResponse createProduct(CreateProductRequestDto dto, Long userId);
-    ProductResponse updateProduct(Long productId, UpdateProductRequestDto dto, Long userId);
-    ProductVariantResponse addVariant(Long productId, CreateVariantDto dto, Long userId);
-    ProductVariantResponse updateVariant(Long productId, Long variantId, UpdateVariantDto dto, Long userId);
-    ProductResponse publish(Long productId, Long userId);
-    ProductResponse activate(Long productId, Long userId);
-    ProductResponse deactivate(Long productId, Long userId);
-    List<ProductResponse> getSellerProducts(Long userId);
-    SellerProductDetailResponse getSellerProductById(Long productId, Long userId);
-    void deleteProduct(Long productId, Long userId);
-    void deleteVariant(Long productId, Long variantId, Long userId);
+    ProductResponse createProduct(CreateProductRequestDto dto, Long storeId, Long userId);
+    ProductResponse updateProduct(Long productId, UpdateProductRequestDto dto, Long storeId, Long userId);
+    ProductVariantResponse addVariant(Long productId, CreateVariantDto dto, Long storeId, Long userId);
+    ProductVariantResponse updateVariant(Long productId, Long variantId, UpdateVariantDto dto, Long storeId, Long userId);
+    ProductResponse publish(Long productId, Long storeId, Long userId);
+    ProductResponse activate(Long productId, Long storeId, Long userId);
+    ProductResponse deactivate(Long productId, Long storeId, Long userId);
+    List<ProductResponse> getStoreProducts(Long storeId, Long userId);
+    SellerProductDetailResponse getStoreProductById(Long productId, Long storeId, Long userId);
+    void deleteProduct(Long productId, Long storeId, Long userId);
+    void deleteVariant(Long productId, Long variantId, Long storeId, Long userId);
+    ProductVariantResponse deactivateVariant(Long productId, Long variantId, Long storeId, Long userId);
+    ProductVariantResponse activateVariant(Long productId, Long variantId, Long storeId, Long userId);
 }

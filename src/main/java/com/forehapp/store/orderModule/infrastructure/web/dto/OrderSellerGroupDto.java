@@ -6,10 +6,11 @@ import java.util.List;
 
 public record OrderSellerGroupDto(
         Long groupId,
-        Long sellerId,
-        String sellerName,
+        Long storeId,
+        String storeName,
         String status,
         BigDecimal subtotal,
+        BigDecimal shippingCost,
         String trackingNumber,
         LocalDateTime preparedAt,
         LocalDateTime shippedAt,

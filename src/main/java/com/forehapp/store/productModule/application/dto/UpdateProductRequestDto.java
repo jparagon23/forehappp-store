@@ -15,4 +15,6 @@ public class UpdateProductRequestDto {
     private Long brandId;
 
     private Long lineId;
+
+    private Boolean freeShipping;
 }

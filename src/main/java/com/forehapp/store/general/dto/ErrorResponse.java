@@ -1,10 +1,20 @@
 package com.forehapp.store.general.dto;
 
-import lombok.AllArgsConstructor;
+import com.forehapp.store.general.exceptions.ErrorCode;
 import lombok.Getter;
 
 @Getter
-@AllArgsConstructor
 public class ErrorResponse {
-    private String error;
+    private final String code;
+    private final String error;
+
+    public ErrorResponse(ErrorCode code, String error) {
+        this.code = code.name();
+        this.error = error;
+    }
+
+    public ErrorResponse(String error) {
+        this.code = ErrorCode.INTERNAL_ERROR.name();
+        this.error = error;
+    }
 }

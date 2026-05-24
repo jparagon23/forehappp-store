@@ -1,0 +1,378 @@
+================================================================================
+  FOREHAPP STORE — MÉTODOS DE PAGO: GUÍA DE INTEGRACIÓN FRONTEND
+  (CASH_ON_DELIVERY + flujo manual CASH/TRANSFER + breaking changes)
+================================================================================
+
+BASE URL: http://localhost:8082
+AUTENTICACIÓN: Bearer Token (JWT) en header Authorization en TODOS los endpoints
+
+
+================================================================================
+  BREAKING CHANGES — LEER PRIMERO
+================================================================================
+
+Estos cambios rompen la integración existente si el front usaba los valores
+anteriores de los enums.
+
+1. ENUM PaymentMethod — valores renombrados a inglés
+   ─────────────────────────────────────────────────
+   ANTES             →  AHORA
+   "MERCADOPAGO"     →  "MERCADO_PAGO"
+   "TRANSFERENCIA"   →  "TRANSFER"
+   "EFECTIVO"        →  "CASH"
+   (nuevo)           →  "CASH_ON_DELIVERY"
+
+   Impacto: cualquier lugar donde el front envíe o compare métodos de pago
+   debe usar los nuevos valores.
+
+2. ENUM PaymentStatus — valores renombrados a inglés
+   ──────────────────────────────────────────────────
+   ANTES          →  AHORA
+   "PENDIENTE"    →  "PENDING"
+   "APROBADO"     →  "APPROVED"
+   "RECHAZADO"    →  "REJECTED"
+   "REEMBOLSADO"  →  "REFUNDED"
+
+   Impacto: si el front muestra el estado del pago, actualizar los mapeos
+   de texto.
+
+3. ENUM OrderStatus — nuevo valor agregado
+   ─────────────────────────────────────────
+   "PAYMENT_CONFIRMED"  → orden con pago manual confirmado por admin
+
+   Impacto: el switch/if que maneja OrderStatus debe contemplar este caso.
+   No ignorarlo o el buyer verá un estado en blanco.
+
+4. POST /api/v1/orders — nuevo campo requerido
+   ──────────────────────────────────────────────
+   El body ahora requiere "paymentMethod". Sin ese campo → 400.
+   Ver sección "Endpoint: Crear orden".
+
+5. OrderResponse y OrderSummaryDto — campos nuevos / renombrados
+   ──────────────────────────────────────────────────────────────
+   a) "status" renombrado a "paymentStatus" en ambos DTOs.
+      Actualizar cualquier referencia a order.status → order.paymentStatus.
+
+   b) Ambas respuestas incluyen "paymentMethod": String.
+      Usar para lógica de UI descrita abajo.
+
+   c) OrderSummaryDto incluye ahora "shippingStatus": String.
+      Es el estado de envío más avanzado entre todos los grupos de la orden.
+      Valores posibles (en orden): PENDING → PREPARING → SHIPPED → DELIVERED / CANCELLED
+      Usar para mostrar en el listado el estado real del envío sin abrir el detalle.
+
+
+================================================================================
+  LOS 3 FLUJOS DE PAGO
+================================================================================
+
+  ┌──────────────────┬──────────────────────────────────────────────────────┐
+  │ Método           │ Flujo                                                │
+  ├──────────────────┼──────────────────────────────────────────────────────┤
+  │ MERCADO_PAGO     │ checkoutUrl retornado → buyer paga en MP             │
+  │                  │ Webhook automático actualiza la orden                │
+  │                  │ Order:  PENDING → PAID                               │
+  │                  │ Groups: PENDING → PREPARING → SHIPPED → DELIVERED    │
+  ├──────────────────┼──────────────────────────────────────────────────────┤
+  │ CASH             │ Sin checkoutUrl (null)                               │
+  │ TRANSFER         │ Admin confirma el pago manualmente                   │
+  │                  │ Order:  PENDING → PAYMENT_CONFIRMED                  │
+  │                  │ Groups: PENDING → PREPARING → SHIPPED → DELIVERED    │
+  ├──────────────────┼──────────────────────────────────────────────────────┤
+  │ CASH_ON_DELIVERY │ Sin checkoutUrl (null). Solo disponible en Cali.     │
+  │                  │ Groups arrancan en PREPARING directamente.           │
+  │                  │ Order:  PENDING (hasta entrega) → PAID               │
+  │                  │ Groups: PREPARING → SHIPPED → DELIVERED              │
+  │                  │ Al último grupo DELIVERED → Order pasa a PAID        │
+  └──────────────────┴──────────────────────────────────────────────────────┘
+
+
+================================================================================
+  ENDPOINT: CREAR ORDEN — POST /api/v1/orders
+================================================================================
+
+REQUEST BODY (cambio: paymentMethod ahora es requerido):
+{
+  "addressId":     1,                  // Long, requerido
+  "paymentMethod": "MERCADO_PAGO"      // String, requerido — ver valores válidos
+}
+
+VALORES VÁLIDOS:
+  "MERCADO_PAGO"      → pago online vía MercadoPago
+  "CASH"              → pago en efectivo (confirma admin)
+  "TRANSFER"          → transferencia bancaria (confirma admin)
+  "CASH_ON_DELIVERY"  → pago contra entrega (solo si city = "Cali")
+
+RESPUESTA 201 Created — OrderResponse:
+{
+  "orderId":         42,
+  "paymentStatus":   "PENDING",             // ← renombrado de "status"
+  "paymentMethod":   "MERCADO_PAGO",        // ← campo nuevo
+  "total":           250000.00,
+  "shippingAddress": "Calle 123 #45-67",
+  "shippingCity":    "Cali",
+  "shippingCountry": "Colombia",
+  "createdAt":       "2026-05-19T10:00:00",
+  "sellerGroups": [
+    {
+      "groupId":       10,
+      "sellerId":      2,
+      "sellerName":    "Juan Pérez",
+      "groupStatus":   "PENDING",
+      "subtotal":      250000.00,
+      "trackingNumber": null,
+      "preparedAt":    null,
+      "shippedAt":     null,
+      "deliveredAt":   null,
+      "items": [...]
+    }
+  ],
+  "checkoutUrl": "https://www.mercadopago.com.co/..."   // null si no es MERCADO_PAGO
+}
+
+NOTA groupStatus para CASH_ON_DELIVERY:
+  Los grupos se crean directamente en "PREPARING" (no en "PENDING").
+  El front puede detectarlo con order.paymentMethod === "CASH_ON_DELIVERY".
+
+ERRORES:
+  400 → paymentMethod null o valor no reconocido
+        "Payment method is required"
+  400 → CASH_ON_DELIVERY en dirección fuera de Cali
+        "Cash on delivery is only available for orders shipped to Cali"
+  404 → carrito activo no encontrado
+  404 → dirección no encontrada o no pertenece al usuario
+  409 → stock insuficiente: "Insufficient stock for: {título} (SKU: {sku})"
+  422 → carrito vacío
+
+
+================================================================================
+  ENDPOINT: LISTAR ÓRDENES — GET /api/v1/orders
+================================================================================
+
+RESPUESTA 200 OK — Lista de OrderSummaryDto:
+[
+  {
+    "orderId":          42,
+    "paymentStatus":    "PENDING",            // ← renombrado de "status"
+    "paymentMethod":    "CASH_ON_DELIVERY",
+    "shippingStatus":   "SHIPPED",            // ← campo nuevo: estado más avanzado entre grupos
+    "total":            250000.00,
+    "createdAt":        "2026-05-19T10:00:00",
+    "sellerGroupCount": 2
+  }
+]
+
+Usar paymentMethod para mostrar el método de pago y shippingStatus para el
+estado de envío en el listado de órdenes del buyer.
+
+shippingStatus — valores posibles:
+  "PENDING"    → ningún grupo ha iniciado aún
+  "PREPARING"  → al menos un grupo en preparación
+  "SHIPPED"    → al menos un grupo en camino
+  "DELIVERED"  → todos los grupos entregados
+  "CANCELLED"  → solo si todos están cancelados
+
+
+================================================================================
+  ENDPOINT: DETALLE DE ORDEN — GET /api/v1/orders/{orderId}
+================================================================================
+
+Misma estructura que OrderResponse descrita arriba.
+paymentMethod siempre presente — usar para lógica de UI.
+
+
+================================================================================
+  ENDPOINT NUEVO: CONFIRMAR PAGO MANUAL — PATCH /api/v1/admin/payments/orders/{orderId}/confirm-cash
+================================================================================
+
+Rol requerido: STORE_ADMIN
+
+CUÁNDO: Admin recibe el efectivo o verifica la transferencia del buyer.
+APLICA A: órdenes con paymentMethod = "CASH" o "TRANSFER" en estado "PENDING".
+
+EFECTO:
+  → Order.status:     PENDING → PAYMENT_CONFIRMED
+  → Payment.status:   PENDING → APPROVED
+  → Todos los grupos: PENDING → PREPARING  (automático)
+  → Email de confirmación enviado al buyer
+
+RESPUESTA: 204 No Content
+
+ERRORES:
+  400 → La orden no es CASH ni TRANSFER
+        "Only CASH or TRANSFER orders can be confirmed manually"
+  403 → No tiene rol STORE_ADMIN
+        "Access denied: STORE_ADMIN role required"
+  404 → Orden no encontrada
+  404 → Registro de pago no encontrado
+  409 → Orden no está en PENDING
+        "Order is not in PENDING status"
+
+
+================================================================================
+  ESTADOS — QUÉ MOSTRAR AL BUYER
+================================================================================
+
+ORDER PAYMENT STATUS (campo: paymentStatus):
+
+  "PENDING"
+    → MERCADO_PAGO:     "Esperando confirmación de pago"
+    → CASH / TRANSFER:  "Pendiente de confirmación por el administrador"
+    → CASH_ON_DELIVERY: "Pedido recibido — en preparación"
+                        (los grupos ya están en PREPARING, pago al recibir)
+
+  "PAYMENT_CONFIRMED"
+    → CASH / TRANSFER:  "Pago confirmado — tu pedido está siendo preparado"
+
+  "PAID"
+    → MERCADO_PAGO:     "Pago recibido — pedido en proceso"
+    → CASH_ON_DELIVERY: "Pedido entregado y pago completado"
+
+  "CANCELLED"
+    → Todos:            "Orden cancelada"
+
+Lógica sugerida para COD en estado PENDING:
+  if (order.paymentMethod === "CASH_ON_DELIVERY" && order.paymentStatus === "PENDING") {
+    mostrar: "Pedido recibido — en preparación. Pagarás al recibir."
+  }
+
+GROUP STATUS:
+
+  "PENDING"    → "Esperando inicio de preparación"
+  "PREPARING"  → "El vendedor está preparando tu pedido"
+  "SHIPPED"    → "En camino" + trackingNumber si disponible
+  "DELIVERED"  → "Entregado"
+  "CANCELLED"  → "Cancelado" + cancellationReason si disponible
+
+
+================================================================================
+  RESTRICCIÓN CASH_ON_DELIVERY — SOLO CALI
+================================================================================
+
+El método CASH_ON_DELIVERY solo está disponible si la dirección seleccionada
+tiene city = "Cali" (sin distinción de mayúsculas).
+
+Lógica recomendada en el selector de método de pago:
+  const isCali = selectedAddress?.city?.toLowerCase() === "cali"
+
+  // Deshabilitar / ocultar CASH_ON_DELIVERY si !isCali
+  // Ejemplo React:
+  <option value="CASH_ON_DELIVERY" disabled={!isCali}>
+    Contra entrega (solo Cali)
+  </option>
+
+Si se omite esta validación y se envía de todas formas:
+  HTTP 400 → "Cash on delivery is only available for orders shipped to Cali"
+
+
+================================================================================
+  FLUJO DE CHECKOUT — POR MÉTODO
+================================================================================
+
+── MERCADO_PAGO ──────────────────────────────────────────────────────────────
+
+1. POST /api/v1/orders  { addressId, paymentMethod: "MERCADO_PAGO" }
+2. checkoutUrl != null  → redirigir al buyer a esa URL
+3. Buyer paga en MercadoPago → regresa via backUrl:
+     /orders/success?order_id={id}   → pago aprobado
+     /orders/failure?order_id={id}   → pago rechazado
+     /orders/pending?order_id={id}   → pago pendiente
+4. Al regresar: GET /api/v1/orders/{orderId} para leer el estado real
+   (el webhook puede tardar unos segundos → hacer polling o mostrar spinner)
+
+── CASH / TRANSFER ─────────────────────────────────────────────────────────
+
+1. POST /api/v1/orders  { addressId, paymentMethod: "CASH" | "TRANSFER" }
+2. checkoutUrl = null → no redirigir
+3. Mostrar pantalla de confirmación:
+   "Orden #42 creada. Un administrador verificará tu pago y te
+    notificará por email cuando sea aprobado."
+4. Orden queda en PENDING hasta que el admin confirme
+5. Buyer recibe email de confirmación cuando admin llame a confirm-cash
+
+── CASH_ON_DELIVERY ─────────────────────────────────────────────────────────
+
+1. Verificar que la dirección seleccionada sea Cali (validar antes de enviar)
+2. POST /api/v1/orders  { addressId, paymentMethod: "CASH_ON_DELIVERY" }
+3. checkoutUrl = null → no redirigir
+4. Mostrar pantalla de confirmación:
+   "Orden #43 creada. Tu pedido ya está siendo preparado.
+    Pagarás $250.000 COP al momento de la entrega."
+5. Los grupos ya vienen en groupStatus = "PREPARING" en la respuesta
+6. Cuando el último grupo se marque DELIVERED → Order.status pasa a "PAID"
+
+
+================================================================================
+  RESUMEN DE CAMBIOS POR VISTA
+================================================================================
+
+  Vista / Componente              Cambio requerido
+  ──────────────────────────────  ────────────────────────────────────────────
+  Checkout — selector de método   Usar nuevos valores de enum (MERCADO_PAGO,
+                                  CASH, TRANSFER, CASH_ON_DELIVERY)
+                                  Deshabilitar COD si city != Cali
+
+  Checkout — post-creación        Bifurcar por checkoutUrl:
+                                  checkoutUrl != null → redirigir a MP
+                                  checkoutUrl = null  → pantalla de confirmación
+                                  (mensaje distinto según paymentMethod)
+
+  Lista de órdenes (buyer)        "status" renombrado a "paymentStatus"
+                                  Nuevo campo "shippingStatus" (estado más avanzado
+                                  de los grupos — usar para mostrar el envío)
+                                  Mostrar paymentMethod en cada fila
+                                  Nuevo estado "PAYMENT_CONFIRMED" en badge
+
+  Detalle de orden (buyer)        "status" renombrado a "paymentStatus"
+                                  Nuevo campo paymentMethod en OrderResponse
+                                  Lógica de mensaje por (paymentMethod + paymentStatus)
+                                  COD en PENDING → mostrar "en preparación"
+
+  Detalle de orden (buyer)        PaymentStatus ya no está en español:
+  — estado del pago               PENDING / APPROVED / REJECTED / REFUNDED
+
+  Panel admin — órdenes           Botón "Confirmar pago" visible para órdenes
+                                  con paymentMethod CASH o TRANSFER en PENDING
+                                  PATCH /api/v1/admin/payments/orders/{id}/confirm-cash
+                                  Al confirmar → Order pasa a PAYMENT_CONFIRMED
+
+  Panel admin / seller            Nuevo OrderStatus "PAYMENT_CONFIRMED" en
+  — listados de grupos            filtros y badges
+
+
+================================================================================
+  RESUMEN DE ENDPOINTS AFECTADOS / NUEVOS
+================================================================================
+
+  Método   Ruta                                          Cambio
+  ───────  ────────────────────────────────────────────  ──────────────────────
+  POST     /api/v1/orders                               CAMBIO: requiere paymentMethod
+                                                         en body (antes no existía)
+  GET      /api/v1/orders                               CAMBIO: OrderSummaryDto
+                                                         incluye paymentMethod
+  GET      /api/v1/orders/{orderId}                     CAMBIO: OrderResponse
+                                                         incluye paymentMethod
+  PATCH    /api/v1/admin/payments/orders/{id}/           NUEVO: confirmar pago
+             confirm-cash                                manual (STORE_ADMIN)
+
+
+================================================================================
+  MANEJO DE ERRORES NUEVOS
+================================================================================
+
+  HTTP 400  "Payment method is required"
+            → paymentMethod ausente en POST /orders
+
+  HTTP 400  "Cash on delivery is only available for orders shipped to Cali"
+            → CASH_ON_DELIVERY con dirección fuera de Cali
+
+  HTTP 400  "Only CASH or TRANSFER orders can be confirmed manually"
+            → confirm-cash en una orden que no es CASH ni TRANSFER
+
+  HTTP 403  "Access denied: STORE_ADMIN role required"
+            → confirm-cash sin el rol correcto
+
+  HTTP 409  "Order is not in PENDING status"
+            → confirm-cash en orden que ya no está en PENDING
+
+================================================================================

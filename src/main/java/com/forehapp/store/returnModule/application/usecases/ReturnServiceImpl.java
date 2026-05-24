@@ -1,5 +1,10 @@
 package com.forehapp.store.returnModule.application.usecases;
 
+import com.forehapp.store.general.exceptions.BadRequestException;
+import com.forehapp.store.general.exceptions.ConflictException;
+import com.forehapp.store.general.exceptions.ErrorCode;
+import com.forehapp.store.general.exceptions.ForbiddenException;
+import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.orderModule.domain.model.OrderItem;
 import com.forehapp.store.orderModule.domain.model.OrderSellerGroup;
 import com.forehapp.store.orderModule.domain.model.OrderSellerGroupStatus;
@@ -13,10 +18,8 @@ import com.forehapp.store.returnModule.domain.ports.in.IReturnService;
 import com.forehapp.store.returnModule.domain.ports.out.IReturnDao;
 import com.forehapp.store.userModule.domain.model.StoreProfile;
 import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -43,16 +46,16 @@ public class ReturnServiceImpl implements IReturnService {
         StoreProfile buyer = resolveProfile(userId);
 
         OrderSellerGroup group = orderGroupDao.findByIdWithDetails(dto.orderGroupId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order group not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.RETURN_ORDER_NOT_FOUND, "Order group not found"));
 
         if (!group.getOrder().getBuyer().getId().equals(buyer.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This order does not belong to you");
+            throw new ForbiddenException(ErrorCode.RETURN_ORDER_NOT_YOURS, "This order does not belong to you");
         }
         if (group.getStatus() != OrderSellerGroupStatus.DELIVERED) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Returns can only be requested for delivered orders");
+            throw new BadRequestException(ErrorCode.RETURN_ORDER_NOT_DELIVERED, "Returns can only be requested for delivered orders");
         }
         returnDao.findByGroupId(dto.orderGroupId()).ifPresent(r -> {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "A return request already exists for this order group");
+            throw new ConflictException(ErrorCode.RETURN_DUPLICATE, "A return request already exists for this order group");
         });
 
         Map<Long, OrderItem> itemsById = group.getItems().stream()
@@ -67,11 +70,11 @@ public class ReturnServiceImpl implements IReturnService {
         for (ReturnItemRequestDto itemDto : dto.items()) {
             OrderItem orderItem = itemsById.get(itemDto.orderItemId());
             if (orderItem == null) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                throw new BadRequestException(ErrorCode.RETURN_ITEM_NOT_FOUND,
                         "Item " + itemDto.orderItemId() + " does not belong to this order group");
             }
             if (itemDto.quantityToReturn() > orderItem.getQuantity()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                throw new BadRequestException(ErrorCode.RETURN_ITEM_QUANTITY_EXCEEDED,
                         "Cannot return more than the ordered quantity for item " + itemDto.orderItemId());
             }
             ReturnItem returnItem = new ReturnItem();
@@ -96,16 +99,16 @@ public class ReturnServiceImpl implements IReturnService {
     public ReturnResponse getReturn(Long userId, Long returnId) {
         StoreProfile buyer = resolveProfile(userId);
         ReturnRequest returnRequest = returnDao.findById(returnId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Return request not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.RETURN_NOT_FOUND, "Return request not found"));
         if (!returnRequest.getBuyer().getId().equals(buyer.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This return does not belong to you");
+            throw new ForbiddenException(ErrorCode.RETURN_NOT_YOURS, "This return does not belong to you");
         }
         return toResponse(returnRequest);
     }
 
     private StoreProfile resolveProfile(Long userId) {
         return storeProfileDao.findByUserId(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Store profile not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_PROFILE_NOT_FOUND, "Store profile not found"));
     }
 
     static ReturnResponse toResponse(ReturnRequest r) {

@@ -3,17 +3,29 @@ package com.forehapp.store.orderModule.application.mappers;
 import com.forehapp.store.orderModule.domain.model.Order;
 import com.forehapp.store.orderModule.domain.model.OrderItem;
 import com.forehapp.store.orderModule.domain.model.OrderSellerGroup;
+import com.forehapp.store.orderModule.domain.model.OrderSellerGroupStatus;
 import com.forehapp.store.orderModule.infrastructure.web.dto.OrderItemDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.OrderResponse;
 import com.forehapp.store.orderModule.infrastructure.web.dto.OrderSellerGroupDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.OrderSummaryDto;
+import com.forehapp.store.orderModule.infrastructure.web.dto.VariantAttributeDto;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 @Component
 public class OrderMapper {
+
+    private static final Map<OrderSellerGroupStatus, Integer> STATUS_PRIORITY = Map.of(
+            OrderSellerGroupStatus.DELIVERED,  5,
+            OrderSellerGroupStatus.SHIPPED,    4,
+            OrderSellerGroupStatus.PREPARING,  3,
+            OrderSellerGroupStatus.PENDING,    2,
+            OrderSellerGroupStatus.CANCELLED,  1
+    );
 
     public OrderResponse toResponse(Order order, String checkoutUrl) {
         List<OrderSellerGroupDto> groups = order.getSellerGroups().stream()
@@ -22,6 +34,7 @@ public class OrderMapper {
         return new OrderResponse(
                 order.getId(),
                 order.getStatus().name(),
+                order.getPaymentMethod(),
                 order.getTotal(),
                 order.getShippingAddress(),
                 order.getShippingCity(),
@@ -33,9 +46,16 @@ public class OrderMapper {
     }
 
     public OrderSummaryDto toSummary(Order order) {
+        String shippingStatus = order.getSellerGroups().stream()
+                .map(OrderSellerGroup::getStatus)
+                .max(Comparator.comparingInt(s -> STATUS_PRIORITY.getOrDefault(s, 0)))
+                .map(OrderSellerGroupStatus::name)
+                .orElse(OrderSellerGroupStatus.PENDING.name());
         return new OrderSummaryDto(
                 order.getId(),
                 order.getStatus().name(),
+                order.getPaymentMethod(),
+                shippingStatus,
                 order.getTotal(),
                 order.getCreatedAt(),
                 order.getSellerGroups().size()
@@ -43,16 +63,16 @@ public class OrderMapper {
     }
 
     private OrderSellerGroupDto toGroupDto(OrderSellerGroup group) {
-        String sellerName = group.getSeller().getUser().getName() + " " + group.getSeller().getUser().getLastname();
         List<OrderItemDto> items = group.getItems().stream()
                 .map(this::toItemDto)
                 .toList();
         return new OrderSellerGroupDto(
                 group.getId(),
-                group.getSeller().getId(),
-                sellerName,
+                group.getStore().getId(),
+                group.getStore().getName(),
                 group.getStatus().name(),
                 group.getSubtotal(),
+                group.getShippingCost(),
                 group.getTrackingNumber(),
                 group.getPreparedAt(),
                 group.getShippedAt(),
@@ -63,11 +83,17 @@ public class OrderMapper {
 
     private OrderItemDto toItemDto(OrderItem item) {
         BigDecimal subtotal = item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity()));
+        List<VariantAttributeDto> attributes = item.getVariant().getAttributeValues().stream()
+                .map(av -> new VariantAttributeDto(
+                        av.getAttribute().getDescription(),
+                        av.getDescription()))
+                .toList();
         return new OrderItemDto(
                 item.getId(),
                 item.getVariant().getId(),
                 item.getVariant().getSku(),
                 item.getVariant().getProduct().getTitle(),
+                attributes,
                 item.getQuantity(),
                 item.getUnitPrice(),
                 subtotal

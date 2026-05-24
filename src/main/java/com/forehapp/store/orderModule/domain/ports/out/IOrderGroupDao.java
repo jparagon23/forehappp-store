@@ -7,7 +7,7 @@ import java.util.Optional;
 
 public interface IOrderGroupDao {
     Optional<OrderSellerGroup> findByIdWithDetails(Long groupId);
-    List<OrderSellerGroup> findAllBySellerIdWithDetails(Long sellerId);
+    List<OrderSellerGroup> findAllByStoreIdWithDetails(Long storeId);
     List<OrderSellerGroup> findAllByOrderId(Long orderId);
     OrderSellerGroup save(OrderSellerGroup group);
 }

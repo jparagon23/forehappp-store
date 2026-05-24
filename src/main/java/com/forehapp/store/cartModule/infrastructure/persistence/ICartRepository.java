@@ -17,8 +17,7 @@ public interface ICartRepository extends JpaRepository<Cart, Long> {
            "LEFT JOIN FETCH c.items i " +
            "LEFT JOIN FETCH i.variant v " +
            "LEFT JOIN FETCH v.product p " +
-           "LEFT JOIN FETCH p.seller s " +
-           "LEFT JOIN FETCH s.user " +
+           "LEFT JOIN FETCH p.store s " +
            "WHERE c.buyer.id = :buyerId AND c.status = :status")
     Optional<Cart> findByBuyerIdAndStatus(@Param("buyerId") Long buyerId, @Param("status") CartStatus status);
 

@@ -6,8 +6,8 @@ import java.time.LocalDateTime;
 
 public record CouponResponse(
         Long couponId,
-        Long sellerId,
-        String sellerName,
+        Long storeId,
+        String storeName,
         String code,
         String description,
         String discountType,

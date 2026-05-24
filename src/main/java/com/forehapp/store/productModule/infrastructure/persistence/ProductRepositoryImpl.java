@@ -25,13 +25,13 @@ public class ProductRepositoryImpl implements IProductDao {
     }
 
     @Override
-    public Optional<Product> findByIdAndSellerId(Long productId, Long sellerId) {
-        return jpaRepository.findByIdAndSellerId(productId, sellerId);
+    public Optional<Product> findByIdAndStoreId(Long productId, Long storeId) {
+        return jpaRepository.findByIdAndStoreId(productId, storeId);
     }
 
     @Override
-    public List<Product> findAllBySellerId(Long sellerId) {
-        return jpaRepository.findAllBySellerId(sellerId);
+    public List<Product> findAllByStoreId(Long storeId) {
+        return jpaRepository.findAllByStoreId(storeId);
     }
 
     @Override

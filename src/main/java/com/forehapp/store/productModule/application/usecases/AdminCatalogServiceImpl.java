@@ -1,6 +1,8 @@
 package com.forehapp.store.productModule.application.usecases;
 
 import com.forehapp.store.general.exceptions.BadRequestException;
+import com.forehapp.store.general.exceptions.ErrorCode;
+import com.forehapp.store.general.exceptions.ForbiddenException;
 import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.productModule.application.dto.*;
 import com.forehapp.store.productModule.domain.model.*;
@@ -52,9 +54,9 @@ public class AdminCatalogServiceImpl implements IAdminCatalogService {
     public LineResponse createLine(Long brandId, CreateLineRequestDto dto, Long userId) {
         resolveAdmin(userId);
         Brand brand = brandDao.findById(brandId)
-                .orElseThrow(() -> new NotFoundException("Brand not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Brand not found"));
         Category category = categoryDao.findById(dto.getCategoryId())
-                .orElseThrow(() -> new NotFoundException("Category not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Category not found"));
         Line line = new Line();
         line.setBrand(brand);
         line.setCategory(category);
@@ -86,7 +88,7 @@ public class AdminCatalogServiceImpl implements IAdminCatalogService {
             Long attributeId, CreateAttributeValueRequestDto dto, Long userId) {
         resolveAdmin(userId);
         Attribute attribute = attributeDao.findById(attributeId)
-                .orElseThrow(() -> new NotFoundException("Attribute not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Attribute not found"));
         AttributeValue value = new AttributeValue();
         value.setAttribute(attribute);
         value.setDescription(dto.getDescription().trim());
@@ -101,12 +103,12 @@ public class AdminCatalogServiceImpl implements IAdminCatalogService {
         resolveAdmin(userId);
 
         Category category = categoryDao.findById(categoryId)
-                .orElseThrow(() -> new NotFoundException("Category not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Category not found"));
         Attribute attribute = attributeDao.findById(dto.getAttributeId())
-                .orElseThrow(() -> new NotFoundException("Attribute not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Attribute not found"));
 
         if (categoryDao.existsCategoryAttribute(categoryId, dto.getAttributeId())) {
-            throw new BadRequestException("Attribute is already linked to this category");
+            throw new BadRequestException(ErrorCode.PRODUCT_ATTRIBUTE_ALREADY_LINKED, "Attribute is already linked to this category");
         }
 
         CategoryAttribute ca = new CategoryAttribute();
@@ -125,9 +127,9 @@ public class AdminCatalogServiceImpl implements IAdminCatalogService {
 
     private void resolveAdmin(Long userId) {
         StoreProfile profile = storeProfileDao.findByUserId(userId)
-                .orElseThrow(() -> new NotFoundException("Store profile not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_PROFILE_NOT_FOUND, "Store profile not found"));
         if (!profile.getRoles().contains(StoreRole.STORE_ADMIN)) {
-            throw new BadRequestException("Access denied: STORE_ADMIN role required");
+            throw new ForbiddenException(ErrorCode.PRODUCT_CATALOG_ADMIN_REQUIRED, "Access denied: STORE_ADMIN role required");
         }
     }
 }

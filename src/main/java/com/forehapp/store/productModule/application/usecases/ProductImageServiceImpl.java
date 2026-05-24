@@ -1,6 +1,8 @@
 package com.forehapp.store.productModule.application.usecases;
 
 import com.forehapp.store.general.exceptions.BadRequestException;
+import com.forehapp.store.general.exceptions.ErrorCode;
+import com.forehapp.store.general.exceptions.ForbiddenException;
 import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.general.storage.StorageService;
 import com.forehapp.store.productModule.application.dto.ProductImageResponse;
@@ -9,12 +11,15 @@ import com.forehapp.store.productModule.domain.model.ProductImage;
 import com.forehapp.store.productModule.domain.ports.in.IProductImageService;
 import com.forehapp.store.productModule.domain.ports.out.IProductDao;
 import com.forehapp.store.productModule.domain.ports.out.IProductImageDao;
-import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
+import com.forehapp.store.storeModule.domain.model.StoreMemberRole;
+import com.forehapp.store.storeModule.domain.ports.out.IStoreMembershipDao;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 
@@ -27,86 +32,90 @@ public class ProductImageServiceImpl implements IProductImageService {
     private final StorageService storageService;
     private final IProductImageDao imageDao;
     private final IProductDao productDao;
-    private final IStoreProfileDao storeProfileDao;
+    private final IStoreMembershipDao membershipDao;
 
     public ProductImageServiceImpl(StorageService storageService,
                                    IProductImageDao imageDao,
                                    IProductDao productDao,
-                                   IStoreProfileDao storeProfileDao) {
+                                   IStoreMembershipDao membershipDao) {
         this.storageService = storageService;
         this.imageDao = imageDao;
         this.productDao = productDao;
-        this.storeProfileDao = storeProfileDao;
+        this.membershipDao = membershipDao;
     }
 
     @Override
     @Transactional
-    public ProductImageResponse upload(Long productId, MultipartFile file, Long userId) {
+    @CacheEvict(value = "public-products", allEntries = true)
+    public ProductImageResponse upload(Long productId, MultipartFile file, Long storeId, Long userId) {
         validateFile(file);
-        Long sellerId = resolveSellerId(userId);
-        Product product = productDao.findByIdAndSellerId(productId, sellerId)
-                .orElseThrow(() -> new NotFoundException("Producto no encontrado"));
+        resolveStoreAccess(storeId, userId);
+        Product product = productDao.findByIdAndStoreId(productId, storeId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Producto no encontrado"));
 
         StorageService.UploadResult result = storageService.upload(file, "products/" + productId);
 
         ProductImage image = new ProductImage();
         image.setProduct(product);
         image.setS3Key(result.key());
-        image.setUrl(result.url());
+        image.setUrl(result.key());
         image.setDisplayOrder(0);
 
-        return new ProductImageResponse(imageDao.save(image));
+        ProductImage saved = imageDao.save(image);
+        String presignedUrl = storageService.presign(saved.getS3Key(), Duration.ofDays(7));
+        return new ProductImageResponse(saved, presignedUrl);
     }
 
     @Override
     @Transactional
-    public void delete(Long productId, Long imageId, Long userId) {
-        Long sellerId = resolveSellerId(userId);
-        productDao.findByIdAndSellerId(productId, sellerId)
-                .orElseThrow(() -> new NotFoundException("Producto no encontrado"));
+    @CacheEvict(value = "public-products", allEntries = true)
+    public void delete(Long productId, Long imageId, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        productDao.findByIdAndStoreId(productId, storeId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Producto no encontrado"));
 
         ProductImage image = imageDao.findById(imageId)
-                .orElseThrow(() -> new NotFoundException("Imagen no encontrada"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Imagen no encontrada"));
 
         if (!image.getProduct().getId().equals(productId)) {
-            throw new BadRequestException("La imagen no pertenece al producto indicado");
+            throw new BadRequestException(ErrorCode.PRODUCT_IMAGE_WRONG_PRODUCT, "La imagen no pertenece al producto indicado");
         }
 
         storageService.delete(image.getS3Key());
         imageDao.delete(image);
     }
 
-    private Long resolveSellerId(Long userId) {
-        return storeProfileDao.findByUserId(userId)
-                .orElseThrow(() -> new NotFoundException("Store profile not found"))
-                .getId();
-    }
-
     @Override
     public List<ProductImageResponse> getByProduct(Long productId) {
         return imageDao.findByProductId(productId).stream()
-                .map(ProductImageResponse::new)
+                .map(img -> new ProductImageResponse(img, storageService.presign(img.getS3Key(), Duration.ofDays(7))))
                 .toList();
+    }
+
+    private void resolveStoreAccess(Long storeId, Long userId) {
+        membershipDao.findActiveByStoreIdAndUserId(storeId, userId)
+                .filter(m -> m.getRole() != StoreMemberRole.STAFF)
+                .orElseThrow(() -> new ForbiddenException(ErrorCode.STORE_ACCESS_DENIED, "You do not have permission to manage this store's products"));
     }
 
     private void validateFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new BadRequestException("El archivo está vacío");
+            throw new BadRequestException(ErrorCode.PRODUCT_IMAGE_EMPTY, "El archivo está vacío");
         }
         if (file.getSize() > MAX_SIZE_BYTES) {
-            throw new BadRequestException("El archivo no puede superar 5MB");
+            throw new BadRequestException(ErrorCode.PRODUCT_IMAGE_TOO_LARGE, "El archivo no puede superar 5MB");
         }
         String contentType = file.getContentType();
         if (contentType == null || !ALLOWED_TYPES.contains(contentType)) {
-            throw new BadRequestException("Formato no permitido. Use JPEG, PNG o WebP");
+            throw new BadRequestException(ErrorCode.PRODUCT_IMAGE_FORMAT_INVALID, "Formato no permitido. Use JPEG, PNG o WebP");
         }
         try {
             byte[] header = file.getBytes();
             if (!hasValidMagicBytes(header, contentType)) {
-                throw new BadRequestException("El contenido del archivo no coincide con su tipo declarado");
+                throw new BadRequestException(ErrorCode.PRODUCT_IMAGE_CONTENT_MISMATCH, "El contenido del archivo no coincide con su tipo declarado");
             }
         } catch (IOException e) {
-            throw new BadRequestException("No se pudo leer el archivo");
+            throw new BadRequestException(ErrorCode.PRODUCT_IMAGE_READ_ERROR, "No se pudo leer el archivo");
         }
     }
 

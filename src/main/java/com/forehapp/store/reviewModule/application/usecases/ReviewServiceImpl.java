@@ -1,5 +1,10 @@
 package com.forehapp.store.reviewModule.application.usecases;
 
+import com.forehapp.store.general.exceptions.BadRequestException;
+import com.forehapp.store.general.exceptions.ConflictException;
+import com.forehapp.store.general.exceptions.ErrorCode;
+import com.forehapp.store.general.exceptions.ForbiddenException;
+import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.productModule.domain.model.Product;
 import com.forehapp.store.productModule.domain.ports.out.IProductDao;
 import com.forehapp.store.reviewModule.application.dto.CreateReviewRequestDto;
@@ -15,10 +20,8 @@ import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -62,10 +65,10 @@ public class ReviewServiceImpl implements IReviewService {
     public ReviewResponse createReview(Long userId, Long productId, CreateReviewRequestDto dto) {
         StoreProfile reviewer = resolveProfile(userId);
         Product product = productDao.findById(productId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Product not found"));
 
         reviewDao.findByProductIdAndReviewerId(productId, reviewer.getId()).ifPresent(r -> {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "You have already reviewed this product");
+            throw new ConflictException(ErrorCode.REVIEW_DUPLICATE, "You have already reviewed this product");
         });
 
         ProductReview review = new ProductReview();
@@ -83,13 +86,13 @@ public class ReviewServiceImpl implements IReviewService {
     public void deleteReview(Long userId, Long reviewId) {
         StoreProfile reviewer = resolveProfile(userId);
         ProductReview review = reviewDao.findById(reviewId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Review not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.REVIEW_NOT_FOUND, "Review not found"));
 
         if (!review.getReviewer().getId().equals(reviewer.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your review");
+            throw new ForbiddenException(ErrorCode.REVIEW_NOT_YOURS, "Not your review");
         }
         if (review.getStatus() == ReviewStatus.APROBADO) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot delete an approved review");
+            throw new BadRequestException(ErrorCode.REVIEW_APPROVED_DELETE_DENIED, "Cannot delete an approved review");
         }
 
         reviewDao.delete(review);
@@ -104,7 +107,7 @@ public class ReviewServiceImpl implements IReviewService {
 
     private StoreProfile resolveProfile(Long userId) {
         return storeProfileDao.findByUserId(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Store profile not found"));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_PROFILE_NOT_FOUND, "Store profile not found"));
     }
 
     private ReviewResponse toResponse(ProductReview r) {

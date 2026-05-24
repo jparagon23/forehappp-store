@@ -5,10 +5,10 @@ import com.forehapp.store.orderModule.infrastructure.web.dto.SellerOrderGroupDto
 import java.util.List;
 
 public interface IOrderModuleService {
-    List<SellerOrderGroupDto> getSellerGroups(Long userId);
-    SellerOrderGroupDto getSellerGroupById(Long userId, Long groupId);
-    void prepareGroup(Long userId, Long groupId);
-    void shipGroup(Long userId, Long groupId, String trackingNumber);
-    void deliverGroup(Long userId, Long groupId);
-    void cancelGroup(Long userId, Long groupId, String reason);
+    List<SellerOrderGroupDto> getSellerGroups(Long storeId, Long userId);
+    SellerOrderGroupDto getSellerGroupById(Long storeId, Long groupId, Long userId);
+    void prepareGroup(Long storeId, Long groupId, Long userId);
+    void shipGroup(Long storeId, Long groupId, String trackingNumber, Long userId);
+    void deliverGroup(Long storeId, Long groupId, Long userId);
+    void cancelGroup(Long storeId, Long groupId, String reason, Long userId);
 }

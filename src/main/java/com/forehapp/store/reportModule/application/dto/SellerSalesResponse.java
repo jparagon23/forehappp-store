@@ -3,8 +3,8 @@ package com.forehapp.store.reportModule.application.dto;
 import java.math.BigDecimal;
 
 public record SellerSalesResponse(
-        Long sellerId,
-        String sellerName,
+        Long storeId,
+        String storeName,
         Long totalOrders,
         BigDecimal totalRevenue
 ) {}

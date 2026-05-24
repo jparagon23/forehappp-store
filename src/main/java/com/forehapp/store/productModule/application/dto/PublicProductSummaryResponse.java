@@ -16,19 +16,32 @@ public class PublicProductSummaryResponse {
     private final String category;
     private final LocalDateTime createdAt;
     private final BigDecimal minPrice;
+    private final BigDecimal compareAtPrice;
     private final int variantCount;
+    private final boolean freeShipping;
+    private final String thumbnailUrl;
 
-    public PublicProductSummaryResponse(Product product) {
+    public PublicProductSummaryResponse(Product product, String thumbnailUrl) {
         this.id = product.getId();
         this.title = product.getTitle();
         this.brand = product.getBrand().getDescription();
         this.line = product.getLine() != null ? product.getLine().getDescription() : null;
         this.category = product.getCategory().getDescription();
         this.createdAt = product.getCreatedAt();
-        this.variantCount = product.getVariants().size();
-        this.minPrice = product.getVariants().stream()
+        var activeVariants = product.getVariants().stream()
+                .filter(v -> Boolean.TRUE.equals(v.getActive()))
+                .toList();
+        this.variantCount = activeVariants.size();
+        this.minPrice = activeVariants.stream()
                 .map(v -> v.getPrice())
                 .min(BigDecimal::compareTo)
                 .orElse(null);
+        this.compareAtPrice = activeVariants.stream()
+                .map(v -> v.getCompareAtPrice())
+                .filter(p -> p != null)
+                .max(BigDecimal::compareTo)
+                .orElse(null);
+        this.freeShipping = Boolean.TRUE.equals(product.getFreeShipping());
+        this.thumbnailUrl = thumbnailUrl;
     }
 }

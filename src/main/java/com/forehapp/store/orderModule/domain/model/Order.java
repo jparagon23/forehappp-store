@@ -42,6 +42,9 @@ public class Order {
     @Column(name = "shipping_country", nullable = false, length = 100)
     private String shippingCountry;
 
+    @Column(name = "payment_method", nullable = false, length = 30)
+    private String paymentMethod;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
