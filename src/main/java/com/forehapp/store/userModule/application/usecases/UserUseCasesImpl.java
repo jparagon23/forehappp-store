@@ -6,9 +6,11 @@ import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.userModule.application.dto.ChangePasswordDto;
 import com.forehapp.store.userModule.application.dto.UpdateUserRequestDto;
 import com.forehapp.store.userModule.application.dto.UserResponse;
+import com.forehapp.store.userModule.application.dto.UserSearchResponse;
 import com.forehapp.store.userModule.domain.model.User;
 import com.forehapp.store.userModule.domain.ports.in.ChangePasswordUseCase;
 import com.forehapp.store.userModule.domain.ports.in.GetUserUseCase;
+import com.forehapp.store.userModule.domain.ports.in.SearchUserUseCase;
 import com.forehapp.store.userModule.domain.ports.in.UpdateUserUseCase;
 import com.forehapp.store.userModule.domain.ports.out.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -16,7 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class UserUseCasesImpl implements GetUserUseCase, UpdateUserUseCase, ChangePasswordUseCase {
+public class UserUseCasesImpl implements GetUserUseCase, UpdateUserUseCase, ChangePasswordUseCase, SearchUserUseCase {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -55,6 +57,13 @@ public class UserUseCasesImpl implements GetUserUseCase, UpdateUserUseCase, Chan
 
         user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
         userRepository.save(user);
+    }
+
+    @Override
+    public UserSearchResponse searchByEmail(String email) {
+        return userRepository.findByEmailWithActiveStoreProfile(email)
+                .map(UserSearchResponse::new)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_PROFILE_NOT_FOUND, "Usuario no encontrado"));
     }
 
     private User findOrThrow(Long userId) {
