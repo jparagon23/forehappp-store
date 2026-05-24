@@ -63,7 +63,8 @@ public class WebSecurityConfig {
                 "https://forehapp.netlify.app",
                 "https://forehappstore.netlify.app",
                 "https://devforehapp.netlify.app",
-                "https://forehapp.com"
+                "https://forehapp.com",
+                "https://forehappstore.com"
         ));
         if (extraAllowedOrigins != null && !extraAllowedOrigins.isBlank()) {
             Arrays.stream(extraAllowedOrigins.split(","))
