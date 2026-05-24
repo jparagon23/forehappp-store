@@ -57,6 +57,8 @@ CREATE TABLE IF NOT EXISTS store_roles (
     role_name VARCHAR(20) PRIMARY KEY
 );
 
+INSERT IGNORE INTO store_roles (role_name) VALUES ('CUSTOMER'), ('SELLER'), ('STORE_ADMIN');
+
 CREATE TABLE IF NOT EXISTS store_profile_roles (
     store_profile_id BIGINT      NOT NULL,
     role             VARCHAR(20) NOT NULL,
