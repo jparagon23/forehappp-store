@@ -50,6 +50,12 @@ public class CatalogController {
         return ResponseEntity.ok(catalogService.findAllAttributes());
     }
 
+    @GetMapping("/attributes/{attributeId}/values")
+    public ResponseEntity<List<CategoryAttributeResponse.AttributeValueDto>> getAttributeValues(
+            @PathVariable Long attributeId) {
+        return ResponseEntity.ok(catalogService.findAttributeValues(attributeId));
+    }
+
     @GetMapping("/categories/{categoryId}/attributes")
     public ResponseEntity<List<CategoryAttributeResponse>> getCategoryAttributes(
             @PathVariable Long categoryId) {

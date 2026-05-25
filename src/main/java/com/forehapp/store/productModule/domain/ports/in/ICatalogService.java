@@ -15,4 +15,5 @@ public interface ICatalogService {
     List<CategoryResponse> findAllCategories();
     List<CategoryAttributeResponse> findCategoryAttributes(Long categoryId);
     List<AttributeResponse> findAllAttributes();
+    List<CategoryAttributeResponse.AttributeValueDto> findAttributeValues(Long attributeId);
 }
