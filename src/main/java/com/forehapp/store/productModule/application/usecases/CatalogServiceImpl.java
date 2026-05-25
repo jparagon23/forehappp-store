@@ -115,4 +115,11 @@ public class CatalogServiceImpl implements ICatalogService {
                 .map(AttributeResponse::new)
                 .toList();
     }
+
+    @Override
+    public List<CategoryAttributeResponse.AttributeValueDto> findAttributeValues(Long attributeId) {
+        return attributeValueDao.findAllByAttributeIds(List.of(attributeId)).stream()
+                .map(av -> new CategoryAttributeResponse.AttributeValueDto(av.getId(), av.getDescription()))
+                .toList();
+    }
 }
