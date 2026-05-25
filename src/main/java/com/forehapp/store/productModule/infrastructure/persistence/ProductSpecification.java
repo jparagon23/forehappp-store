@@ -16,8 +16,8 @@ public class ProductSpecification {
         String pattern = "%" + search.toLowerCase() + "%";
         return (root, query, cb) -> cb.or(
                 cb.like(cb.lower(root.get("title")), pattern),
-                cb.like(cb.lower(root.join("category").get("name")), pattern),
-                cb.like(cb.lower(root.join("brand").get("name")), pattern)
+                cb.like(cb.lower(root.join("category").get("description")), pattern),
+                cb.like(cb.lower(root.join("brand").get("description")), pattern)
         );
     }
 
