@@ -10,5 +10,5 @@ public record RedeemCouponRequestDto(
         @NotBlank String code,
         @NotNull Long storeId,
         @NotNull @DecimalMin("0.01") BigDecimal orderAmount,
-        Long orderId
+        @NotNull Long orderId
 ) {}

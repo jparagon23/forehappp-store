@@ -5,5 +5,7 @@ import jakarta.validation.constraints.NotNull;
 
 public record CreateOrderRequestDto(
         @NotNull(message = "Address ID is required") Long addressId,
-        @NotNull(message = "Payment method is required") PaymentMethod paymentMethod
+        @NotNull(message = "Payment method is required") PaymentMethod paymentMethod,
+        String couponCode,
+        Long couponStoreId
 ) {}

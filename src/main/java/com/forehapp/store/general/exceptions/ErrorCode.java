@@ -18,6 +18,7 @@ public enum ErrorCode {
     USER_PROFILE_NOT_FOUND,
 
     // Store
+    STORE_NOT_FOUND,
     STORE_ADMIN_REQUIRED,
     STORE_ALREADY_MEMBER,
     STORE_ROLE_SELF_CHANGE,

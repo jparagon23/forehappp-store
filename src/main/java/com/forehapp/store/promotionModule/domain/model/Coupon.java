@@ -58,7 +58,7 @@ public class Coupon {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private PromotionStatus status = PromotionStatus.ACTIVA;
+    private PromotionStatus status = PromotionStatus.ACTIVE;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
