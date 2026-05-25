@@ -2,6 +2,7 @@ package com.forehapp.store.productModule.application.usecases;
 
 import com.forehapp.store.general.exceptions.ErrorCode;
 import com.forehapp.store.general.exceptions.NotFoundException;
+import com.forehapp.store.productModule.application.dto.AttributeResponse;
 import com.forehapp.store.productModule.application.dto.BrandResponse;
 import com.forehapp.store.productModule.application.dto.CategoryAttributeResponse;
 import com.forehapp.store.productModule.application.dto.CategoryResponse;
@@ -9,6 +10,7 @@ import com.forehapp.store.productModule.application.dto.LineResponse;
 import com.forehapp.store.productModule.domain.model.AttributeValue;
 import com.forehapp.store.productModule.domain.model.CategoryAttribute;
 import com.forehapp.store.productModule.domain.ports.in.ICatalogService;
+import com.forehapp.store.productModule.domain.ports.out.IAttributeDao;
 import com.forehapp.store.productModule.domain.ports.out.IAttributeValueDao;
 import com.forehapp.store.productModule.domain.ports.out.IBrandDao;
 import com.forehapp.store.productModule.domain.ports.out.ICategoryDao;
@@ -27,15 +29,18 @@ public class CatalogServiceImpl implements ICatalogService {
     private final ILineDao lineDao;
     private final ICategoryDao categoryDao;
     private final IAttributeValueDao attributeValueDao;
+    private final IAttributeDao attributeDao;
 
     public CatalogServiceImpl(IBrandDao brandDao,
                               ILineDao lineDao,
                               ICategoryDao categoryDao,
-                              IAttributeValueDao attributeValueDao) {
+                              IAttributeValueDao attributeValueDao,
+                              IAttributeDao attributeDao) {
         this.brandDao = brandDao;
         this.lineDao = lineDao;
         this.categoryDao = categoryDao;
         this.attributeValueDao = attributeValueDao;
+        this.attributeDao = attributeDao;
     }
 
     @Override
@@ -101,6 +106,13 @@ public class CatalogServiceImpl implements ICatalogService {
                                         av.getId(), av.getDescription()))
                                 .toList()
                 ))
+                .toList();
+    }
+
+    @Override
+    public List<AttributeResponse> findAllAttributes() {
+        return attributeDao.findAll().stream()
+                .map(AttributeResponse::new)
                 .toList();
     }
 }

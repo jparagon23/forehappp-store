@@ -1,5 +1,6 @@
 package com.forehapp.store.productModule.infrastructure.web;
 
+import com.forehapp.store.productModule.application.dto.AttributeResponse;
 import com.forehapp.store.productModule.application.dto.BrandResponse;
 import com.forehapp.store.productModule.application.dto.CategoryAttributeResponse;
 import com.forehapp.store.productModule.application.dto.CategoryResponse;
@@ -42,6 +43,11 @@ public class CatalogController {
     @GetMapping("/categories")
     public ResponseEntity<List<CategoryResponse>> getCategories() {
         return ResponseEntity.ok(catalogService.findAllCategories());
+    }
+
+    @GetMapping("/attributes")
+    public ResponseEntity<List<AttributeResponse>> getAttributes() {
+        return ResponseEntity.ok(catalogService.findAllAttributes());
     }
 
     @GetMapping("/categories/{categoryId}/attributes")
