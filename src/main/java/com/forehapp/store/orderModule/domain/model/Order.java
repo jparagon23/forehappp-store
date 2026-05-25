@@ -45,6 +45,12 @@ public class Order {
     @Column(name = "payment_method", nullable = false, length = 30)
     private String paymentMethod;
 
+    @Column(name = "coupon_code", length = 50)
+    private String couponCode;
+
+    @Column(name = "coupon_discount", precision = 14, scale = 2)
+    private BigDecimal couponDiscount;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

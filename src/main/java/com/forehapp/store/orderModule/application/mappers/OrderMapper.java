@@ -36,6 +36,8 @@ public class OrderMapper {
                 order.getStatus().name(),
                 order.getPaymentMethod(),
                 order.getTotal(),
+                order.getCouponCode(),
+                order.getCouponDiscount(),
                 order.getShippingAddress(),
                 order.getShippingCity(),
                 order.getShippingCountry(),

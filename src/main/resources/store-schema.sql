@@ -571,3 +571,31 @@ SET @s = (SELECT IF(COUNT(*) = 0,
   'SELECT 1')
   FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_order_seller_groups' AND COLUMN_NAME = 'shipping_cost');
 PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- =====================
+-- Migration: store_orders — coupon fields
+-- =====================
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_orders ADD COLUMN coupon_code VARCHAR(50)',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_orders' AND COLUMN_NAME = 'coupon_code');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_orders ADD COLUMN coupon_discount DECIMAL(14,2)',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_orders' AND COLUMN_NAME = 'coupon_discount');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- =====================
+-- Migration: store_coupons — rename enum values to English
+-- =====================
+
+UPDATE store_coupons SET discount_type = 'PERCENTAGE'   WHERE discount_type = 'PORCENTAJE';
+UPDATE store_coupons SET discount_type = 'FIXED_AMOUNT'  WHERE discount_type = 'MONTO_FIJO';
+UPDATE store_coupons SET status = 'ACTIVE'   WHERE status = 'ACTIVA';
+UPDATE store_coupons SET status = 'INACTIVE' WHERE status = 'INACTIVA';
+UPDATE store_coupons SET status = 'EXPIRED'  WHERE status = 'VENCIDA';
+
+ALTER TABLE store_coupons MODIFY COLUMN status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE';

@@ -66,6 +66,13 @@ public class PromotionServiceImpl implements IPromotionService {
         Coupon coupon = couponDao.findByCode(dto.code().toUpperCase())
                 .orElseThrow(() -> new NotFoundException(ErrorCode.COUPON_NOT_FOUND, "Coupon not found"));
 
+        if (coupon.getStatus() == PromotionStatus.ACTIVE
+                && coupon.getValidUntil() != null
+                && LocalDate.now().isAfter(coupon.getValidUntil())) {
+            coupon.setStatus(PromotionStatus.EXPIRED);
+            couponDao.save(coupon);
+        }
+
         String error = checkCouponRules(coupon, dto.storeId(), dto.orderAmount(), profile.getId());
         if (error != null) {
             throw new BadRequestException(ErrorCode.COUPON_INVALID, error);
@@ -100,7 +107,7 @@ public class PromotionServiceImpl implements IPromotionService {
         if (!coupon.getStore().getId().equals(storeId)) {
             return "Coupon is not valid for this store";
         }
-        if (coupon.getStatus() != PromotionStatus.ACTIVA) {
+        if (coupon.getStatus() != PromotionStatus.ACTIVE) {
             return "Coupon is not active";
         }
         LocalDate today = LocalDate.now();
@@ -124,7 +131,7 @@ public class PromotionServiceImpl implements IPromotionService {
     }
 
     private BigDecimal calculateDiscount(Coupon coupon, BigDecimal orderAmount) {
-        if (coupon.getDiscountType() == DiscountType.PORCENTAJE) {
+        if (coupon.getDiscountType() == DiscountType.PERCENTAGE) {
             return orderAmount
                     .multiply(coupon.getDiscountValue())
                     .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);

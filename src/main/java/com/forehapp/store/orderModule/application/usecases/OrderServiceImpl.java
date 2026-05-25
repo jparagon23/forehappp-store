@@ -19,6 +19,9 @@ import com.forehapp.store.orderModule.domain.model.OrderSellerGroupStatus;
 import com.forehapp.store.orderModule.domain.ports.in.IOrderService;
 import com.forehapp.store.orderModule.domain.ports.out.IOrderDao;
 import com.forehapp.store.orderModule.infrastructure.web.dto.CreateOrderRequestDto;
+import com.forehapp.store.promotionModule.application.dto.CouponValidationResponse;
+import com.forehapp.store.promotionModule.application.dto.RedeemCouponRequestDto;
+import com.forehapp.store.promotionModule.domain.ports.in.IPromotionService;
 import com.forehapp.store.orderModule.infrastructure.web.dto.OrderResponse;
 import com.forehapp.store.orderModule.infrastructure.web.dto.OrderSummaryDto;
 import com.forehapp.store.paymentModule.domain.model.PaymentMethod;
@@ -65,6 +68,7 @@ public class OrderServiceImpl implements IOrderService {
     private final OrderMapper orderMapper;
     private final ApplicationEventPublisher eventPublisher;
     private final IShippingZoneDao shippingZoneDao;
+    private final IPromotionService promotionService;
 
     @Value("${app.inventory.low-stock-threshold:5}")
     private int lowStockThreshold;
@@ -79,7 +83,8 @@ public class OrderServiceImpl implements IOrderService {
                             IPaymentService paymentService,
                             OrderMapper orderMapper,
                             ApplicationEventPublisher eventPublisher,
-                            IShippingZoneDao shippingZoneDao) {
+                            IShippingZoneDao shippingZoneDao,
+                            IPromotionService promotionService) {
         this.cartDao = cartDao;
         this.orderDao = orderDao;
         this.storeProfileDao = storeProfileDao;
@@ -91,6 +96,7 @@ public class OrderServiceImpl implements IOrderService {
         this.orderMapper = orderMapper;
         this.eventPublisher = eventPublisher;
         this.shippingZoneDao = shippingZoneDao;
+        this.promotionService = promotionService;
     }
 
     @Override
@@ -121,6 +127,10 @@ public class OrderServiceImpl implements IOrderService {
         Order order = buildOrder(buyer, address, cart.getItems());
         order.setPaymentMethod(dto.paymentMethod().name());
         Order savedOrder = orderDao.save(order);
+
+        if (dto.couponCode() != null && dto.couponStoreId() != null) {
+            savedOrder = applyCoupon(userId, dto.couponCode(), dto.couponStoreId(), savedOrder);
+        }
 
         cart.setStatus(CartStatus.CONVERTED);
         cart.setUpdatedAt(LocalDateTime.now());
@@ -322,6 +332,29 @@ public class OrderServiceImpl implements IOrderService {
                 order.getCreatedAt(),
                 sellerGroups
         );
+    }
+
+    private Order applyCoupon(Long userId, String couponCode, Long couponStoreId, Order savedOrder) {
+        boolean hasGroupForStore = savedOrder.getSellerGroups().stream()
+                .anyMatch(g -> g.getStore().getId().equals(couponStoreId));
+        if (!hasGroupForStore) {
+            throw new BadRequestException(ErrorCode.COUPON_INVALID,
+                    "Cart has no items from the coupon's store");
+        }
+
+        BigDecimal groupSubtotal = savedOrder.getSellerGroups().stream()
+                .filter(g -> g.getStore().getId().equals(couponStoreId))
+                .findFirst()
+                .map(OrderSellerGroup::getSubtotal)
+                .orElse(BigDecimal.ZERO);
+
+        CouponValidationResponse couponResult = promotionService.redeemCoupon(userId,
+                new RedeemCouponRequestDto(couponCode, couponStoreId, groupSubtotal, savedOrder.getId()));
+
+        savedOrder.setCouponCode(couponCode);
+        savedOrder.setCouponDiscount(couponResult.discountAmount());
+        savedOrder.setTotal(savedOrder.getTotal().subtract(couponResult.discountAmount()).max(BigDecimal.ZERO));
+        return orderDao.save(savedOrder);
     }
 
     private StoreProfile resolveProfile(Long userId) {

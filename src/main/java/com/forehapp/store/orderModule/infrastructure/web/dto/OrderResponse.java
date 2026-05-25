@@ -9,6 +9,8 @@ public record OrderResponse(
         String paymentStatus,
         String paymentMethod,
         BigDecimal total,
+        String couponCode,
+        BigDecimal couponDiscount,
         String shippingAddress,
         String shippingCity,
         String shippingCountry,

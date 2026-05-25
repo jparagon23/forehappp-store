@@ -14,6 +14,7 @@ import com.forehapp.store.promotionModule.domain.ports.in.IPromotionModuleServic
 import com.forehapp.store.promotionModule.domain.ports.out.ICouponDao;
 import com.forehapp.store.storeModule.domain.model.Store;
 import com.forehapp.store.storeModule.domain.model.StoreMembership;
+import com.forehapp.store.storeModule.domain.ports.out.IStoreDao;
 import com.forehapp.store.storeModule.domain.ports.out.IStoreMembershipDao;
 import com.forehapp.store.userModule.domain.model.StoreProfile;
 import com.forehapp.store.userModule.domain.model.StoreRole;
@@ -30,13 +31,16 @@ public class PromotionModuleServiceImpl implements IPromotionModuleService {
     private final ICouponDao couponDao;
     private final IStoreMembershipDao membershipDao;
     private final IStoreProfileDao storeProfileDao;
+    private final IStoreDao storeDao;
 
     public PromotionModuleServiceImpl(ICouponDao couponDao,
                                       IStoreMembershipDao membershipDao,
-                                      IStoreProfileDao storeProfileDao) {
+                                      IStoreProfileDao storeProfileDao,
+                                      IStoreDao storeDao) {
         this.couponDao = couponDao;
         this.membershipDao = membershipDao;
         this.storeProfileDao = storeProfileDao;
+        this.storeDao = storeDao;
     }
 
     @Override
@@ -86,7 +90,7 @@ public class PromotionModuleServiceImpl implements IPromotionModuleService {
     public CouponResponse deactivateCoupon(Long storeId, Long userId, Long couponId) {
         resolveStoreAccess(storeId, userId);
         Coupon coupon = findStoreCoupon(couponId, storeId);
-        coupon.setStatus(PromotionStatus.INACTIVA);
+        coupon.setStatus(PromotionStatus.INACTIVE);
         return toResponse(couponDao.save(coupon));
     }
 
@@ -111,6 +115,61 @@ public class PromotionModuleServiceImpl implements IPromotionModuleService {
         requireAdmin(userId);
         PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         return couponDao.findAll(pageable).map(this::toResponse);
+    }
+
+    @Override
+    @Transactional
+    public CouponResponse adminCreateCoupon(Long adminUserId, Long storeId, CreateCouponRequestDto dto) {
+        requireAdmin(adminUserId);
+        Store store = storeDao.findById(storeId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.STORE_NOT_FOUND, "Store not found"));
+
+        if (couponDao.findByCode(dto.code().toUpperCase()).isPresent()) {
+            throw new ConflictException(ErrorCode.COUPON_CODE_DUPLICATE, "Coupon code already exists");
+        }
+        if (dto.validUntil() != null && dto.validUntil().isBefore(dto.validFrom())) {
+            throw new BadRequestException(ErrorCode.COUPON_DATE_INVALID, "validUntil must be after validFrom");
+        }
+
+        Coupon coupon = new Coupon();
+        coupon.setStore(store);
+        coupon.setCode(dto.code().toUpperCase());
+        coupon.setDescription(dto.description());
+        coupon.setDiscountType(dto.discountType());
+        coupon.setDiscountValue(dto.discountValue());
+        coupon.setMinOrderAmount(dto.minOrderAmount());
+        coupon.setMaxUses(dto.maxUses());
+        coupon.setMaxUsesPerUser(dto.maxUsesPerUser());
+        coupon.setValidFrom(dto.validFrom());
+        coupon.setValidUntil(dto.validUntil());
+
+        return toResponse(couponDao.save(coupon));
+    }
+
+    @Override
+    @Transactional
+    public CouponResponse adminUpdateCoupon(Long adminUserId, Long couponId, UpdateCouponRequestDto dto) {
+        requireAdmin(adminUserId);
+        Coupon coupon = couponDao.findById(couponId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.COUPON_NOT_FOUND, "Coupon not found"));
+
+        if (dto.description() != null) coupon.setDescription(dto.description());
+        if (dto.minOrderAmount() != null) coupon.setMinOrderAmount(dto.minOrderAmount());
+        if (dto.maxUses() != null) coupon.setMaxUses(dto.maxUses());
+        if (dto.validUntil() != null) coupon.setValidUntil(dto.validUntil());
+        if (dto.status() != null) coupon.setStatus(dto.status());
+
+        return toResponse(couponDao.save(coupon));
+    }
+
+    @Override
+    @Transactional
+    public CouponResponse adminDeactivateCoupon(Long adminUserId, Long couponId) {
+        requireAdmin(adminUserId);
+        Coupon coupon = couponDao.findById(couponId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.COUPON_NOT_FOUND, "Coupon not found"));
+        coupon.setStatus(PromotionStatus.INACTIVE);
+        return toResponse(couponDao.save(coupon));
     }
 
     private StoreMembership resolveStoreAccess(Long storeId, Long userId) {
