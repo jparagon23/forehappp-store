@@ -38,7 +38,7 @@ public class ProductRepositoryImpl implements IProductDao {
     public Page<Product> findActiveProducts(String search, Long categoryId, Long brandId, Pageable pageable) {
         Specification<Product> spec = Specification.where(ProductSpecification.isActive());
         if (search != null && !search.isBlank()) {
-            spec = spec.and(ProductSpecification.titleContains(search));
+            spec = spec.and(ProductSpecification.matchesSearch(search));
         }
         if (categoryId != null) {
             spec = spec.and(ProductSpecification.hasCategory(categoryId));

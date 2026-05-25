@@ -12,9 +12,13 @@ public class ProductSpecification {
         return (root, query, cb) -> cb.equal(root.get("status"), ProductStatus.ACTIVE);
     }
 
-    public static Specification<Product> titleContains(String search) {
-        return (root, query, cb) ->
-                cb.like(cb.lower(root.get("title")), "%" + search.toLowerCase() + "%");
+    public static Specification<Product> matchesSearch(String search) {
+        String pattern = "%" + search.toLowerCase() + "%";
+        return (root, query, cb) -> cb.or(
+                cb.like(cb.lower(root.get("title")), pattern),
+                cb.like(cb.lower(root.join("category").get("name")), pattern),
+                cb.like(cb.lower(root.join("brand").get("name")), pattern)
+        );
     }
 
     public static Specification<Product> hasCategory(Long categoryId) {
