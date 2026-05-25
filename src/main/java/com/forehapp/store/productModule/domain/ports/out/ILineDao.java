@@ -10,4 +10,6 @@ public interface ILineDao {
     List<Line> findAllByBrandId(Long brandId);
     List<Line> findAllByBrandIdAndCategoryId(Long brandId, Long categoryId);
     Line save(Line line);
+    void delete(Line line);
+    boolean isUsedByProducts(Long lineId);
 }

@@ -1,6 +1,7 @@
 package com.forehapp.store.productModule.application.usecases;
 
 import com.forehapp.store.general.exceptions.BadRequestException;
+import com.forehapp.store.general.exceptions.ConflictException;
 import com.forehapp.store.general.exceptions.ErrorCode;
 import com.forehapp.store.general.exceptions.ForbiddenException;
 import com.forehapp.store.general.exceptions.NotFoundException;
@@ -15,6 +16,7 @@ import com.forehapp.store.productModule.application.dto.UpdateVariantDto;
 import com.forehapp.store.productModule.domain.model.*;
 import com.forehapp.store.general.storage.StorageService;
 import com.forehapp.store.productModule.domain.ports.in.IProductService;
+import com.forehapp.store.orderModule.domain.ports.out.IOrderItemDao;
 import com.forehapp.store.productModule.domain.ports.out.*;
 import com.forehapp.store.storeModule.domain.model.Store;
 import com.forehapp.store.storeModule.domain.model.StoreMembership;
@@ -42,6 +44,7 @@ public class ProductServiceImpl implements IProductService {
     private final IProductImageDao productImageDao;
     private final IProductVariantDao variantDao;
     private final IInventoryMovementDao movementDao;
+    private final IOrderItemDao orderItemDao;
     private final StorageService storageService;
 
     public ProductServiceImpl(IProductDao productDao,
@@ -53,6 +56,7 @@ public class ProductServiceImpl implements IProductService {
                               IProductImageDao productImageDao,
                               IProductVariantDao variantDao,
                               IInventoryMovementDao movementDao,
+                              IOrderItemDao orderItemDao,
                               StorageService storageService) {
         this.productDao = productDao;
         this.brandDao = brandDao;
@@ -63,6 +67,7 @@ public class ProductServiceImpl implements IProductService {
         this.productImageDao = productImageDao;
         this.variantDao = variantDao;
         this.movementDao = movementDao;
+        this.orderItemDao = orderItemDao;
         this.storageService = storageService;
     }
 
@@ -142,7 +147,7 @@ public class ProductServiceImpl implements IProductService {
         resolveStoreAccess(storeId, userId);
         Product product = resolveStoreProduct(productId, storeId);
 
-        if (variantDao.existsBySku(dto.getSku().trim())) {
+        if (dto.getSku() != null && !dto.getSku().isBlank() && variantDao.existsBySku(dto.getSku().trim())) {
             throw new BadRequestException(ErrorCode.PRODUCT_SKU_DUPLICATE, "SKU already exists: " + dto.getSku());
         }
 
@@ -155,7 +160,7 @@ public class ProductServiceImpl implements IProductService {
 
         ProductVariant variant = new ProductVariant();
         variant.setProduct(product);
-        variant.setSku(dto.getSku().trim());
+        variant.setSku(dto.getSku() != null && !dto.getSku().isBlank() ? dto.getSku().trim() : null);
         variant.setPrice(dto.getPrice());
         variant.setCompareAtPrice(dto.getCompareAtPrice());
         variant.setStock(dto.getStock());
@@ -285,22 +290,27 @@ public class ProductServiceImpl implements IProductService {
     public void deleteVariant(Long productId, Long variantId, Long storeId, Long userId) {
         resolveStoreAccess(storeId, userId);
         Product product = resolveStoreProduct(productId, storeId);
-        ProductVariant variant = variantDao.findByIdAndProductId(variantId, productId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Variant not found"));
 
+        boolean existed = product.getVariants().stream().anyMatch(v -> v.getId().equals(variantId));
+        if (!existed) {
+            throw new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Variant not found");
+        }
         if (product.getVariants().size() == 1) {
             throw new BadRequestException(ErrorCode.PRODUCT_LAST_VARIANT, "Cannot delete the last variant. Delete the product instead.");
         }
+        if (orderItemDao.existsByVariantId(variantId)) {
+            throw new ConflictException(ErrorCode.PRODUCT_VARIANT_HAS_ORDERS, "This variant has associated orders and cannot be deleted. Deactivate it instead.");
+        }
 
-        variantDao.delete(variant);
+        product.getVariants().removeIf(v -> v.getId().equals(variantId));
 
         boolean hasStock = product.getVariants().stream()
-                .filter(v -> !v.getId().equals(variantId))
                 .anyMatch(v -> Boolean.TRUE.equals(v.getActive()) && v.getStock() > 0);
         if (!hasStock && product.getStatus() == ProductStatus.ACTIVE) {
             product.setStatus(ProductStatus.OUT_OF_STOCK);
-            productDao.save(product);
         }
+
+        productDao.save(product);
     }
 
     @Override

@@ -14,4 +14,11 @@ public interface IAttributeValueJpaRepository extends JpaRepository<AttributeVal
 
     @Query("SELECT av FROM AttributeValue av JOIN FETCH av.attribute WHERE av.attribute.id IN :attributeIds")
     List<AttributeValue> findByAttributeIdIn(@Param("attributeIds") List<Long> attributeIds);
+
+    Optional<AttributeValue> findByIdAndAttributeId(Long id, Long attributeId);
+
+    boolean existsByAttributeId(Long attributeId);
+
+    @Query("SELECT COUNT(pv) > 0 FROM ProductVariant pv JOIN pv.attributeValues av WHERE av.id = :valueId")
+    boolean isUsedByVariant(@Param("valueId") Long valueId);
 }

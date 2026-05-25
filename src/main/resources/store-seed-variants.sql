@@ -12,7 +12,8 @@
     (3, 'Tamaño de Paquete'),
     (4, 'Talla de Zapatilla'),
     (5, 'Color'),
-    (6, 'Talla de Ropa');
+    (6, 'Talla de Ropa'),
+    (7, 'Sabor');
 
     -- =====================
     -- VALORES DE ATRIBUTO
@@ -64,6 +65,17 @@
     (27, 6, 'L'),
     (28, 6, 'XL'),
     (29, 6, 'XXL');
+
+    -- Sabor (7)
+    INSERT IGNORE INTO store_attribute_values (attribute_value_id, attribute_id, description) VALUES
+    (30, 7, 'Chocolate'),
+    (31, 7, 'Vainilla'),
+    (32, 7, 'Fresa'),
+    (33, 7, 'Menta'),
+    (34, 7, 'Naranja'),
+    (35, 7, 'Limón'),
+    (36, 7, 'Mango'),
+    (37, 7, 'Sin Sabor');
 
     -- =====================
     -- CATEGORÍA → ATRIBUTOS
