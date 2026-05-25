@@ -1,5 +1,6 @@
 package com.forehapp.store.productModule.domain.ports.in;
 
+import com.forehapp.store.productModule.application.dto.AttributeResponse;
 import com.forehapp.store.productModule.application.dto.BrandResponse;
 import com.forehapp.store.productModule.application.dto.CategoryAttributeResponse;
 import com.forehapp.store.productModule.application.dto.CategoryResponse;
@@ -13,4 +14,5 @@ public interface ICatalogService {
     List<LineResponse> findLinesByBrandAndCategory(Long brandId, Long categoryId);
     List<CategoryResponse> findAllCategories();
     List<CategoryAttributeResponse> findCategoryAttributes(Long categoryId);
+    List<AttributeResponse> findAllAttributes();
 }
