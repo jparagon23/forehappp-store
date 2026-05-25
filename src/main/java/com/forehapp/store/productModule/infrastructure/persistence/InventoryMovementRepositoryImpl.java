@@ -27,6 +27,11 @@ public class InventoryMovementRepositoryImpl implements IInventoryMovementDao {
     }
 
     @Override
+    public void deleteByVariantId(Long variantId) {
+        jpaRepository.deleteByVariantId(variantId);
+    }
+
+    @Override
     public Page<InventoryMovement> findByVariant(Long variantId, MovementReason reason, Pageable pageable) {
         return jpaRepository.findByVariant(variantId, reason, pageable);
     }

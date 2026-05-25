@@ -27,4 +27,9 @@ public interface ICartRepository extends JpaRepository<Cart, Long> {
            "WHERE c.status = com.forehapp.store.cartModule.domain.model.CartStatus.ACTIVE " +
            "AND c.updatedAt < :threshold")
     int expireOldCarts(@Param("threshold") LocalDateTime threshold);
+
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM CartItem ci WHERE ci.variant.id = :variantId")
+    void deleteCartItemsByVariantId(@Param("variantId") Long variantId);
 }

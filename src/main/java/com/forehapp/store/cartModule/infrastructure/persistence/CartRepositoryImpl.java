@@ -36,4 +36,9 @@ public class CartRepositoryImpl implements ICartDao {
     public int expireOldCarts(LocalDateTime threshold) {
         return jpaRepository.expireOldCarts(threshold);
     }
+
+    @Override
+    public void deleteCartItemsByVariantId(Long variantId) {
+        jpaRepository.deleteCartItemsByVariantId(variantId);
+    }
 }

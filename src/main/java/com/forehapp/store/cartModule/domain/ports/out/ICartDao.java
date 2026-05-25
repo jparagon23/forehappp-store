@@ -10,4 +10,5 @@ public interface ICartDao {
     Cart save(Cart cart);
     void delete(Cart cart);
     int expireOldCarts(LocalDateTime threshold);
+    void deleteCartItemsByVariantId(Long variantId);
 }
