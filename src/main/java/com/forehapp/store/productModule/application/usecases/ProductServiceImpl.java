@@ -16,6 +16,7 @@ import com.forehapp.store.productModule.application.dto.UpdateVariantDto;
 import com.forehapp.store.productModule.domain.model.*;
 import com.forehapp.store.general.storage.StorageService;
 import com.forehapp.store.productModule.domain.ports.in.IProductService;
+import com.forehapp.store.cartModule.domain.ports.out.ICartDao;
 import com.forehapp.store.orderModule.domain.ports.out.IOrderItemDao;
 import com.forehapp.store.productModule.domain.ports.out.*;
 import com.forehapp.store.storeModule.domain.model.Store;
@@ -45,6 +46,7 @@ public class ProductServiceImpl implements IProductService {
     private final IProductVariantDao variantDao;
     private final IInventoryMovementDao movementDao;
     private final IOrderItemDao orderItemDao;
+    private final ICartDao cartDao;
     private final StorageService storageService;
 
     public ProductServiceImpl(IProductDao productDao,
@@ -57,6 +59,7 @@ public class ProductServiceImpl implements IProductService {
                               IProductVariantDao variantDao,
                               IInventoryMovementDao movementDao,
                               IOrderItemDao orderItemDao,
+                              ICartDao cartDao,
                               StorageService storageService) {
         this.productDao = productDao;
         this.brandDao = brandDao;
@@ -68,6 +71,7 @@ public class ProductServiceImpl implements IProductService {
         this.variantDao = variantDao;
         this.movementDao = movementDao;
         this.orderItemDao = orderItemDao;
+        this.cartDao = cartDao;
         this.storageService = storageService;
     }
 
@@ -301,6 +305,9 @@ public class ProductServiceImpl implements IProductService {
         if (orderItemDao.existsByVariantId(variantId)) {
             throw new ConflictException(ErrorCode.PRODUCT_VARIANT_HAS_ORDERS, "This variant has associated orders and cannot be deleted. Deactivate it instead.");
         }
+
+        cartDao.deleteCartItemsByVariantId(variantId);
+        movementDao.deleteByVariantId(variantId);
 
         product.getVariants().removeIf(v -> v.getId().equals(variantId));
 

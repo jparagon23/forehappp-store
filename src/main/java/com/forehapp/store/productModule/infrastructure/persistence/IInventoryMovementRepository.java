@@ -15,6 +15,10 @@ public interface IInventoryMovementRepository extends JpaRepository<InventoryMov
     @Query("UPDATE ProductVariant v SET v.stock = v.stock + :delta WHERE v.id = :variantId")
     void incrementStock(@Param("variantId") Long variantId, @Param("delta") int delta);
 
+    @Modifying
+    @Query("DELETE FROM InventoryMovement m WHERE m.variant.id = :variantId")
+    void deleteByVariantId(@Param("variantId") Long variantId);
+
     @Query("SELECT m FROM InventoryMovement m WHERE m.variant.id = :variantId " +
            "AND (:reason IS NULL OR m.reason = :reason) " +
            "ORDER BY m.createdAt DESC")

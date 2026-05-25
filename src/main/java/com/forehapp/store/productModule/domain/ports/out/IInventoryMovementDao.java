@@ -8,5 +8,6 @@ import org.springframework.data.domain.Pageable;
 public interface IInventoryMovementDao {
     InventoryMovement save(InventoryMovement movement);
     void incrementStock(Long variantId, int delta);
+    void deleteByVariantId(Long variantId);
     Page<InventoryMovement> findByVariant(Long variantId, MovementReason reason, Pageable pageable);
 }
