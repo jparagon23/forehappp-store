@@ -11,9 +11,12 @@ import java.util.Optional;
 public class LineRepositoryAdapter implements ILineDao {
 
     private final ILineJpaRepository jpaRepository;
+    private final IProductRepository productRepository;
 
-    public LineRepositoryAdapter(ILineJpaRepository jpaRepository) {
+    public LineRepositoryAdapter(ILineJpaRepository jpaRepository,
+                                  IProductRepository productRepository) {
         this.jpaRepository = jpaRepository;
+        this.productRepository = productRepository;
     }
 
     @Override
@@ -34,5 +37,15 @@ public class LineRepositoryAdapter implements ILineDao {
     @Override
     public Line save(Line line) {
         return jpaRepository.save(line);
+    }
+
+    @Override
+    public void delete(Line line) {
+        jpaRepository.delete(line);
+    }
+
+    @Override
+    public boolean isUsedByProducts(Long lineId) {
+        return productRepository.existsByLineId(lineId);
     }
 }

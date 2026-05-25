@@ -1,6 +1,7 @@
 package com.forehapp.store.productModule.application.usecases;
 
 import com.forehapp.store.general.exceptions.BadRequestException;
+import com.forehapp.store.general.exceptions.ConflictException;
 import com.forehapp.store.general.exceptions.ErrorCode;
 import com.forehapp.store.general.exceptions.ForbiddenException;
 import com.forehapp.store.general.exceptions.NotFoundException;
@@ -40,6 +41,8 @@ public class AdminCatalogServiceImpl implements IAdminCatalogService {
         this.storeProfileDao = storeProfileDao;
     }
 
+    // ── Brand ────────────────────────────────────────────────────────────────
+
     @Override
     @Transactional
     public BrandResponse createBrand(CreateBrandRequestDto dto, Long userId) {
@@ -48,6 +51,30 @@ public class AdminCatalogServiceImpl implements IAdminCatalogService {
         brand.setDescription(dto.getName().trim());
         return new BrandResponse(brandDao.save(brand));
     }
+
+    @Override
+    @Transactional
+    public BrandResponse updateBrand(Long brandId, CreateBrandRequestDto dto, Long userId) {
+        resolveAdmin(userId);
+        Brand brand = brandDao.findById(brandId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Brand not found"));
+        brand.setDescription(dto.getName().trim());
+        return new BrandResponse(brandDao.save(brand));
+    }
+
+    @Override
+    @Transactional
+    public void deleteBrand(Long brandId, Long userId) {
+        resolveAdmin(userId);
+        Brand brand = brandDao.findById(brandId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Brand not found"));
+        if (brandDao.isUsedByProducts(brandId)) {
+            throw new ConflictException(ErrorCode.CATALOG_BRAND_IN_USE, "Brand is used by one or more products and cannot be deleted");
+        }
+        brandDao.delete(brand);
+    }
+
+    // ── Line ─────────────────────────────────────────────────────────────────
 
     @Override
     @Transactional
@@ -66,6 +93,36 @@ public class AdminCatalogServiceImpl implements IAdminCatalogService {
 
     @Override
     @Transactional
+    public LineResponse updateLine(Long brandId, Long lineId, UpdateLineRequestDto dto, Long userId) {
+        resolveAdmin(userId);
+        Line line = lineDao.findById(lineId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Line not found"));
+        if (!line.getBrand().getId().equals(brandId)) {
+            throw new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Line not found for this brand");
+        }
+        line.setDescription(dto.getName().trim());
+        return new LineResponse(lineDao.save(line));
+    }
+
+    @Override
+    @Transactional
+    public void deleteLine(Long brandId, Long lineId, Long userId) {
+        resolveAdmin(userId);
+        Line line = lineDao.findById(lineId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Line not found"));
+        if (!line.getBrand().getId().equals(brandId)) {
+            throw new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Line not found for this brand");
+        }
+        if (lineDao.isUsedByProducts(lineId)) {
+            throw new ConflictException(ErrorCode.CATALOG_LINE_IN_USE, "Line is used by one or more products and cannot be deleted");
+        }
+        lineDao.delete(line);
+    }
+
+    // ── Category ─────────────────────────────────────────────────────────────
+
+    @Override
+    @Transactional
     public CategoryResponse createCategory(CreateCategoryRequestDto dto, Long userId) {
         resolveAdmin(userId);
         Category category = new Category();
@@ -75,12 +132,60 @@ public class AdminCatalogServiceImpl implements IAdminCatalogService {
 
     @Override
     @Transactional
+    public CategoryResponse updateCategory(Long categoryId, CreateCategoryRequestDto dto, Long userId) {
+        resolveAdmin(userId);
+        Category category = categoryDao.findById(categoryId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Category not found"));
+        category.setDescription(dto.getName().trim());
+        return new CategoryResponse(categoryDao.save(category));
+    }
+
+    @Override
+    @Transactional
+    public void deleteCategory(Long categoryId, Long userId) {
+        resolveAdmin(userId);
+        Category category = categoryDao.findById(categoryId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Category not found"));
+        if (categoryDao.isUsedByProducts(categoryId)) {
+            throw new ConflictException(ErrorCode.CATALOG_CATEGORY_IN_USE, "Category is used by one or more products and cannot be deleted");
+        }
+        categoryDao.delete(category);
+    }
+
+    // ── Attribute ─────────────────────────────────────────────────────────────
+
+    @Override
+    @Transactional
     public AttributeResponse createAttribute(CreateAttributeRequestDto dto, Long userId) {
         resolveAdmin(userId);
         Attribute attribute = new Attribute();
         attribute.setDescription(dto.getName().trim());
         return new AttributeResponse(attributeDao.save(attribute));
     }
+
+    @Override
+    @Transactional
+    public AttributeResponse updateAttribute(Long attributeId, CreateAttributeRequestDto dto, Long userId) {
+        resolveAdmin(userId);
+        Attribute attribute = attributeDao.findById(attributeId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Attribute not found"));
+        attribute.setDescription(dto.getName().trim());
+        return new AttributeResponse(attributeDao.save(attribute));
+    }
+
+    @Override
+    @Transactional
+    public void deleteAttribute(Long attributeId, Long userId) {
+        resolveAdmin(userId);
+        Attribute attribute = attributeDao.findById(attributeId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Attribute not found"));
+        if (attributeDao.hasValues(attributeId)) {
+            throw new ConflictException(ErrorCode.CATALOG_ATTRIBUTE_IN_USE, "Attribute has values; delete all values before deleting the attribute");
+        }
+        attributeDao.delete(attribute);
+    }
+
+    // ── AttributeValue ────────────────────────────────────────────────────────
 
     @Override
     @Transactional
@@ -95,6 +200,36 @@ public class AdminCatalogServiceImpl implements IAdminCatalogService {
         AttributeValue saved = attributeValueDao.save(value);
         return new CategoryAttributeResponse.AttributeValueDto(saved.getId(), saved.getDescription());
     }
+
+    @Override
+    @Transactional
+    public CategoryAttributeResponse.AttributeValueDto updateAttributeValue(
+            Long attributeId, Long valueId, CreateAttributeValueRequestDto dto, Long userId) {
+        resolveAdmin(userId);
+        attributeDao.findById(attributeId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Attribute not found"));
+        AttributeValue value = attributeValueDao.findByIdAndAttributeId(valueId, attributeId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Attribute value not found"));
+        value.setDescription(dto.getDescription().trim());
+        AttributeValue saved = attributeValueDao.save(value);
+        return new CategoryAttributeResponse.AttributeValueDto(saved.getId(), saved.getDescription());
+    }
+
+    @Override
+    @Transactional
+    public void deleteAttributeValue(Long attributeId, Long valueId, Long userId) {
+        resolveAdmin(userId);
+        attributeDao.findById(attributeId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Attribute not found"));
+        AttributeValue value = attributeValueDao.findByIdAndAttributeId(valueId, attributeId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Attribute value not found"));
+        if (attributeValueDao.isUsedByVariants(valueId)) {
+            throw new ConflictException(ErrorCode.CATALOG_ATTRIBUTE_VALUE_IN_USE, "Attribute value is used by one or more product variants and cannot be deleted");
+        }
+        attributeValueDao.delete(value);
+    }
+
+    // ── CategoryAttribute link ────────────────────────────────────────────────
 
     @Override
     @Transactional
@@ -124,6 +259,34 @@ public class AdminCatalogServiceImpl implements IAdminCatalogService {
                 List.of()
         );
     }
+
+    @Override
+    @Transactional
+    public CategoryAttributeResponse updateCategoryAttribute(
+            Long categoryId, Long attributeId, UpdateCategoryAttributeRequestDto dto, Long userId) {
+        resolveAdmin(userId);
+        CategoryAttribute ca = categoryDao.findCategoryAttribute(categoryId, attributeId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Category-attribute link not found"));
+        ca.setRequired(dto.isRequired() ? "T" : "F");
+        CategoryAttribute saved = categoryDao.saveCategoryAttribute(ca);
+        return new CategoryAttributeResponse(
+                saved.getAttribute().getId(),
+                saved.getAttribute().getDescription(),
+                dto.isRequired(),
+                List.of()
+        );
+    }
+
+    @Override
+    @Transactional
+    public void unlinkAttributeFromCategory(Long categoryId, Long attributeId, Long userId) {
+        resolveAdmin(userId);
+        CategoryAttribute ca = categoryDao.findCategoryAttribute(categoryId, attributeId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Category-attribute link not found"));
+        categoryDao.deleteCategoryAttribute(ca);
+    }
+
+    // ── Private helpers ───────────────────────────────────────────────────────
 
     private void resolveAdmin(Long userId) {
         StoreProfile profile = storeProfileDao.findByUserId(userId)

@@ -5,6 +5,7 @@ import com.forehapp.store.productModule.domain.ports.out.IAttributeValueDao;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public class AttributeValueRepositoryAdapter implements IAttributeValueDao {
@@ -26,7 +27,22 @@ public class AttributeValueRepositoryAdapter implements IAttributeValueDao {
     }
 
     @Override
+    public Optional<AttributeValue> findByIdAndAttributeId(Long id, Long attributeId) {
+        return jpaRepository.findByIdAndAttributeId(id, attributeId);
+    }
+
+    @Override
     public AttributeValue save(AttributeValue attributeValue) {
         return jpaRepository.save(attributeValue);
+    }
+
+    @Override
+    public void delete(AttributeValue attributeValue) {
+        jpaRepository.delete(attributeValue);
+    }
+
+    @Override
+    public boolean isUsedByVariants(Long valueId) {
+        return jpaRepository.isUsedByVariant(valueId);
     }
 }

@@ -13,11 +13,14 @@ public class CategoryRepositoryAdapter implements ICategoryDao {
 
     private final ICategoryRepository categoryRepository;
     private final ICategoryAttributeJpaRepository categoryAttributeRepository;
+    private final IProductRepository productRepository;
 
     public CategoryRepositoryAdapter(ICategoryRepository categoryRepository,
-                                     ICategoryAttributeJpaRepository categoryAttributeRepository) {
+                                     ICategoryAttributeJpaRepository categoryAttributeRepository,
+                                     IProductRepository productRepository) {
         this.categoryRepository = categoryRepository;
         this.categoryAttributeRepository = categoryAttributeRepository;
+        this.productRepository = productRepository;
     }
 
     @Override
@@ -36,8 +39,23 @@ public class CategoryRepositoryAdapter implements ICategoryDao {
     }
 
     @Override
+    public Optional<CategoryAttribute> findCategoryAttribute(Long categoryId, Long attributeId) {
+        return categoryAttributeRepository.findByCategoryIdAndAttributeId(categoryId, attributeId);
+    }
+
+    @Override
     public Category save(Category category) {
         return categoryRepository.save(category);
+    }
+
+    @Override
+    public void delete(Category category) {
+        categoryRepository.delete(category);
+    }
+
+    @Override
+    public boolean isUsedByProducts(Long categoryId) {
+        return productRepository.existsByCategoryId(categoryId);
     }
 
     @Override
@@ -48,5 +66,10 @@ public class CategoryRepositoryAdapter implements ICategoryDao {
     @Override
     public CategoryAttribute saveCategoryAttribute(CategoryAttribute categoryAttribute) {
         return categoryAttributeRepository.save(categoryAttribute);
+    }
+
+    @Override
+    public void deleteCategoryAttribute(CategoryAttribute categoryAttribute) {
+        categoryAttributeRepository.delete(categoryAttribute);
     }
 }

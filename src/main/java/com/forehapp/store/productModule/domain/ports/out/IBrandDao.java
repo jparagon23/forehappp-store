@@ -9,4 +9,6 @@ public interface IBrandDao {
     Optional<Brand> findById(Long id);
     List<Brand> findAll();
     Brand save(Brand brand);
+    void delete(Brand brand);
+    boolean isUsedByProducts(Long brandId);
 }

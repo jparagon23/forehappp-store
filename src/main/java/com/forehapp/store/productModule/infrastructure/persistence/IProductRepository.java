@@ -15,6 +15,10 @@ import java.util.Optional;
 public interface IProductRepository extends JpaRepository<Product, Long>, JpaSpecificationExecutor<Product> {
     Optional<Product> findByIdAndStoreId(Long id, Long storeId);
 
+    boolean existsByBrandId(Long brandId);
+    boolean existsByCategoryId(Long categoryId);
+    boolean existsByLineId(Long lineId);
+
     @EntityGraph(attributePaths = {"brand", "category", "line", "store"})
     List<Product> findAllByStoreId(Long storeId);
 

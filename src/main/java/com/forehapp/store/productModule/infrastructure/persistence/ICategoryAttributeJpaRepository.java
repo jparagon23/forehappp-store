@@ -12,5 +12,7 @@ public interface ICategoryAttributeJpaRepository extends JpaRepository<CategoryA
     @Query("SELECT ca FROM CategoryAttribute ca JOIN FETCH ca.attribute WHERE ca.category.id = :categoryId")
     List<CategoryAttribute> findByCategoryIdWithAttribute(@Param("categoryId") Long categoryId);
 
+    Optional<CategoryAttribute> findByCategoryIdAndAttributeId(Long categoryId, Long attributeId);
+
     boolean existsByCategoryIdAndAttributeId(Long categoryId, Long attributeId);
 }
