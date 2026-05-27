@@ -230,6 +230,8 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
                 group.getId(),
                 group.getOrder().getId(),
                 buyerName,
+                group.getOrder().getBuyerPhone(),
+                group.getOrder().getBuyerEmail(),
                 group.getOrder().getShippingAddress(),
                 group.getOrder().getShippingCity(),
                 group.getOrder().getShippingCountry(),

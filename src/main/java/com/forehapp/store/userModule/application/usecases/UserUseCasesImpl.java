@@ -4,13 +4,16 @@ import com.forehapp.store.general.exceptions.BadRequestException;
 import com.forehapp.store.general.exceptions.ErrorCode;
 import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.userModule.application.dto.ChangePasswordDto;
+import com.forehapp.store.userModule.application.dto.UpdatePhoneRequestDto;
 import com.forehapp.store.userModule.application.dto.UpdateUserRequestDto;
 import com.forehapp.store.userModule.application.dto.UserResponse;
 import com.forehapp.store.userModule.application.dto.UserSearchResponse;
+import com.forehapp.store.userModule.domain.model.StoreProfile;
 import com.forehapp.store.userModule.domain.model.User;
 import com.forehapp.store.userModule.domain.ports.in.ChangePasswordUseCase;
 import com.forehapp.store.userModule.domain.ports.in.GetUserUseCase;
 import com.forehapp.store.userModule.domain.ports.in.SearchUserUseCase;
+import com.forehapp.store.userModule.domain.ports.in.UpdatePhoneUseCase;
 import com.forehapp.store.userModule.domain.ports.in.UpdateUserUseCase;
 import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
 import com.forehapp.store.userModule.domain.ports.out.UserRepository;
@@ -19,7 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class UserUseCasesImpl implements GetUserUseCase, UpdateUserUseCase, ChangePasswordUseCase, SearchUserUseCase {
+public class UserUseCasesImpl implements GetUserUseCase, UpdateUserUseCase, UpdatePhoneUseCase, ChangePasswordUseCase, SearchUserUseCase {
 
     private final UserRepository userRepository;
     private final IStoreProfileDao storeProfileDao;
@@ -63,6 +66,17 @@ public class UserUseCasesImpl implements GetUserUseCase, UpdateUserUseCase, Chan
 
         user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
         userRepository.save(user);
+    }
+
+    @Override
+    @Transactional
+    public UserResponse updatePhone(Long userId, UpdatePhoneRequestDto dto) {
+        User user = findOrThrow(userId);
+        StoreProfile profile = storeProfileDao.findByUserId(userId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_PROFILE_NOT_FOUND, "Store profile not found"));
+        profile.setPhone(dto.getPhone().trim());
+        storeProfileDao.save(profile);
+        return new UserResponse(user, profile.getPhone());
     }
 
     @Override

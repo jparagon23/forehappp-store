@@ -105,6 +105,11 @@ public class OrderServiceImpl implements IOrderService {
     public OrderResponse createOrder(Long userId, CreateOrderRequestDto dto) {
         StoreProfile buyer = resolveProfile(userId);
 
+        if (buyer.getPhone() == null || buyer.getPhone().isBlank()) {
+            throw new BadRequestException(ErrorCode.ORDER_BUYER_PHONE_REQUIRED,
+                    "A phone number is required to place an order. Please update your profile.");
+        }
+
         Cart cart = cartDao.findActiveByBuyerId(buyer.getId())
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ORDER_CART_NOT_FOUND, "Active cart not found"));
 
@@ -197,6 +202,8 @@ public class OrderServiceImpl implements IOrderService {
     private Order buildOrder(StoreProfile buyer, UserAddress address, List<CartItem> cartItems) {
         Order order = new Order();
         order.setBuyer(buyer);
+        order.setBuyerPhone(buyer.getPhone());
+        order.setBuyerEmail(buyer.getUser().getEmail());
         order.setShippingAddress(address.getStreet());
         order.setShippingCity(address.getCity().getName());
         order.setShippingCountry(address.getCity().getState().getCountry().getName());

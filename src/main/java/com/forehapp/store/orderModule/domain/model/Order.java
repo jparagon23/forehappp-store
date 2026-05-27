@@ -33,6 +33,12 @@ public class Order {
     @Column(nullable = false, precision = 14, scale = 2)
     private BigDecimal total;
 
+    @Column(name = "buyer_phone", length = 50)
+    private String buyerPhone;
+
+    @Column(name = "buyer_email", length = 150)
+    private String buyerEmail;
+
     @Column(name = "shipping_address", nullable = false, length = 255)
     private String shippingAddress;
 

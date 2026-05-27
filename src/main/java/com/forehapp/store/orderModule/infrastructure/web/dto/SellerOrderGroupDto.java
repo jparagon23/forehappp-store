@@ -8,6 +8,8 @@ public record SellerOrderGroupDto(
         Long groupId,
         Long orderId,
         String buyerName,
+        String buyerPhone,
+        String buyerEmail,
         String shippingAddress,
         String shippingCity,
         String shippingCountry,
