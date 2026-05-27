@@ -12,6 +12,7 @@ import com.forehapp.store.userModule.domain.ports.in.ChangePasswordUseCase;
 import com.forehapp.store.userModule.domain.ports.in.GetUserUseCase;
 import com.forehapp.store.userModule.domain.ports.in.SearchUserUseCase;
 import com.forehapp.store.userModule.domain.ports.in.UpdateUserUseCase;
+import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
 import com.forehapp.store.userModule.domain.ports.out.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -21,17 +22,20 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserUseCasesImpl implements GetUserUseCase, UpdateUserUseCase, ChangePasswordUseCase, SearchUserUseCase {
 
     private final UserRepository userRepository;
+    private final IStoreProfileDao storeProfileDao;
     private final PasswordEncoder passwordEncoder;
 
-    public UserUseCasesImpl(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public UserUseCasesImpl(UserRepository userRepository, IStoreProfileDao storeProfileDao, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
+        this.storeProfileDao = storeProfileDao;
         this.passwordEncoder = passwordEncoder;
     }
 
     @Override
     public UserResponse getProfile(Long userId) {
         User user = findOrThrow(userId);
-        return new UserResponse(user);
+        String phone = storeProfileDao.findByUserId(userId).map(p -> p.getPhone()).orElse(null);
+        return new UserResponse(user, phone);
     }
 
     @Override
@@ -40,7 +44,9 @@ public class UserUseCasesImpl implements GetUserUseCase, UpdateUserUseCase, Chan
         User user = findOrThrow(userId);
         user.setName(dto.getName().trim());
         user.setLastname(dto.getLastname().trim());
-        return new UserResponse(userRepository.save(user));
+        userRepository.save(user);
+        String phone = storeProfileDao.findByUserId(userId).map(p -> p.getPhone()).orElse(null);
+        return new UserResponse(user, phone);
     }
 
     @Override

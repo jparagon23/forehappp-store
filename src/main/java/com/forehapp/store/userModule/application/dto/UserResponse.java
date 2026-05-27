@@ -9,11 +9,13 @@ public class UserResponse {
     private final String email;
     private final String name;
     private final String lastname;
+    private final String phone;
 
-    public UserResponse(User user) {
+    public UserResponse(User user, String phone) {
         this.id = user.getId();
         this.email = user.getEmail();
         this.name = user.getName();
         this.lastname = user.getLastname();
+        this.phone = phone;
     }
 }
