@@ -2,7 +2,10 @@ package com.forehapp.store.productModule.infrastructure.persistence;
 
 import com.forehapp.store.productModule.domain.model.Product;
 import com.forehapp.store.productModule.domain.model.ProductStatus;
+import jakarta.persistence.criteria.Expression;
 import org.springframework.data.jpa.domain.Specification;
+
+import java.time.LocalDate;
 
 public class ProductSpecification {
 
@@ -27,5 +30,16 @@ public class ProductSpecification {
 
     public static Specification<Product> hasBrand(Long brandId) {
         return (root, query, cb) -> cb.equal(root.get("brand").get("id"), brandId);
+    }
+
+    public static Specification<Product> withDiscoveryOrder() {
+        return (root, query, cb) -> {
+            if (!Long.class.equals(query.getResultType())) {
+                int seed = LocalDate.now().getDayOfYear();
+                Expression<Double> rand = cb.function("RAND", Double.class, cb.literal(seed));
+                query.orderBy(cb.asc(rand));
+            }
+            return cb.conjunction();
+        };
     }
 }

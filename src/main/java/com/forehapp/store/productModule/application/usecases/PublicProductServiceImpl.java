@@ -8,6 +8,7 @@ import com.forehapp.store.productModule.application.dto.PublicProductDetailRespo
 import com.forehapp.store.productModule.application.dto.PublicProductSummaryResponse;
 import com.forehapp.store.productModule.domain.model.Product;
 import com.forehapp.store.productModule.domain.model.ProductImage;
+import com.forehapp.store.productModule.domain.model.ProductSortBy;
 import com.forehapp.store.productModule.domain.model.ProductStatus;
 import com.forehapp.store.productModule.domain.ports.in.IProductImageService;
 import com.forehapp.store.productModule.domain.ports.in.IPublicProductService;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.time.LocalDate;
 import java.util.List;
 
 @Service
@@ -36,10 +38,10 @@ public class PublicProductServiceImpl implements IPublicProductService {
 
     @Override
     @Cacheable(value = "public-products",
-               key = "#search + ':' + #categoryId + ':' + #brandId + ':' + #pageable.pageNumber + ':' + #pageable.pageSize")
+               key = "#search + ':' + #categoryId + ':' + #brandId + ':' + #sortBy + ':' + (#sortBy.name() == 'DISCOVERY' ? T(java.time.LocalDate).now().toString() : '') + ':' + #pageable.pageNumber + ':' + #pageable.pageSize")
     @Transactional(readOnly = true)
-    public Page<PublicProductSummaryResponse> findActiveProducts(String search, Long categoryId, Long brandId, Pageable pageable) {
-        return productDao.findActiveProducts(search, categoryId, brandId, pageable)
+    public Page<PublicProductSummaryResponse> findActiveProducts(String search, Long categoryId, Long brandId, ProductSortBy sortBy, Pageable pageable) {
+        return productDao.findActiveProducts(search, categoryId, brandId, sortBy, pageable)
                 .map(p -> {
                     String thumbnail = p.getImages().stream()
                             .findFirst()
