@@ -1,12 +1,14 @@
 package com.forehapp.store.userModule.infrastructure.web;
 
 import com.forehapp.store.userModule.application.dto.ChangePasswordDto;
+import com.forehapp.store.userModule.application.dto.UpdatePhoneRequestDto;
 import com.forehapp.store.userModule.application.dto.UpdateUserRequestDto;
 import com.forehapp.store.userModule.application.dto.UserResponse;
 import com.forehapp.store.userModule.application.dto.UserSearchResponse;
 import com.forehapp.store.userModule.domain.ports.in.ChangePasswordUseCase;
 import com.forehapp.store.userModule.domain.ports.in.GetUserUseCase;
 import com.forehapp.store.userModule.domain.ports.in.SearchUserUseCase;
+import com.forehapp.store.userModule.domain.ports.in.UpdatePhoneUseCase;
 import com.forehapp.store.userModule.domain.ports.in.UpdateUserUseCase;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -19,15 +21,18 @@ public class UserController {
 
     private final GetUserUseCase getUserUseCase;
     private final UpdateUserUseCase updateUserUseCase;
+    private final UpdatePhoneUseCase updatePhoneUseCase;
     private final ChangePasswordUseCase changePasswordUseCase;
     private final SearchUserUseCase searchUserUseCase;
 
     public UserController(GetUserUseCase getUserUseCase,
                           UpdateUserUseCase updateUserUseCase,
+                          UpdatePhoneUseCase updatePhoneUseCase,
                           ChangePasswordUseCase changePasswordUseCase,
                           SearchUserUseCase searchUserUseCase) {
         this.getUserUseCase = getUserUseCase;
         this.updateUserUseCase = updateUserUseCase;
+        this.updatePhoneUseCase = updatePhoneUseCase;
         this.changePasswordUseCase = changePasswordUseCase;
         this.searchUserUseCase = searchUserUseCase;
     }
@@ -41,6 +46,12 @@ public class UserController {
     public ResponseEntity<UserResponse> updateProfile(@AuthenticationPrincipal String userId,
                                                       @Valid @RequestBody UpdateUserRequestDto dto) {
         return ResponseEntity.ok(updateUserUseCase.updateProfile(Long.parseLong(userId), dto));
+    }
+
+    @PatchMapping("/me/phone")
+    public ResponseEntity<UserResponse> updatePhone(@AuthenticationPrincipal String userId,
+                                                    @Valid @RequestBody UpdatePhoneRequestDto dto) {
+        return ResponseEntity.ok(updatePhoneUseCase.updatePhone(Long.parseLong(userId), dto));
     }
 
     @PatchMapping("/me/password")

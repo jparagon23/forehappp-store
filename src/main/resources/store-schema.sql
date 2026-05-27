@@ -599,3 +599,19 @@ UPDATE store_coupons SET status = 'INACTIVE' WHERE status = 'INACTIVA';
 UPDATE store_coupons SET status = 'EXPIRED'  WHERE status = 'VENCIDA';
 
 ALTER TABLE store_coupons MODIFY COLUMN status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE';
+
+-- =====================
+-- Migration: store_orders — buyer contact snapshot
+-- =====================
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_orders ADD COLUMN buyer_phone VARCHAR(50)',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_orders' AND COLUMN_NAME = 'buyer_phone');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_orders ADD COLUMN buyer_email VARCHAR(150)',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_orders' AND COLUMN_NAME = 'buyer_email');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
