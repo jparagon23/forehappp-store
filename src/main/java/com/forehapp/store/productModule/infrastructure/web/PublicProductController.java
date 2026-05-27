@@ -3,6 +3,7 @@ package com.forehapp.store.productModule.infrastructure.web;
 import com.forehapp.store.general.dto.PagedResponse;
 import com.forehapp.store.productModule.application.dto.PublicProductDetailResponse;
 import com.forehapp.store.productModule.application.dto.PublicProductSummaryResponse;
+import com.forehapp.store.productModule.domain.model.ProductSortBy;
 import com.forehapp.store.productModule.domain.ports.in.IPublicProductService;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -25,13 +26,19 @@ public class PublicProductController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false) Long brandId,
+            @RequestParam(defaultValue = "NEWEST") String sortBy,
             @RequestParam(defaultValue = "0") String page,
             @RequestParam(defaultValue = "20") String size) {
 
         int pageNum = parseIntSafe(page, 0);
         int pageSize = Math.min(parseIntSafe(size, 20), 50);
-        Pageable pageable = PageRequest.of(pageNum, pageSize, Sort.by(Sort.Direction.DESC, "createdAt"));
-        return ResponseEntity.ok(new PagedResponse<>(publicProductService.findActiveProducts(search, categoryId, brandId, pageable)));
+        ProductSortBy sort = parseSortBy(sortBy);
+
+        Pageable pageable = sort == ProductSortBy.DISCOVERY
+                ? PageRequest.of(pageNum, pageSize)
+                : PageRequest.of(pageNum, pageSize, Sort.by(Sort.Direction.DESC, "createdAt"));
+
+        return ResponseEntity.ok(new PagedResponse<>(publicProductService.findActiveProducts(search, categoryId, brandId, sort, pageable)));
     }
 
     private int parseIntSafe(String value, int defaultValue) {
@@ -40,6 +47,14 @@ public class PublicProductController {
             return parsed < 0 ? defaultValue : parsed;
         } catch (NumberFormatException e) {
             return defaultValue;
+        }
+    }
+
+    private ProductSortBy parseSortBy(String value) {
+        try {
+            return ProductSortBy.valueOf(value.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return ProductSortBy.NEWEST;
         }
     }
 

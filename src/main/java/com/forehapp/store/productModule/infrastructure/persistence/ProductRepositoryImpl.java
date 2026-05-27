@@ -1,8 +1,10 @@
 package com.forehapp.store.productModule.infrastructure.persistence;
 
 import com.forehapp.store.productModule.domain.model.Product;
+import com.forehapp.store.productModule.domain.model.ProductSortBy;
 import com.forehapp.store.productModule.domain.ports.out.IProductDao;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Repository;
@@ -35,7 +37,7 @@ public class ProductRepositoryImpl implements IProductDao {
     }
 
     @Override
-    public Page<Product> findActiveProducts(String search, Long categoryId, Long brandId, Pageable pageable) {
+    public Page<Product> findActiveProducts(String search, Long categoryId, Long brandId, ProductSortBy sortBy, Pageable pageable) {
         Specification<Product> spec = Specification.where(ProductSpecification.isActive());
         if (search != null && !search.isBlank()) {
             spec = spec.and(ProductSpecification.matchesSearch(search));
@@ -45,6 +47,10 @@ public class ProductRepositoryImpl implements IProductDao {
         }
         if (brandId != null) {
             spec = spec.and(ProductSpecification.hasBrand(brandId));
+        }
+        if (sortBy == ProductSortBy.DISCOVERY) {
+            spec = spec.and(ProductSpecification.withDiscoveryOrder());
+            pageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
         }
         return jpaRepository.findAll(spec, pageable);
     }
