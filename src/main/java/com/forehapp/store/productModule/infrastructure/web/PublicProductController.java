@@ -1,9 +1,9 @@
 package com.forehapp.store.productModule.infrastructure.web;
 
+import com.forehapp.store.general.dto.PagedResponse;
 import com.forehapp.store.productModule.application.dto.PublicProductDetailResponse;
 import com.forehapp.store.productModule.application.dto.PublicProductSummaryResponse;
 import com.forehapp.store.productModule.domain.ports.in.IPublicProductService;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -21,7 +21,7 @@ public class PublicProductController {
     }
 
     @GetMapping
-    public ResponseEntity<Page<PublicProductSummaryResponse>> listProducts(
+    public ResponseEntity<PagedResponse<PublicProductSummaryResponse>> listProducts(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false) Long brandId,
@@ -30,7 +30,7 @@ public class PublicProductController {
 
         size = Math.min(size, 50);
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        return ResponseEntity.ok(publicProductService.findActiveProducts(search, categoryId, brandId, pageable));
+        return ResponseEntity.ok(new PagedResponse<>(publicProductService.findActiveProducts(search, categoryId, brandId, pageable)));
     }
 
     @GetMapping("/{productId}")
