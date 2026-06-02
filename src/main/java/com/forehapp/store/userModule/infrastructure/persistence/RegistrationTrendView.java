@@ -1,6 +1,8 @@
 package com.forehapp.store.userModule.infrastructure.persistence;
 
+import java.time.LocalDate;
+
 public interface RegistrationTrendView {
-    String getDate();
+    LocalDate getDate();
     Long getCount();
 }
