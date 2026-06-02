@@ -15,20 +15,13 @@ import com.forehapp.store.productModule.domain.ports.in.IPublicProductService;
 import com.forehapp.store.productModule.domain.ports.out.IProductDao;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDate;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 @Service
 public class PublicProductServiceImpl implements IPublicProductService {
@@ -48,13 +41,7 @@ public class PublicProductServiceImpl implements IPublicProductService {
                key = "#search + ':' + #categoryId + ':' + #brandId + ':' + #sortBy + ':' + (#sortBy.name() == 'DISCOVERY' ? T(java.time.LocalDate).now().toString() : '') + ':' + #pageable.pageNumber + ':' + #pageable.pageSize")
     @Transactional(readOnly = true)
     public Page<PublicProductSummaryResponse> findActiveProducts(String search, Long categoryId, Long brandId, ProductSortBy sortBy, Pageable pageable) {
-        Page<Product> page = productDao.findActiveProducts(search, categoryId, brandId, sortBy, pageable);
-
-        List<Product> products = sortBy == ProductSortBy.DISCOVERY
-                ? interleaveByCategory(page.getContent())
-                : page.getContent();
-
-        return new PageImpl<>(products, pageable, page.getTotalElements())
+        return productDao.findActiveProducts(search, categoryId, brandId, sortBy, pageable)
                 .map(p -> {
                     String thumbnail = p.getImages().stream()
                             .findFirst()
@@ -62,26 +49,6 @@ public class PublicProductServiceImpl implements IPublicProductService {
                             .orElse(null);
                     return new PublicProductSummaryResponse(p, thumbnail);
                 });
-    }
-
-    private List<Product> interleaveByCategory(List<Product> products) {
-        Map<Long, Deque<Product>> byCategory = new LinkedHashMap<>();
-        for (Product p : products) {
-            byCategory.computeIfAbsent(p.getCategory().getId(), k -> new ArrayDeque<>()).add(p);
-        }
-
-        List<Product> result = new ArrayList<>(products.size());
-        List<Deque<Product>> queues = new ArrayList<>(byCategory.values());
-
-        while (!queues.isEmpty()) {
-            Iterator<Deque<Product>> it = queues.iterator();
-            while (it.hasNext()) {
-                Deque<Product> queue = it.next();
-                result.add(queue.poll());
-                if (queue.isEmpty()) it.remove();
-            }
-        }
-        return result;
     }
 
     @Override
