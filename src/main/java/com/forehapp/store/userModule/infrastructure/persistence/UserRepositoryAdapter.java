@@ -43,12 +43,12 @@ public class UserRepositoryAdapter implements UserRepository {
 
     @Override
     public long countAll() {
-        return jpaRepository.count();
+        return jpaRepository.countUsersWithStoreProfile();
     }
 
     @Override
     public long countNewSince(LocalDateTime from) {
-        return jpaRepository.countByCreationDateAfter(from);
+        return jpaRepository.countByCreationDateAfterWithStoreProfile(from);
     }
 
     @Override
