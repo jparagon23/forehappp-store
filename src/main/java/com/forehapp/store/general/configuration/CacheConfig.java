@@ -17,11 +17,12 @@ public class CacheConfig {
     public CacheManager cacheManager() {
         SimpleCacheManager manager = new SimpleCacheManager();
         manager.setCaches(List.of(
-                caffeineCache("public-products",    500,   180),
-                caffeineCache("location-countries",  50, 86400),
-                caffeineCache("location-states",    500, 86400),
-                caffeineCache("location-cities",   5000, 86400),
-                caffeineCache("admin-user-stats",     1,  3600)
+                caffeineCache("public-products",       500,   180),
+                caffeineCache("discovery-sections",    50,  3600),
+                caffeineCache("location-countries",    50, 86400),
+                caffeineCache("location-states",      500, 86400),
+                caffeineCache("location-cities",     5000, 86400),
+                caffeineCache("admin-user-stats",       1,  3600)
         ));
         return manager;
     }
