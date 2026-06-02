@@ -4,12 +4,17 @@ import com.forehapp.store.productModule.domain.model.Product;
 import com.forehapp.store.productModule.domain.model.ProductSortBy;
 import com.forehapp.store.productModule.domain.ports.out.IProductDao;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Repository
@@ -38,6 +43,10 @@ public class ProductRepositoryImpl implements IProductDao {
 
     @Override
     public Page<Product> findActiveProducts(String search, Long categoryId, Long brandId, ProductSortBy sortBy, Pageable pageable) {
+        if (sortBy == ProductSortBy.DISCOVERY && search == null && categoryId == null && brandId == null) {
+            return findDiscoveryProducts(pageable);
+        }
+
         Specification<Product> spec = Specification.where(ProductSpecification.isActive());
         if (search != null && !search.isBlank()) {
             spec = spec.and(ProductSpecification.matchesSearch(search));
@@ -48,11 +57,27 @@ public class ProductRepositoryImpl implements IProductDao {
         if (brandId != null) {
             spec = spec.and(ProductSpecification.hasBrand(brandId));
         }
-        if (sortBy == ProductSortBy.DISCOVERY) {
-            spec = spec.and(ProductSpecification.withDiscoveryOrder());
-            pageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
-        }
         return jpaRepository.findAll(spec, pageable);
+    }
+
+    private Page<Product> findDiscoveryProducts(Pageable pageable) {
+        int seed = LocalDate.now().getDayOfYear();
+        Pageable idPage = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+        List<Long> ids = jpaRepository.findDiscoveryProductIds(seed, idPage);
+        if (ids.isEmpty()) {
+            return new PageImpl<>(List.of(), pageable, 0);
+        }
+        long total = jpaRepository.countActiveStoreProducts();
+
+        Map<Long, Integer> order = new HashMap<>();
+        for (int i = 0; i < ids.size(); i++) order.put(ids.get(i), i);
+
+        List<Product> products = jpaRepository.findByIdInWithGraph(ids)
+                .stream()
+                .sorted(Comparator.comparingInt(p -> order.get(p.getId())))
+                .toList();
+
+        return new PageImpl<>(products, pageable, total);
     }
 
     @Override
