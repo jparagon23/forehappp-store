@@ -6,7 +6,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotWritableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import java.io.IOException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
@@ -64,6 +66,18 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleResponseStatus(ResponseStatusException ex) {
         return ResponseEntity.status(ex.getStatusCode())
                 .body(new ErrorResponse(ErrorCode.INTERNAL_ERROR, ex.getReason()));
+    }
+
+    @ExceptionHandler(HttpMessageNotWritableException.class)
+    public ResponseEntity<ErrorResponse> handleNotWritable(HttpMessageNotWritableException ex) {
+        Throwable cause = ex.getMostSpecificCause();
+        if (cause instanceof IOException && cause.getMessage() != null && cause.getMessage().contains("Broken pipe")) {
+            log.debug("Client disconnected before response was fully written");
+            return null;
+        }
+        log.error("Could not write HTTP response", ex);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ErrorResponse(ErrorCode.INTERNAL_ERROR, "Internal server error"));
     }
 
     @ExceptionHandler(Exception.class)

@@ -8,6 +8,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 
@@ -68,10 +69,12 @@ public class UserRepositoryAdapter implements UserRepository {
                 .toList();
     }
 
+    private static final DateTimeFormatter TREND_DATE_FMT = DateTimeFormatter.ISO_LOCAL_DATE;
+
     @Override
     public List<RegistrationTrendPoint> findRegistrationTrend(LocalDateTime from) {
         return jpaRepository.findRegistrationTrend(from).stream()
-                .map(v -> new RegistrationTrendPoint(v.getDate(), v.getCount()))
+                .map(v -> new RegistrationTrendPoint(v.getDate().format(TREND_DATE_FMT), v.getCount()))
                 .toList();
     }
 }
