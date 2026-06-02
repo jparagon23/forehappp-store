@@ -101,7 +101,7 @@ public class OrderServiceImpl implements IOrderService {
 
     @Override
     @Transactional
-    @CacheEvict(value = "public-products", allEntries = true)
+    @CacheEvict(value = {"public-products", "discovery-sections"}, allEntries = true)
     public OrderResponse createOrder(Long userId, CreateOrderRequestDto dto) {
         StoreProfile buyer = resolveProfile(userId);
 
