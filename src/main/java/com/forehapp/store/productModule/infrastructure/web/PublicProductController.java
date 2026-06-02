@@ -1,6 +1,7 @@
 package com.forehapp.store.productModule.infrastructure.web;
 
 import com.forehapp.store.general.dto.PagedResponse;
+import com.forehapp.store.productModule.application.dto.CategoryDiscoverySectionResponse;
 import com.forehapp.store.productModule.application.dto.PublicProductDetailResponse;
 import com.forehapp.store.productModule.application.dto.PublicProductSummaryResponse;
 import com.forehapp.store.productModule.domain.model.ProductSortBy;
@@ -10,6 +11,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/products/public")
@@ -56,6 +59,13 @@ public class PublicProductController {
         } catch (IllegalArgumentException e) {
             return ProductSortBy.NEWEST;
         }
+    }
+
+    @GetMapping("/discovery/sections")
+    public ResponseEntity<List<CategoryDiscoverySectionResponse>> getDiscoverySections(
+            @RequestParam(defaultValue = "8") String limit) {
+        int sectionLimit = Math.min(Math.max(parseIntSafe(limit, 8), 1), 20);
+        return ResponseEntity.ok(publicProductService.findDiscoverySections(sectionLimit));
     }
 
     @GetMapping("/{productId}")
