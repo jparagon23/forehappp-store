@@ -20,7 +20,8 @@ public class CacheConfig {
                 caffeineCache("public-products",    500,   180),
                 caffeineCache("location-countries",  50, 86400),
                 caffeineCache("location-states",    500, 86400),
-                caffeineCache("location-cities",   5000, 86400)
+                caffeineCache("location-cities",   5000, 86400),
+                caffeineCache("admin-user-stats",     1,  3600)
         ));
         return manager;
     }

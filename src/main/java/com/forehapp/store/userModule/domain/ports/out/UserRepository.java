@@ -14,6 +14,9 @@ public interface UserRepository {
     Optional<User> findById(Long id);
     User save(User user);
     long countAll();
+    long countNewSince(LocalDateTime from);
+    long countWithPhone();
+    long countActive();
     List<UserRegistrationSummary> findRecentRegistrations(int limit);
     List<RegistrationTrendPoint> findRegistrationTrend(LocalDateTime from);
 }

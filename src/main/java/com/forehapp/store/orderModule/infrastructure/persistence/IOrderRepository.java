@@ -17,4 +17,7 @@ public interface IOrderRepository extends JpaRepository<Order, Long> {
     Optional<Order> findByIdWithGroups(@Param("orderId") Long orderId);
 
     List<Order> findAllByBuyer_IdOrderByCreatedAtDesc(Long buyerId);
+
+    @Query(value = "SELECT COUNT(DISTINCT buyer_id) FROM store_orders", nativeQuery = true)
+    long countDistinctBuyers();
 }

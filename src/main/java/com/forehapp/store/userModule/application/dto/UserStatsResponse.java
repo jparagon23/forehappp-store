@@ -7,6 +7,13 @@ import java.util.List;
 
 public record UserStatsResponse(
         long totalUsers,
+        long newUsersToday,
+        long newUsersThisWeek,
+        long newUsersThisMonth,
+        long usersWhoOrdered,
+        double conversionRate,
+        long usersWithPhone,
+        long activeUsers,
         List<UserRegistrationSummary> recentUsers,
         List<RegistrationTrendPoint> registrationTrend
 ) {}
