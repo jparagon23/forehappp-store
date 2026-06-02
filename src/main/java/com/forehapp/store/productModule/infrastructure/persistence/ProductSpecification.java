@@ -36,8 +36,9 @@ public class ProductSpecification {
         return (root, query, cb) -> {
             if (!Long.class.equals(query.getResultType())) {
                 int seed = LocalDate.now().getDayOfYear();
-                Expression<Double> rand = cb.function("RAND", Double.class, cb.literal(seed));
-                query.orderBy(cb.asc(rand));
+                Expression<Long> hash = cb.function("CRC32", Long.class,
+                        cb.concat(root.get("id").as(String.class), cb.literal(String.valueOf(seed))));
+                query.orderBy(cb.asc(hash));
             }
             return cb.conjunction();
         };
