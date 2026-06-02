@@ -46,6 +46,21 @@ public class UserRepositoryAdapter implements UserRepository {
     }
 
     @Override
+    public long countNewSince(LocalDateTime from) {
+        return jpaRepository.countByCreationDateAfter(from);
+    }
+
+    @Override
+    public long countWithPhone() {
+        return jpaRepository.countUsersWithPhone();
+    }
+
+    @Override
+    public long countActive() {
+        return jpaRepository.countActiveUsers();
+    }
+
+    @Override
     public List<UserRegistrationSummary> findRecentRegistrations(int limit) {
         return jpaRepository.findRecentRegistrations(PageRequest.of(0, limit)).stream()
                 .map(v -> new UserRegistrationSummary(v.getId(), v.getName(), v.getLastname(),

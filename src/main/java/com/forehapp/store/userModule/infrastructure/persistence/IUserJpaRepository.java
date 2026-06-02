@@ -21,4 +21,12 @@ public interface IUserJpaRepository extends JpaRepository<User, Long> {
 
     @Query(value = "SELECT DATE(creation_date) AS date, COUNT(*) AS count FROM users WHERE creation_date >= :from GROUP BY DATE(creation_date) ORDER BY date ASC", nativeQuery = true)
     List<RegistrationTrendView> findRegistrationTrend(@Param("from") LocalDateTime from);
+
+    long countByCreationDateAfter(LocalDateTime date);
+
+    @Query(value = "SELECT COUNT(*) FROM store_profiles WHERE phone IS NOT NULL AND phone != ''", nativeQuery = true)
+    long countUsersWithPhone();
+
+    @Query(value = "SELECT COUNT(*) FROM store_profiles WHERE active = 1", nativeQuery = true)
+    long countActiveUsers();
 }

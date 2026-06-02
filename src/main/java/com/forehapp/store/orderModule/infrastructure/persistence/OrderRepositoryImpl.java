@@ -35,4 +35,9 @@ public class OrderRepositoryImpl implements IOrderDao {
     public List<Order> findAllByBuyerIdOrderByCreatedAtDesc(Long buyerId) {
         return jpaRepository.findAllByBuyer_IdOrderByCreatedAtDesc(buyerId);
     }
+
+    @Override
+    public long countDistinctBuyers() {
+        return jpaRepository.countDistinctBuyers();
+    }
 }
