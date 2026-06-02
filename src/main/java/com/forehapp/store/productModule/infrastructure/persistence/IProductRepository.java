@@ -33,11 +33,12 @@ public interface IProductRepository extends JpaRepository<Product, Long>, JpaSpe
     @Query(value = """
             SELECT ranked.product_id FROM (
                 SELECT p.product_id,
-                       ROW_NUMBER() OVER (PARTITION BY p.category_id ORDER BY RAND(:seed)) AS cat_rank
+                       ROW_NUMBER() OVER (PARTITION BY p.category_id ORDER BY CRC32(CONCAT(p.product_id, :seed))) AS cat_rank,
+                       p.category_id
                 FROM store_products p
                 WHERE p.status = 'ACTIVE'
             ) ranked
-            ORDER BY ranked.cat_rank, RAND(:seed + ranked.category_id)
+            ORDER BY ranked.cat_rank, CRC32(CONCAT(ranked.category_id, :seed))
             """, nativeQuery = true)
     List<Long> findDiscoveryProductIds(@Param("seed") int seed, Pageable pageable);
 
