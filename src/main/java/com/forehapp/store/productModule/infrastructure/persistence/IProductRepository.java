@@ -48,4 +48,18 @@ public interface IProductRepository extends JpaRepository<Product, Long>, JpaSpe
 
     @Query(value = "SELECT COUNT(*) FROM store_products WHERE status = 'ACTIVE'", nativeQuery = true)
     long countActiveStoreProducts();
+
+    @Query(value = """
+            SELECT ranked.product_id AS productId, ranked.category_id AS categoryId, ranked.cat_total AS catTotal
+            FROM (
+                SELECT p.product_id, p.category_id,
+                       ROW_NUMBER() OVER (PARTITION BY p.category_id ORDER BY CRC32(CONCAT(p.product_id, :seed))) AS rn,
+                       COUNT(*) OVER (PARTITION BY p.category_id) AS cat_total
+                FROM store_products p
+                WHERE p.status = 'ACTIVE'
+            ) ranked
+            WHERE ranked.rn <= :limit
+            ORDER BY ranked.cat_total DESC, ranked.category_id, ranked.rn
+            """, nativeQuery = true)
+    List<DiscoveryProductIdView> findDiscoverySectionIds(@Param("seed") int seed, @Param("limit") int limit);
 }

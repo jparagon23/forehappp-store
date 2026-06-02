@@ -3,6 +3,7 @@ package com.forehapp.store.productModule.application.usecases;
 import com.forehapp.store.general.exceptions.ErrorCode;
 import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.general.storage.StorageService;
+import com.forehapp.store.productModule.application.dto.CategoryDiscoverySectionResponse;
 import com.forehapp.store.productModule.application.dto.ProductImageResponse;
 import com.forehapp.store.productModule.application.dto.PublicProductDetailResponse;
 import com.forehapp.store.productModule.application.dto.PublicProductSummaryResponse;
@@ -49,6 +50,29 @@ public class PublicProductServiceImpl implements IPublicProductService {
                             .orElse(null);
                     return new PublicProductSummaryResponse(p, thumbnail);
                 });
+    }
+
+    @Override
+    @Cacheable(value = "discovery-sections", key = "#limit + ':' + T(java.time.LocalDate).now().toString()")
+    @Transactional(readOnly = true)
+    public List<CategoryDiscoverySectionResponse> findDiscoverySections(int limit) {
+        return productDao.findDiscoverySections(limit).stream()
+                .map(section -> {
+                    List<PublicProductSummaryResponse> products = section.products().stream()
+                            .map(p -> {
+                                String thumbnail = p.getImages().stream()
+                                        .findFirst()
+                                        .map(img -> storageService.presign(img.getS3Key(), Duration.ofDays(7)))
+                                        .orElse(null);
+                                return new PublicProductSummaryResponse(p, thumbnail);
+                            })
+                            .toList();
+                    String categoryName = section.products().isEmpty() ? ""
+                            : section.products().get(0).getCategory().getDescription();
+                    return new CategoryDiscoverySectionResponse(
+                            section.categoryId(), categoryName, section.totalInCategory(), products);
+                })
+                .toList();
     }
 
     @Override
