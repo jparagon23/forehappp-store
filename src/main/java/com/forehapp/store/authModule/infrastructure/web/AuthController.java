@@ -1,9 +1,12 @@
 package com.forehapp.store.authModule.infrastructure.web;
 
+import com.forehapp.store.authModule.application.dto.GoogleLoginRequestDto;
 import com.forehapp.store.authModule.application.dto.LoginResponseDto;
 import com.forehapp.store.authModule.application.dto.RegisterRequestDto;
 import com.forehapp.store.authModule.application.dto.RegisterResponseDto;
 import com.forehapp.store.authModule.application.dto.VerifyCodeRequestDto;
+import com.forehapp.store.authModule.domain.ports.in.GoogleLoginUseCase;
+import com.forehapp.store.authModule.domain.ports.in.GoogleRegisterUseCase;
 import com.forehapp.store.authModule.domain.ports.in.RegisterUseCase;
 import com.forehapp.store.authModule.domain.ports.in.ResendCodeUseCase;
 import com.forehapp.store.authModule.domain.ports.in.VerifyCodeUseCase;
@@ -22,13 +25,19 @@ public class AuthController {
     private final RegisterUseCase registerUseCase;
     private final VerifyCodeUseCase verifyCodeUseCase;
     private final ResendCodeUseCase resendCodeUseCase;
+    private final GoogleLoginUseCase googleLoginUseCase;
+    private final GoogleRegisterUseCase googleRegisterUseCase;
 
     public AuthController(RegisterUseCase registerUseCase,
                           VerifyCodeUseCase verifyCodeUseCase,
-                          ResendCodeUseCase resendCodeUseCase) {
+                          ResendCodeUseCase resendCodeUseCase,
+                          GoogleLoginUseCase googleLoginUseCase,
+                          GoogleRegisterUseCase googleRegisterUseCase) {
         this.registerUseCase = registerUseCase;
         this.verifyCodeUseCase = verifyCodeUseCase;
         this.resendCodeUseCase = resendCodeUseCase;
+        this.googleLoginUseCase = googleLoginUseCase;
+        this.googleRegisterUseCase = googleRegisterUseCase;
     }
 
     @PostMapping("/register")
@@ -58,5 +67,15 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         return ResponseEntity.ok(tokens);
+    }
+
+    @PostMapping("/google/login")
+    public ResponseEntity<LoginResponseDto> googleLogin(@Valid @RequestBody GoogleLoginRequestDto dto) {
+        return ResponseEntity.ok(googleLoginUseCase.loginWithGoogle(dto.getIdToken()));
+    }
+
+    @PostMapping("/google/register")
+    public ResponseEntity<LoginResponseDto> googleRegister(@Valid @RequestBody GoogleLoginRequestDto dto) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(googleRegisterUseCase.registerWithGoogle(dto.getIdToken()));
     }
 }

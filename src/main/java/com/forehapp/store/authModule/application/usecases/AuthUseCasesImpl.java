@@ -2,7 +2,10 @@ package com.forehapp.store.authModule.application.usecases;
 
 import com.forehapp.store.authModule.application.dto.*;
 import com.forehapp.store.authModule.application.services.ConfirmationTokenService;
+import com.forehapp.store.authModule.application.services.GoogleAuthService;
 import com.forehapp.store.authModule.domain.model.ConfirmationToken;
+import com.forehapp.store.authModule.domain.ports.in.GoogleLoginUseCase;
+import com.forehapp.store.authModule.domain.ports.in.GoogleRegisterUseCase;
 import com.forehapp.store.authModule.domain.ports.in.RegisterUseCase;
 import com.forehapp.store.authModule.domain.ports.in.ResendCodeUseCase;
 import com.forehapp.store.authModule.domain.ports.in.VerifyCodeUseCase;
@@ -19,6 +22,7 @@ import com.forehapp.store.userModule.domain.model.User;
 import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
 import com.forehapp.store.userModule.domain.ports.out.RoleRepository;
 import com.forehapp.store.userModule.domain.ports.out.UserRepository;
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -29,7 +33,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
-public class AuthUseCasesImpl implements RegisterUseCase, VerifyCodeUseCase, ResendCodeUseCase {
+public class AuthUseCasesImpl implements RegisterUseCase, VerifyCodeUseCase, ResendCodeUseCase,
+        GoogleLoginUseCase, GoogleRegisterUseCase {
 
     private static final Logger logger = LoggerFactory.getLogger(AuthUseCasesImpl.class);
 
@@ -39,19 +44,22 @@ public class AuthUseCasesImpl implements RegisterUseCase, VerifyCodeUseCase, Res
     private final ConfirmationTokenService confirmationTokenService;
     private final EmailSender emailSender;
     private final IStoreProfileDao storeProfileDao;
+    private final GoogleAuthService googleAuthService;
 
     public AuthUseCasesImpl(UserRepository userRepository,
                             RoleRepository roleRepository,
                             PasswordEncoder passwordEncoder,
                             ConfirmationTokenService confirmationTokenService,
                             EmailSender emailSender,
-                            IStoreProfileDao storeProfileDao) {
+                            IStoreProfileDao storeProfileDao,
+                            GoogleAuthService googleAuthService) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.confirmationTokenService = confirmationTokenService;
         this.emailSender = emailSender;
         this.storeProfileDao = storeProfileDao;
+        this.googleAuthService = googleAuthService;
     }
 
     @Override
@@ -131,6 +139,66 @@ public class AuthUseCasesImpl implements RegisterUseCase, VerifyCodeUseCase, Res
 
         sendVerificationCode(user);
         logger.info("Verification code resent to user {}", userId);
+    }
+
+    @Override
+    @Transactional
+    public LoginResponseDto loginWithGoogle(String idToken) {
+        GoogleIdToken.Payload payload = googleAuthService.verifyToken(idToken);
+        String email = payload.getEmail().trim().toLowerCase();
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new BadRequestException(ErrorCode.AUTH_GOOGLE_ACCOUNT_NOT_FOUND,
+                        "No existe una cuenta con ese email de Google"));
+
+        StoreProfile profile = storeProfileDao.findByUserId(user.getId())
+                .orElseThrow(() -> new BadRequestException(ErrorCode.USER_PROFILE_NOT_FOUND, "Perfil no encontrado"));
+
+        logger.info("Google login for user {}", user.getId());
+        UserDetailsImpl userDetails = new UserDetailsImpl(user);
+        String accessToken = JwtUtil.createToken(String.valueOf(user.getId()), userDetails.getAuthorities());
+        String refreshToken = JwtUtil.createRefreshToken(String.valueOf(user.getId()), userDetails.getAuthorities());
+        return new LoginResponseDto(accessToken, refreshToken, user.getId(), user.getName(), user.getEmail(), profile.getRoles());
+    }
+
+    @Override
+    @Transactional
+    public LoginResponseDto registerWithGoogle(String idToken) {
+        GoogleIdToken.Payload payload = googleAuthService.verifyToken(idToken);
+        String email = payload.getEmail().trim().toLowerCase();
+
+        if (userRepository.findByEmail(email).isPresent()) {
+            throw new BadRequestException(ErrorCode.AUTH_EMAIL_ALREADY_REGISTERED,
+                    "El email ya está registrado. Iniciá sesión con Google.");
+        }
+
+        Role userRole = roleRepository.findById((long) Constants.USER_ROLE_ID)
+                .orElseThrow(() -> new IllegalStateException("Default user role not found"));
+
+        String name = (String) payload.get("given_name");
+        String lastname = (String) payload.get("family_name");
+
+        User user = new User();
+        user.setEmail(email);
+        user.setPassword(null);
+        user.setName(name != null ? name.trim() : email);
+        user.setLastname(lastname != null ? lastname.trim() : "");
+        user.setUserStatus(Constants.ACTIVE_USER_STATUS);
+        user.setAllowNotification("T");
+        user.setRoles(List.of(userRole));
+
+        User saved = userRepository.save(user);
+        logger.info("Google registration for user {}", saved.getId());
+
+        StoreProfile profile = new StoreProfile();
+        profile.setUser(saved);
+        profile.getRoles().add(StoreRole.CUSTOMER);
+        storeProfileDao.save(profile);
+
+        UserDetailsImpl userDetails = new UserDetailsImpl(saved);
+        String accessToken = JwtUtil.createToken(String.valueOf(saved.getId()), userDetails.getAuthorities());
+        String refreshToken = JwtUtil.createRefreshToken(String.valueOf(saved.getId()), userDetails.getAuthorities());
+        return new LoginResponseDto(accessToken, refreshToken, saved.getId(), saved.getName(), saved.getEmail(), profile.getRoles());
     }
 
     private void sendVerificationCode(User user) {
