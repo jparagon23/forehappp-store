@@ -41,8 +41,9 @@ public class CatalogController {
     }
 
     @GetMapping("/categories")
-    public ResponseEntity<List<CategoryResponse>> getCategories() {
-        return ResponseEntity.ok(catalogService.findAllCategories());
+    public ResponseEntity<List<CategoryResponse>> getCategories(
+            @RequestParam(required = false, defaultValue = "false") boolean hasProducts) {
+        return ResponseEntity.ok(catalogService.findAllCategories(hasProducts));
     }
 
     @GetMapping("/attributes")

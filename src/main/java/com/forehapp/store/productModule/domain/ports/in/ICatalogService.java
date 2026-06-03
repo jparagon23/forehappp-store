@@ -12,7 +12,7 @@ public interface ICatalogService {
     List<BrandResponse> findAllBrands();
     List<LineResponse> findLinesByBrand(Long brandId);
     List<LineResponse> findLinesByBrandAndCategory(Long brandId, Long categoryId);
-    List<CategoryResponse> findAllCategories();
+    List<CategoryResponse> findAllCategories(boolean hasProducts);
     List<CategoryAttributeResponse> findCategoryAttributes(Long categoryId);
     List<AttributeResponse> findAllAttributes();
     List<CategoryAttributeResponse.AttributeValueDto> findAttributeValues(Long attributeId);
