@@ -3,6 +3,7 @@ package com.forehapp.store.productModule.application.usecases;
 import com.forehapp.store.general.exceptions.ErrorCode;
 import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.general.storage.StorageService;
+import com.forehapp.store.productModule.application.dto.BrandFacetResponse;
 import com.forehapp.store.productModule.application.dto.CategoryDiscoverySectionResponse;
 import com.forehapp.store.productModule.application.dto.ProductImageResponse;
 import com.forehapp.store.productModule.application.dto.PublicProductDetailResponse;
@@ -39,10 +40,10 @@ public class PublicProductServiceImpl implements IPublicProductService {
 
     @Override
     @Cacheable(value = "public-products",
-               key = "#search + ':' + #categoryId + ':' + #brandId + ':' + #sortBy + ':' + (#sortBy.name() == 'DISCOVERY' ? T(java.time.LocalDate).now().toString() : '') + ':' + #pageable.pageNumber + ':' + #pageable.pageSize")
+               key = "#search + ':' + #categoryId + ':' + #brandId + ':' + #freeShipping + ':' + #sortBy + ':' + (#sortBy.name() == 'DISCOVERY' ? T(java.time.LocalDate).now().toString() : '') + ':' + #pageable.pageNumber + ':' + #pageable.pageSize")
     @Transactional(readOnly = true)
-    public Page<PublicProductSummaryResponse> findActiveProducts(String search, Long categoryId, Long brandId, ProductSortBy sortBy, Pageable pageable) {
-        return productDao.findActiveProducts(search, categoryId, brandId, sortBy, pageable)
+    public Page<PublicProductSummaryResponse> findActiveProducts(String search, Long categoryId, Long brandId, Boolean freeShipping, ProductSortBy sortBy, Pageable pageable) {
+        return productDao.findActiveProducts(search, categoryId, brandId, freeShipping, sortBy, pageable)
                 .map(p -> {
                     String thumbnail = p.getImages().stream()
                             .findFirst()
@@ -50,6 +51,16 @@ public class PublicProductServiceImpl implements IPublicProductService {
                             .orElse(null);
                     return new PublicProductSummaryResponse(p, thumbnail);
                 });
+    }
+
+    @Override
+    @Cacheable(value = "public-product-brand-facets",
+               key = "#search + ':' + #categoryId + ':' + #freeShipping")
+    @Transactional(readOnly = true)
+    public List<BrandFacetResponse> findBrandFacets(String search, Long categoryId, Boolean freeShipping) {
+        return productDao.findBrandFacets(search, categoryId, freeShipping).stream()
+                .map(BrandFacetResponse::from)
+                .toList();
     }
 
     @Override

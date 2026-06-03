@@ -1,11 +1,14 @@
 package com.forehapp.store.productModule.infrastructure.web;
 
-import com.forehapp.store.general.dto.PagedResponse;
+import com.forehapp.store.productModule.application.dto.BrandFacetResponse;
 import com.forehapp.store.productModule.application.dto.CategoryDiscoverySectionResponse;
+import com.forehapp.store.productModule.application.dto.ProductFacetsResponse;
+import com.forehapp.store.productModule.application.dto.ProductListingResponse;
 import com.forehapp.store.productModule.application.dto.PublicProductDetailResponse;
 import com.forehapp.store.productModule.application.dto.PublicProductSummaryResponse;
 import com.forehapp.store.productModule.domain.model.ProductSortBy;
 import com.forehapp.store.productModule.domain.ports.in.IPublicProductService;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -25,10 +28,11 @@ public class PublicProductController {
     }
 
     @GetMapping
-    public ResponseEntity<PagedResponse<PublicProductSummaryResponse>> listProducts(
+    public ResponseEntity<ProductListingResponse> listProducts(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false) Long brandId,
+            @RequestParam(required = false) Boolean freeShipping,
             @RequestParam(defaultValue = "NEWEST") String sortBy,
             @RequestParam(defaultValue = "0") String page,
             @RequestParam(defaultValue = "20") String size) {
@@ -37,11 +41,21 @@ public class PublicProductController {
         int pageSize = Math.min(parseIntSafe(size, 20), 50);
         ProductSortBy sort = parseSortBy(sortBy);
 
-        Pageable pageable = sort == ProductSortBy.DISCOVERY
-                ? PageRequest.of(pageNum, pageSize)
-                : PageRequest.of(pageNum, pageSize, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Pageable pageable = sort == ProductSortBy.NEWEST
+                ? PageRequest.of(pageNum, pageSize, Sort.by(Sort.Direction.DESC, "createdAt"))
+                : PageRequest.of(pageNum, pageSize);
 
-        return ResponseEntity.ok(new PagedResponse<>(publicProductService.findActiveProducts(search, categoryId, brandId, sort, pageable)));
+        Page<PublicProductSummaryResponse> productsPage =
+                publicProductService.findActiveProducts(search, categoryId, brandId, freeShipping, sort, pageable);
+
+        ProductFacetsResponse facets = null;
+        if (search != null || categoryId != null) {
+            List<BrandFacetResponse> brandFacets =
+                    publicProductService.findBrandFacets(search, categoryId, freeShipping);
+            facets = new ProductFacetsResponse(brandFacets);
+        }
+
+        return ResponseEntity.ok(new ProductListingResponse(productsPage, facets));
     }
 
     private int parseIntSafe(String value, int defaultValue) {

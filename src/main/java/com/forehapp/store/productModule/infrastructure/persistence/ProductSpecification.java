@@ -2,9 +2,14 @@ package com.forehapp.store.productModule.infrastructure.persistence;
 
 import com.forehapp.store.productModule.domain.model.Product;
 import com.forehapp.store.productModule.domain.model.ProductStatus;
+import com.forehapp.store.productModule.domain.model.ProductVariant;
 import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 public class ProductSpecification {
@@ -30,6 +35,23 @@ public class ProductSpecification {
 
     public static Specification<Product> hasBrand(Long brandId) {
         return (root, query, cb) -> cb.equal(root.get("brand").get("id"), brandId);
+    }
+
+    public static Specification<Product> hasFreeShipping() {
+        return (root, query, cb) -> cb.isTrue(root.get("freeShipping"));
+    }
+
+    public static Specification<Product> withPriceOrder(Sort.Direction direction) {
+        return (root, query, cb) -> {
+            if (!Long.class.equals(query.getResultType())) {
+                Subquery<BigDecimal> sub = query.subquery(BigDecimal.class);
+                Root<ProductVariant> v = sub.from(ProductVariant.class);
+                sub.select(cb.min(v.get("price")))
+                        .where(cb.equal(v.get("product"), root), cb.isTrue(v.get("active")));
+                query.orderBy(direction == Sort.Direction.ASC ? cb.asc(sub) : cb.desc(sub));
+            }
+            return cb.conjunction();
+        };
     }
 
     public static Specification<Product> withDiscoveryOrder() {
