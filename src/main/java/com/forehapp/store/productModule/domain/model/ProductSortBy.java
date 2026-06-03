@@ -2,5 +2,7 @@ package com.forehapp.store.productModule.domain.model;
 
 public enum ProductSortBy {
     NEWEST,
-    DISCOVERY
+    DISCOVERY,
+    PRICE_ASC,
+    PRICE_DESC
 }

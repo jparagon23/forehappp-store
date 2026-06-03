@@ -1,13 +1,24 @@
 package com.forehapp.store.productModule.infrastructure.persistence;
 
+import com.forehapp.store.productModule.domain.model.BrandCount;
 import com.forehapp.store.productModule.domain.model.Product;
 import com.forehapp.store.productModule.domain.model.ProductDiscoverySection;
 import com.forehapp.store.productModule.domain.model.ProductSortBy;
+import com.forehapp.store.productModule.domain.model.ProductStatus;
 import com.forehapp.store.productModule.domain.ports.out.IProductDao;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.JoinType;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Repository;
 
@@ -25,9 +36,11 @@ import java.util.stream.Collectors;
 public class ProductRepositoryImpl implements IProductDao {
 
     private final IProductRepository jpaRepository;
+    private final EntityManager entityManager;
 
-    public ProductRepositoryImpl(IProductRepository jpaRepository) {
+    public ProductRepositoryImpl(IProductRepository jpaRepository, EntityManager entityManager) {
         this.jpaRepository = jpaRepository;
+        this.entityManager = entityManager;
     }
 
     @Override
@@ -46,8 +59,8 @@ public class ProductRepositoryImpl implements IProductDao {
     }
 
     @Override
-    public Page<Product> findActiveProducts(String search, Long categoryId, Long brandId, ProductSortBy sortBy, Pageable pageable) {
-        if (sortBy == ProductSortBy.DISCOVERY && search == null && categoryId == null && brandId == null) {
+    public Page<Product> findActiveProducts(String search, Long categoryId, Long brandId, Boolean freeShipping, ProductSortBy sortBy, Pageable pageable) {
+        if (sortBy == ProductSortBy.DISCOVERY && search == null && categoryId == null && brandId == null && !Boolean.TRUE.equals(freeShipping)) {
             return findDiscoveryProducts(pageable);
         }
 
@@ -60,6 +73,14 @@ public class ProductRepositoryImpl implements IProductDao {
         }
         if (brandId != null) {
             spec = spec.and(ProductSpecification.hasBrand(brandId));
+        }
+        if (Boolean.TRUE.equals(freeShipping)) {
+            spec = spec.and(ProductSpecification.hasFreeShipping());
+        }
+        if (sortBy == ProductSortBy.PRICE_ASC) {
+            spec = spec.and(ProductSpecification.withPriceOrder(Sort.Direction.ASC));
+        } else if (sortBy == ProductSortBy.PRICE_DESC) {
+            spec = spec.and(ProductSpecification.withPriceOrder(Sort.Direction.DESC));
         }
         return jpaRepository.findAll(spec, pageable);
     }
@@ -82,6 +103,43 @@ public class ProductRepositoryImpl implements IProductDao {
                 .toList();
 
         return new PageImpl<>(products, pageable, total);
+    }
+
+    @Override
+    public List<BrandCount> findBrandFacets(String search, Long categoryId, Boolean freeShipping) {
+        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        CriteriaQuery<Object[]> query = cb.createQuery(Object[].class);
+        Root<Product> root = query.from(Product.class);
+        Join<Object, Object> brandJoin = root.join("brand");
+
+        List<Predicate> predicates = new ArrayList<>();
+        predicates.add(cb.equal(root.get("status"), ProductStatus.ACTIVE));
+
+        if (search != null && !search.isBlank()) {
+            String pattern = "%" + search.toLowerCase() + "%";
+            Join<Object, Object> categoryJoin = root.join("category", JoinType.LEFT);
+            predicates.add(cb.or(
+                    cb.like(cb.lower(root.get("title")), pattern),
+                    cb.like(cb.lower(brandJoin.get("description")), pattern),
+                    cb.like(cb.lower(categoryJoin.get("description")), pattern)
+            ));
+        }
+        if (categoryId != null) {
+            predicates.add(cb.equal(root.get("category").get("id"), categoryId));
+        }
+        if (Boolean.TRUE.equals(freeShipping)) {
+            predicates.add(cb.isTrue(root.get("freeShipping")));
+        }
+
+        Expression<Long> countExpr = cb.count(root);
+        query.multiselect(brandJoin.get("id"), brandJoin.get("description"), countExpr)
+                .where(predicates.toArray(new Predicate[0]))
+                .groupBy(brandJoin.get("id"), brandJoin.get("description"))
+                .orderBy(cb.desc(countExpr));
+
+        return entityManager.createQuery(query).getResultList().stream()
+                .map(row -> new BrandCount((Long) row[0], (String) row[1], (Long) row[2]))
+                .toList();
     }
 
     @Override
