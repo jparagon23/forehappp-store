@@ -8,6 +8,7 @@ import com.forehapp.store.productModule.application.dto.CategoryAttributeRespons
 import com.forehapp.store.productModule.application.dto.CategoryResponse;
 import com.forehapp.store.productModule.application.dto.LineResponse;
 import com.forehapp.store.productModule.domain.model.AttributeValue;
+import com.forehapp.store.productModule.domain.model.Category;
 import com.forehapp.store.productModule.domain.model.CategoryAttribute;
 import com.forehapp.store.productModule.domain.ports.in.ICatalogService;
 import com.forehapp.store.productModule.domain.ports.out.IAttributeDao;
@@ -71,10 +72,11 @@ public class CatalogServiceImpl implements ICatalogService {
     }
 
     @Override
-    public List<CategoryResponse> findAllCategories() {
-        return categoryDao.findAll().stream()
-                .map(CategoryResponse::new)
-                .toList();
+    public List<CategoryResponse> findAllCategories(boolean hasProducts) {
+        List<Category> categories = hasProducts
+                ? categoryDao.findAllWithActiveProducts()
+                : categoryDao.findAll();
+        return categories.stream().map(CategoryResponse::new).toList();
     }
 
     @Override

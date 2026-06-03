@@ -34,6 +34,11 @@ public class CategoryRepositoryAdapter implements ICategoryDao {
     }
 
     @Override
+    public List<Category> findAllWithActiveProducts() {
+        return categoryRepository.findAllWithActiveProducts();
+    }
+
+    @Override
     public List<CategoryAttribute> findCategoryAttributes(Long categoryId) {
         return categoryAttributeRepository.findByCategoryIdWithAttribute(categoryId);
     }
