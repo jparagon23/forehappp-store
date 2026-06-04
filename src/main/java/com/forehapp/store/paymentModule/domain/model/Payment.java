@@ -10,7 +10,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "payments")
+@Table(name = "store_payments")
 @Getter @Setter
 @NoArgsConstructor
 public class Payment {

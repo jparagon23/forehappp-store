@@ -200,7 +200,7 @@ CREATE TABLE IF NOT EXISTS store_orders (
     CONSTRAINT store_fk_order_buyer FOREIGN KEY (buyer_id) REFERENCES store_profiles(store_profile_id)
 );
 
-CREATE TABLE IF NOT EXISTS payments (
+CREATE TABLE IF NOT EXISTS store_payments (
     payment_id   BIGINT AUTO_INCREMENT PRIMARY KEY,
     order_id     BIGINT NOT NULL,
     method       VARCHAR(100) NOT NULL,
