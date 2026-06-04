@@ -151,8 +151,20 @@ public class AuthUseCasesImpl implements RegisterUseCase, VerifyCodeUseCase, Res
                 .orElseThrow(() -> new BadRequestException(ErrorCode.AUTH_GOOGLE_ACCOUNT_NOT_FOUND,
                         "No existe una cuenta con ese email de Google"));
 
-        StoreProfile profile = storeProfileDao.findByUserId(user.getId())
-                .orElseThrow(() -> new BadRequestException(ErrorCode.USER_PROFILE_NOT_FOUND, "Perfil no encontrado"));
+        if (user.getUserStatus() == Constants.PENDING_STATUS) {
+            user.setUserStatus(Constants.ACTIVE_USER_STATUS);
+            userRepository.save(user);
+            logger.info("User {} activated via Google login", user.getId());
+        }
+
+        StoreProfile profile = storeProfileDao.findByUserId(user.getId()).orElseGet(() -> {
+            StoreProfile newProfile = new StoreProfile();
+            newProfile.setUser(user);
+            newProfile.getRoles().add(StoreRole.CUSTOMER);
+            StoreProfile saved = storeProfileDao.save(newProfile);
+            logger.info("StoreProfile created for user {} during Google login", user.getId());
+            return saved;
+        });
 
         logger.info("Google login for user {}", user.getId());
         UserDetailsImpl userDetails = new UserDetailsImpl(user);
