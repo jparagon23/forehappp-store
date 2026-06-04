@@ -309,10 +309,13 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
         return new OrderCreatedEvent(
                 order.getId(),
                 order.resolveContactName(),
+                order.getBuyerEmail(),
                 order.getShippingAddress(),
                 order.getShippingCity(),
                 order.getShippingCountry(),
                 order.getCreatedAt(),
+                order.getTotal(),
+                order.getPaymentMethod(),
                 sellerGroups
         );
     }
