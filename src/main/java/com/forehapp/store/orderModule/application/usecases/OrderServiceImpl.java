@@ -164,7 +164,7 @@ public class OrderServiceImpl implements IOrderService {
     public OrderResponse getOrderById(Long userId, Long orderId) {
         StoreProfile buyer = resolveProfile(userId);
         Order order = orderDao.findById(orderId)
-                .filter(o -> o.getBuyer().getId().equals(buyer.getId()))
+                .filter(o -> o.getBuyer() != null && o.getBuyer().getId().equals(buyer.getId()))
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ORDER_NOT_FOUND, "Order not found"));
         return orderMapper.toResponse(order, null);
     }

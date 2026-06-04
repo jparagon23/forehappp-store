@@ -176,9 +176,8 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
     }
 
     private OrderStatusChangedEvent buildStatusEvent(OrderSellerGroup group) {
-        String buyerEmail = group.getOrder().getBuyer().getUser().getEmail();
-        String buyerName = group.getOrder().getBuyer().getUser().getName()
-                + " " + group.getOrder().getBuyer().getUser().getLastname();
+        String buyerEmail = group.getOrder().getBuyerEmail();
+        String buyerName = group.getOrder().resolveContactName();
 
         List<OrderStatusChangedEvent.ItemData> items = group.getItems().stream()
                 .map(i -> new OrderStatusChangedEvent.ItemData(
@@ -203,8 +202,7 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
     }
 
     private SellerOrderGroupDto toSellerDto(OrderSellerGroup group) {
-        String buyerName = group.getOrder().getBuyer().getUser().getName()
-                + " " + group.getOrder().getBuyer().getUser().getLastname();
+        String buyerName = group.getOrder().resolveContactName();
 
         List<OrderItemDto> items = group.getItems().stream()
                 .map(i -> {

@@ -11,13 +11,18 @@ import com.forehapp.store.authModule.domain.ports.in.RegisterUseCase;
 import com.forehapp.store.authModule.domain.ports.in.ResendCodeUseCase;
 import com.forehapp.store.authModule.domain.ports.in.VerifyCodeUseCase;
 import com.forehapp.store.security.jwt.JwtUtil;
+import com.forehapp.store.userModule.domain.ports.out.UserRepository;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
+@Validated
 @RestController
 @RequestMapping("/api/v1/auth")
 public class AuthController {
@@ -27,17 +32,20 @@ public class AuthController {
     private final ResendCodeUseCase resendCodeUseCase;
     private final GoogleLoginUseCase googleLoginUseCase;
     private final GoogleRegisterUseCase googleRegisterUseCase;
+    private final UserRepository userRepository;
 
     public AuthController(RegisterUseCase registerUseCase,
                           VerifyCodeUseCase verifyCodeUseCase,
                           ResendCodeUseCase resendCodeUseCase,
                           GoogleLoginUseCase googleLoginUseCase,
-                          GoogleRegisterUseCase googleRegisterUseCase) {
+                          GoogleRegisterUseCase googleRegisterUseCase,
+                          UserRepository userRepository) {
         this.registerUseCase = registerUseCase;
         this.verifyCodeUseCase = verifyCodeUseCase;
         this.resendCodeUseCase = resendCodeUseCase;
         this.googleLoginUseCase = googleLoginUseCase;
         this.googleRegisterUseCase = googleRegisterUseCase;
+        this.userRepository = userRepository;
     }
 
     @PostMapping("/register")
@@ -77,5 +85,12 @@ public class AuthController {
     @PostMapping("/google/register")
     public ResponseEntity<LoginResponseDto> googleRegister(@Valid @RequestBody GoogleLoginRequestDto dto) {
         return ResponseEntity.status(HttpStatus.CREATED).body(googleRegisterUseCase.registerWithGoogle(dto.getIdToken()));
+    }
+
+    @GetMapping("/check-email")
+    public ResponseEntity<Map<String, Boolean>> checkEmail(
+            @RequestParam @NotBlank @Email String email) {
+        boolean exists = userRepository.findByEmail(email).isPresent();
+        return ResponseEntity.ok(Map.of("exists", exists));
     }
 }

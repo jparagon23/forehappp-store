@@ -10,5 +10,6 @@ public interface IOrderDao {
     Optional<Order> findById(Long orderId);
     Optional<Order> findBasicById(Long orderId);
     List<Order> findAllByBuyerIdOrderByCreatedAtDesc(Long buyerId);
+    List<Order> findGuestOrdersByEmail(String email);
     long countDistinctBuyers();
 }

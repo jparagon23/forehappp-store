@@ -37,6 +37,11 @@ public class OrderRepositoryImpl implements IOrderDao {
     }
 
     @Override
+    public List<Order> findGuestOrdersByEmail(String email) {
+        return jpaRepository.findGuestOrdersByEmail(email);
+    }
+
+    @Override
     public long countDistinctBuyers() {
         return jpaRepository.countDistinctBuyers();
     }

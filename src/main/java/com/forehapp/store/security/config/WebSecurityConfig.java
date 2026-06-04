@@ -106,6 +106,8 @@ public class WebSecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/products/*/reviews").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/products/*/reviews/summary").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/locations/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/checkout/guest", "/api/v1/checkout/guest/estimate", "/api/v1/checkout/guest/create-account").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/check-email").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session ->

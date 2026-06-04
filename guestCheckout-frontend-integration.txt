@@ -1,0 +1,320 @@
+================================================================================
+  GUEST CHECKOUT — INTEGRACIÓN FRONTEND
+  Forehapp Store · Implementado: 2026-06-04
+================================================================================
+
+CONTEXTO
+--------
+Se implementó un flujo completo de compra sin autenticación (Guest Checkout).
+El objetivo es maximizar la conversión eliminando el login obligatorio.
+
+Principio central: comprar siempre debe ser más fácil que registrarse.
+El carrito vive en localStorage del frontend; el backend no almacena carritos
+para invitados. Al confirmar la compra, el frontend envía todo inline en un
+solo request.
+
+Después de la compra, se ofrece de forma opcional crear una cuenta. El backend
+vincula automáticamente el pedido y la dirección a la nueva cuenta.
+
+
+================================================================================
+FLUJO COMPLETO
+================================================================================
+
+  Paso 1 — Carrito
+    └── Frontend acumula ítems en localStorage
+        { variantId, quantity, price, productTitle, sku, ... }
+
+  Paso 2 — Información de contacto
+    └── Al salir del campo email:
+          GET /api/v1/auth/check-email?email=...
+          ├── exists: false → continuar normalmente
+          └── exists: true  → mostrar opciones:
+                              "Iniciar sesión" | "Continuar como invitado"
+
+  Paso 3 — Dirección de envío
+    └── Cargar ubicaciones con endpoints existentes (ver sección más abajo)
+        El frontend obtiene el cityId seleccionado por el usuario
+
+  Paso 4 — Costo de envío
+    └── Al seleccionar o cambiar ciudad:
+          POST /api/v1/checkout/guest/estimate
+          → Devuelve el costo de envío por tienda antes de confirmar
+
+  Paso 5 — Pago
+    └── Al confirmar:
+          POST /api/v1/checkout/guest
+          ├── paymentMethod: MERCADO_PAGO → redirigir a response.checkoutUrl
+          └── paymentMethod: CASH | TRANSFER | COD → mostrar instrucciones
+
+  Paso 6 — Confirmación
+    └── Mostrar orderId, total, estado inicial del pedido
+        El backend envía email de confirmación automáticamente
+
+  Paso 7 — Crear cuenta (opcional, solo si el correo NO tenía cuenta)
+    └── Mostrar: "¿Guardar tus datos para compras futuras?"
+          POST /api/v1/checkout/guest/create-account { email, password }
+          → El backend recupera nombre, apellido y teléfono del pedido
+          → Vincula el pedido a la nueva cuenta
+          → Guarda la dirección usada
+          → Devuelve tokens JWT → auto-login inmediato
+
+
+================================================================================
+NUEVOS ENDPOINTS — TODOS PÚBLICOS (SIN JWT)
+================================================================================
+
+------------------------------------------------------------------------
+1. CHECK EMAIL
+   GET /api/v1/auth/check-email
+------------------------------------------------------------------------
+
+Cuándo llamar: al hacer blur en el campo email del paso de contacto.
+
+Query params:
+  email   string   requerido   Correo a validar
+
+Response 200:
+  {
+    "exists": true | false
+  }
+
+Comportamiento según respuesta:
+  exists: false → continuar, no mostrar nada relacionado con login
+  exists: true  → mostrar mensaje: "Encontramos una cuenta con este correo"
+                  Opciones: [Iniciar sesión] [Continuar como invitado]
+
+
+------------------------------------------------------------------------
+2. ESTIMACIÓN DE ENVÍO
+   POST /api/v1/checkout/guest/estimate
+------------------------------------------------------------------------
+
+Cuándo llamar: cuando el usuario selecciona o cambia la ciudad de destino.
+Permite mostrar el costo antes de que el usuario confirme la compra.
+
+Request body:
+  {
+    "cityId": 123,                      // Long, requerido — id de cities
+    "items": [                          // array, min 1, max 50
+      {
+        "variantId": 45,                // Long, requerido
+        "quantity": 2                   // Integer, min 1, requerido
+      }
+    ]
+  }
+
+Response 200:
+  {
+    "sellerGroups": [
+      {
+        "storeId": 1,
+        "storeName": "Tienda Ejemplo",
+        "subtotal": 150000.00,          // subtotal de los ítems de esa tienda
+        "shippingCost": 8000.00,        // costo de envío para esa tienda
+        "freeShipping": false           // true si shippingCost == 0
+      }
+    ],
+    "itemsTotal": 150000.00,            // suma de todos los subtotales
+    "shippingTotal": 8000.00,           // suma de todos los envíos
+    "grandTotal": 158000.00             // itemsTotal + shippingTotal
+  }
+
+Nota: si el pedido tiene ítems de múltiples tiendas, habrá un objeto
+por tienda en sellerGroups. El envío se calcula de forma independiente
+por cada tienda.
+
+
+------------------------------------------------------------------------
+3. CREAR ORDEN GUEST
+   POST /api/v1/checkout/guest
+------------------------------------------------------------------------
+
+Cuándo llamar: cuando el usuario confirma la compra.
+
+Request body:
+  {
+    "name": "Juan",                     // string, requerido
+    "lastname": "Pérez",               // string, requerido
+    "email": "juan@correo.com",         // string, requerido, formato email
+    "phone": "3001234567",              // string, requerido
+    "shippingAddress": "Calle 10 # 5-20",  // string, requerido
+    "shippingCityId": 123,              // Long, requerido — id de cities
+    "shippingComplement": "Apto 301",   // string, opcional
+    "shippingReference": "Edificio azul, al lado del parque",  // string, opcional
+    "items": [                          // array, min 1, max 50
+      {
+        "variantId": 45,                // Long, requerido
+        "quantity": 2                   // Integer, min 1, requerido
+      }
+    ],
+    "paymentMethod": "MERCADO_PAGO"     // ver valores válidos abajo
+  }
+
+Valores válidos para paymentMethod:
+  MERCADO_PAGO     → pago en línea, la respuesta incluye checkoutUrl
+  CASH             → pago en efectivo, queda en estado PENDING
+  TRANSFER         → transferencia bancaria, queda en estado PENDING
+  CASH_ON_DELIVERY → pago contra entrega (solo disponible para Cali)
+
+Response 201:
+  {
+    "orderId": 88,
+    "paymentStatus": "PENDING",
+    "paymentMethod": "MERCADO_PAGO",
+    "total": 158000.00,
+    "couponCode": null,
+    "couponDiscount": null,
+    "shippingAddress": "Calle 10 # 5-20",
+    "shippingCity": "Cali",
+    "shippingCountry": "Colombia",
+    "createdAt": "2026-06-04T15:30:00",
+    "sellerGroups": [
+      {
+        "groupId": 12,
+        "storeId": 1,
+        "storeName": "Tienda Ejemplo",
+        "status": "PENDING",
+        "subtotal": 150000.00,
+        "shippingCost": 8000.00,
+        "trackingNumber": null,
+        "preparedAt": null,
+        "shippedAt": null,
+        "deliveredAt": null,
+        "items": [
+          {
+            "itemId": 55,
+            "variantId": 45,
+            "sku": "SKU-001",
+            "productTitle": "Camiseta Básica",
+            "attributes": [{ "attribute": "Color", "value": "Azul" }],
+            "quantity": 2,
+            "unitPrice": 75000.00,
+            "subtotal": 150000.00
+          }
+        ]
+      }
+    ],
+    "checkoutUrl": "https://www.mercadopago.com.co/checkout/v1/redirect?pref_id=..."
+  }
+
+IMPORTANTE — checkoutUrl:
+  Solo presente cuando paymentMethod = MERCADO_PAGO.
+  Para los demás métodos viene null.
+  Cuando está presente, redirigir al usuario a esa URL para completar el pago.
+
+Errores posibles:
+  400 — city not found / CASH_ON_DELIVERY fuera de Cali
+  404 — variant not found
+  409 — stock insuficiente para algún ítem
+
+
+------------------------------------------------------------------------
+4. CREAR CUENTA POST-COMPRA
+   POST /api/v1/checkout/guest/create-account
+------------------------------------------------------------------------
+
+Cuándo llamar: en el paso 7 (opcional), cuando el correo NO tenía cuenta
+registrada (exists: false en check-email) y el usuario decide crear una.
+
+El frontend SOLO pide la contraseña. El backend recupera nombre, apellido
+y teléfono del pedido recién realizado con ese email.
+
+Request body:
+  {
+    "email": "juan@correo.com",         // string, requerido, formato email
+    "password": "miContrasena"          // string, requerido, mínimo 6 chars
+  }
+
+Response 201:
+  {
+    "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
+    "refreshToken": "eyJhbGciOiJIUzI1NiJ9...",
+    "userId": 42,
+    "name": "Juan",
+    "email": "juan@correo.com",
+    "storeRoles": ["CUSTOMER"]
+  }
+
+Qué hace el backend automáticamente:
+  ✓ Crea el usuario con estado ACTIVO (sin verificación por email)
+  ✓ Asigna nombre, apellido y teléfono del pedido guest
+  ✓ Vincula todos los pedidos guest con ese email a la nueva cuenta
+  ✓ Guarda la dirección del último pedido como dirección por defecto
+  ✓ Devuelve tokens JWT listos para usar → auto-login inmediato
+
+Errores posibles:
+  400 AUTH_EMAIL_ALREADY_REGISTERED — el email ya tiene cuenta
+
+
+================================================================================
+ENDPOINTS EXISTENTES NECESARIOS PARA ESTE FLUJO
+================================================================================
+
+  GET /api/v1/locations/countries
+    → Lista de países activos
+
+  GET /api/v1/locations/countries/{countryId}/states
+    → Departamentos/estados del país
+
+  GET /api/v1/locations/states/{stateId}/cities
+    → Ciudades del departamento — devuelve { id, name }
+      Usar el campo "id" como shippingCityId en estimate y en la orden
+
+  GET /api/v1/products/public/{id}
+    → Detalle de producto/variante para construir el carrito en localStorage
+
+
+================================================================================
+CAMBIOS EN BASE DE DATOS
+================================================================================
+
+Tabla: store_orders
+
+  Columna                  | Tipo          | Notas
+  -------------------------|---------------|----------------------------------
+  buyer_id                 | BIGINT NULL   | Antes era NOT NULL; ahora puede
+                           |               | ser null en órdenes guest
+  guest_name               | VARCHAR(100)  | Nombre del comprador guest
+  guest_lastname           | VARCHAR(100)  | Apellido del comprador guest
+  shipping_department      | VARCHAR(100)  | Departamento de la dirección
+  shipping_complement      | VARCHAR(255)  | Complemento de la dirección
+  shipping_reference       | VARCHAR(255)  | Referencia de entrega
+  shipping_city_id         | BIGINT        | FK lógica a cities.id
+
+Todas las migraciones son idempotentes y ya están en store-schema.sql.
+No requieren intervención manual.
+
+
+================================================================================
+NOTAS DE IMPLEMENTACIÓN PARA EL FRONTEND
+================================================================================
+
+1. CARRITO EN LOCALSTORAGE
+   Guardar los ítems con al menos: variantId, quantity, price, productTitle.
+   El backend revalida precios y stock al crear la orden — si un precio cambió
+   o hay insuficiente stock, responde 409.
+
+2. FLUJO DE CORREO REGISTRADO
+   Si check-email devuelve exists: true, mostrar las opciones de login pero
+   NUNCA bloquear el checkout. El usuario puede ignorar el login y continuar.
+
+3. MÚLTIPLES TIENDAS
+   Los ítems pueden ser de distintas tiendas. La respuesta de /estimate y de
+   la orden agrupa por tienda (sellerGroups). Mostrar el desglose por tienda
+   en el resumen de la compra.
+
+4. MERCADO PAGO
+   Redirigir directamente a checkoutUrl. MercadoPago redirige de vuelta a la
+   app una vez completado el pago. Configurar las URLs de retorno en el panel
+   de MercadoPago del proyecto.
+
+5. CREAR CUENTA — CUÁNDO MOSTRAR
+   Mostrar el paso 7 SOLO si check-email devolvió exists: false.
+   Si el correo ya tenía cuenta (exists: true), mostrar "Iniciar sesión para
+   ver tus pedidos" en lugar de "Crear cuenta".
+
+6. AUTO-LOGIN TRAS CREAR CUENTA
+   La respuesta de /create-account incluye accessToken y refreshToken.
+   Almacenarlos igual que en un login normal y marcar al usuario como
+   autenticado sin pasos adicionales.
