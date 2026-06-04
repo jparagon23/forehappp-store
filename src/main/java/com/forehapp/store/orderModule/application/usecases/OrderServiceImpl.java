@@ -331,10 +331,13 @@ public class OrderServiceImpl implements IOrderService {
         return new OrderCreatedEvent(
                 order.getId(),
                 buyerName,
+                order.getBuyerEmail(),
                 order.getShippingAddress(),
                 order.getShippingCity(),
                 order.getShippingCountry(),
                 order.getCreatedAt(),
+                order.getTotal(),
+                order.getPaymentMethod(),
                 sellerGroups
         );
     }
