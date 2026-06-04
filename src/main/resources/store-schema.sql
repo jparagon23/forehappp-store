@@ -200,6 +200,17 @@ CREATE TABLE IF NOT EXISTS store_orders (
     CONSTRAINT store_fk_order_buyer FOREIGN KEY (buyer_id) REFERENCES store_profiles(store_profile_id)
 );
 
+CREATE TABLE IF NOT EXISTS payments (
+    payment_id   BIGINT AUTO_INCREMENT PRIMARY KEY,
+    order_id     BIGINT NOT NULL,
+    method       VARCHAR(100) NOT NULL,
+    status       VARCHAR(50) NOT NULL,
+    amount       DECIMAL(15,2) NOT NULL,
+    payment_date TIMESTAMP NOT NULL,
+    reference    VARCHAR(255),
+    CONSTRAINT store_fk_payment_order FOREIGN KEY (order_id) REFERENCES store_orders(order_id)
+);
+
 CREATE TABLE IF NOT EXISTS store_order_seller_groups (
     group_id        BIGINT AUTO_INCREMENT PRIMARY KEY,
     order_id        BIGINT NOT NULL,
