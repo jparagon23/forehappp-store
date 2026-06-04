@@ -31,16 +31,18 @@ public class OrderEmailListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onOrderCreated(OrderCreatedEvent event) {
         for (OrderCreatedEvent.SellerGroupData group : event.getSellerGroups()) {
-            try {
-                String html = buildSellerEmail(event, group);
-                emailSender.sendEmail(
-                        group.sellerEmail(),
-                        "Nueva orden #" + event.getOrderId() + " recibida en Forehapp",
-                        html
-                );
-                log.info("[OrderEmail] Sent new order email to seller={} orderId={}", group.sellerEmail(), event.getOrderId());
-            } catch (Exception e) {
-                log.error("[OrderEmail] Failed to send email to seller={} orderId={}", group.sellerEmail(), event.getOrderId(), e);
+            String html = buildSellerEmail(event, group);
+            for (String email : group.memberEmails()) {
+                try {
+                    emailSender.sendEmail(
+                            email,
+                            "Nueva orden #" + event.getOrderId() + " recibida en Forehapp",
+                            html
+                    );
+                    log.info("[OrderEmail] Sent new order email to member={} orderId={}", email, event.getOrderId());
+                } catch (Exception e) {
+                    log.error("[OrderEmail] Failed to send email to member={} orderId={}", email, event.getOrderId(), e);
+                }
             }
         }
     }
@@ -85,9 +87,9 @@ public class OrderEmailListener {
                       <tr>
                         <td style="padding:32px;">
 
-                          <p style="margin:0 0 8px;font-size:16px;color:#333;">Hola, <strong>%s</strong></p>
+                          <p style="margin:0 0 8px;font-size:16px;color:#333;">Hola, equipo de <strong>%s</strong></p>
                           <p style="margin:0 0 24px;font-size:14px;color:#555;">
-                            Tienes una nueva orden que requiere tu atención.
+                            Tienen una nueva orden que requiere su atención.
                           </p>
 
                           <!-- Order info -->
@@ -156,7 +158,7 @@ public class OrderEmailListener {
                 </body>
                 </html>
                 """.formatted(
-                group.sellerName(),
+                group.storeName(),
                 event.getOrderId(),
                 event.getCreatedAt() != null ? event.getCreatedAt().format(DATE_FMT) : "-",
                 event.getBuyerName(),
