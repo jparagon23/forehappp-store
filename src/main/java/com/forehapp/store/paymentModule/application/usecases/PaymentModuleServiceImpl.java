@@ -107,8 +107,8 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
 
                     transitionGroupsToPreparing(orderId);
 
-                    String buyerEmail = order.getBuyer().getUser().getEmail();
-                    String buyerName  = order.getBuyer().getUser().getName() + " " + order.getBuyer().getUser().getLastname();
+                    String buyerEmail = order.getBuyerEmail();
+                    String buyerName  = order.resolveContactName();
                     eventPublisher.publishEvent(new OrderPaidEvent(
                             order.getId(), buyerEmail, buyerName, order.getTotal(), order.getCreatedAt()
                     ));
@@ -167,8 +167,8 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
 
         transitionGroupsToPreparing(orderId);
 
-        String buyerEmail = order.getBuyer().getUser().getEmail();
-        String buyerName  = order.getBuyer().getUser().getName() + " " + order.getBuyer().getUser().getLastname();
+        String buyerEmail = order.getBuyerEmail();
+        String buyerName  = order.resolveContactName();
         eventPublisher.publishEvent(new OrderPaidEvent(
                 order.getId(), buyerEmail, buyerName, order.getTotal(), order.getCreatedAt()
         ));

@@ -23,8 +23,14 @@ public class Order {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "buyer_id", nullable = false)
+    @JoinColumn(name = "buyer_id", nullable = true)
     private StoreProfile buyer;
+
+    @Column(name = "guest_name", length = 100)
+    private String guestName;
+
+    @Column(name = "guest_lastname", length = 100)
+    private String guestLastname;
 
     @Enumerated(EnumType.STRING)
     @Column(length = 20, nullable = false)
@@ -45,8 +51,20 @@ public class Order {
     @Column(name = "shipping_city", nullable = false, length = 100)
     private String shippingCity;
 
+    @Column(name = "shipping_department", length = 100)
+    private String shippingDepartment;
+
     @Column(name = "shipping_country", nullable = false, length = 100)
     private String shippingCountry;
+
+    @Column(name = "shipping_complement", length = 255)
+    private String shippingComplement;
+
+    @Column(name = "shipping_reference", length = 255)
+    private String shippingReference;
+
+    @Column(name = "shipping_city_id")
+    private Long shippingCityId;
 
     @Column(name = "payment_method", nullable = false, length = 30)
     private String paymentMethod;
@@ -62,6 +80,13 @@ public class Order {
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderSellerGroup> sellerGroups = new ArrayList<>();
+
+    public String resolveContactName() {
+        if (buyer != null) {
+            return buyer.getUser().getName() + " " + buyer.getUser().getLastname();
+        }
+        return guestName + " " + guestLastname;
+    }
 
     @PrePersist
     public void prePersist() {

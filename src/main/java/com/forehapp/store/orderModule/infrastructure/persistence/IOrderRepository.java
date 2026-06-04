@@ -18,6 +18,9 @@ public interface IOrderRepository extends JpaRepository<Order, Long> {
 
     List<Order> findAllByBuyer_IdOrderByCreatedAtDesc(Long buyerId);
 
+    @Query("SELECT o FROM Order o WHERE o.buyerEmail = :email AND o.buyer IS NULL ORDER BY o.createdAt DESC")
+    List<Order> findGuestOrdersByEmail(@Param("email") String email);
+
     @Query(value = "SELECT COUNT(DISTINCT buyer_id) FROM store_orders", nativeQuery = true)
     long countDistinctBuyers();
 }
