@@ -17,6 +17,8 @@ import com.forehapp.store.userModule.domain.ports.in.UpdatePhoneUseCase;
 import com.forehapp.store.userModule.domain.ports.in.UpdateUserUseCase;
 import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
 import com.forehapp.store.userModule.domain.ports.out.UserRepository;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +37,7 @@ public class UserUseCasesImpl implements GetUserUseCase, UpdateUserUseCase, Upda
     }
 
     @Override
+    @Cacheable(value = "user-profile", key = "#userId")
     public UserResponse getProfile(Long userId) {
         User user = findOrThrow(userId);
         String phone = storeProfileDao.findByUserId(userId).map(p -> p.getPhone()).orElse(null);
@@ -43,6 +46,7 @@ public class UserUseCasesImpl implements GetUserUseCase, UpdateUserUseCase, Upda
 
     @Override
     @Transactional
+    @CacheEvict(value = "user-profile", key = "#userId")
     public UserResponse updateProfile(Long userId, UpdateUserRequestDto dto) {
         User user = findOrThrow(userId);
         user.setName(dto.getName().trim());
@@ -70,6 +74,7 @@ public class UserUseCasesImpl implements GetUserUseCase, UpdateUserUseCase, Upda
 
     @Override
     @Transactional
+    @CacheEvict(value = "user-profile", key = "#userId")
     public UserResponse updatePhone(Long userId, UpdatePhoneRequestDto dto) {
         User user = findOrThrow(userId);
         StoreProfile profile = storeProfileDao.findByUserId(userId)
