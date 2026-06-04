@@ -39,8 +39,8 @@ public class OrderCreatedEvent {
     public List<SellerGroupData> getSellerGroups() { return sellerGroups; }
 
     public record SellerGroupData(
-            String sellerEmail,
-            String sellerName,
+            List<String> memberEmails,
+            String storeName,
             BigDecimal subtotal,
             List<ItemData> items
     ) {}

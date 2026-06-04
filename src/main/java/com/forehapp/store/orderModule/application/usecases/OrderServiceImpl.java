@@ -310,11 +310,9 @@ public class OrderServiceImpl implements IOrderService {
         List<OrderCreatedEvent.SellerGroupData> sellerGroups = order.getSellerGroups().stream()
                 .map(group -> {
                     Store store = group.getStore();
-                    String storeEmail = membershipDao.findActiveByStoreId(store.getId()).stream()
-                            .filter(m -> m.getRole() == StoreMemberRole.OWNER)
-                            .findFirst()
+                    List<String> memberEmails = membershipDao.findActiveByStoreId(store.getId()).stream()
                             .map(m -> m.getStoreProfile().getUser().getEmail())
-                            .orElse(null);
+                            .toList();
 
                     List<OrderCreatedEvent.ItemData> items = group.getItems().stream()
                             .map(item -> new OrderCreatedEvent.ItemData(
@@ -326,7 +324,7 @@ public class OrderServiceImpl implements IOrderService {
                             ))
                             .toList();
 
-                    return new OrderCreatedEvent.SellerGroupData(storeEmail, store.getName(), group.getSubtotal(), items);
+                    return new OrderCreatedEvent.SellerGroupData(memberEmails, store.getName(), group.getSubtotal(), items);
                 })
                 .toList();
 

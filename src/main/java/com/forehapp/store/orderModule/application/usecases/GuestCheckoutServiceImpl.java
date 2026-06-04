@@ -289,11 +289,9 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
         List<OrderCreatedEvent.SellerGroupData> sellerGroups = order.getSellerGroups().stream()
                 .map(group -> {
                     Store store = group.getStore();
-                    String storeEmail = membershipDao.findActiveByStoreId(store.getId()).stream()
-                            .filter(m -> m.getRole() == StoreMemberRole.OWNER)
-                            .findFirst()
+                    List<String> memberEmails = membershipDao.findActiveByStoreId(store.getId()).stream()
                             .map(m -> m.getStoreProfile().getUser().getEmail())
-                            .orElse(null);
+                            .toList();
                     List<OrderCreatedEvent.ItemData> items = group.getItems().stream()
                             .map(item -> new OrderCreatedEvent.ItemData(
                                     item.getVariant().getProduct().getTitle(),
@@ -303,7 +301,7 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
                                     item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity()))
                             ))
                             .toList();
-                    return new OrderCreatedEvent.SellerGroupData(storeEmail, store.getName(),
+                    return new OrderCreatedEvent.SellerGroupData(memberEmails, store.getName(),
                             group.getSubtotal(), items);
                 })
                 .toList();
