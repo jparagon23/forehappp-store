@@ -300,7 +300,8 @@ public class CartServiceImpl implements ICartService {
                     BigDecimal subtotal = itemResponses.stream()
                             .map(CartItemResponse::subtotal)
                             .reduce(BigDecimal.ZERO, BigDecimal::add);
-                    return new CartSellerGroupResponse(entry.getKey(), store.getName(), itemResponses, subtotal);
+                    return new CartSellerGroupResponse(entry.getKey(), store.getName(), itemResponses, subtotal,
+                            store.getFreeShippingMinAmount());
                 })
                 .toList();
 

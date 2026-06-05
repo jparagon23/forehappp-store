@@ -37,6 +37,12 @@ public interface IProductRepository extends JpaRepository<Product, Long>, JpaSpe
                        p.category_id
                 FROM store_products p
                 WHERE p.status = 'ACTIVE'
+                  AND EXISTS (
+                      SELECT 1 FROM store_product_variants pv
+                      WHERE pv.product_id = p.product_id
+                        AND pv.active = TRUE
+                        AND pv.stock > 0
+                  )
             ) ranked
             ORDER BY ranked.cat_rank, CRC32(CONCAT(ranked.category_id, :seed))
             """, nativeQuery = true)
@@ -57,6 +63,12 @@ public interface IProductRepository extends JpaRepository<Product, Long>, JpaSpe
                        COUNT(*) OVER (PARTITION BY p.category_id) AS cat_total
                 FROM store_products p
                 WHERE p.status = 'ACTIVE'
+                  AND EXISTS (
+                      SELECT 1 FROM store_product_variants pv
+                      WHERE pv.product_id = p.product_id
+                        AND pv.active = TRUE
+                        AND pv.stock > 0
+                  )
             ) ranked
             WHERE ranked.rn <= :limit
             ORDER BY ranked.cat_total DESC, ranked.category_id, ranked.rn
