@@ -7,5 +7,6 @@ public record CartSellerGroupResponse(
         Long storeId,
         String storeName,
         List<CartItemResponse> items,
-        BigDecimal subtotal
+        BigDecimal subtotal,
+        BigDecimal freeShippingMinAmount
 ) {}
