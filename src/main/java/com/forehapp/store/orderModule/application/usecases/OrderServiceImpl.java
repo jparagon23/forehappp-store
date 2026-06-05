@@ -47,6 +47,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
@@ -72,6 +73,9 @@ public class OrderServiceImpl implements IOrderService {
 
     @Value("${app.inventory.low-stock-threshold:5}")
     private int lowStockThreshold;
+
+    @Value("${app.payment.mercado-pago-surcharge-rate:0.03}")
+    private BigDecimal mercadoPagoSurchargeRate;
 
     public OrderServiceImpl(ICartDao cartDao,
                             IOrderDao orderDao,
@@ -135,6 +139,15 @@ public class OrderServiceImpl implements IOrderService {
 
         if (dto.couponCode() != null && dto.couponStoreId() != null) {
             savedOrder = applyCoupon(userId, dto.couponCode(), dto.couponStoreId(), savedOrder);
+        }
+
+        if (dto.paymentMethod() == PaymentMethod.MERCADO_PAGO) {
+            BigDecimal surcharge = savedOrder.getTotal()
+                    .multiply(mercadoPagoSurchargeRate)
+                    .setScale(2, RoundingMode.HALF_UP);
+            savedOrder.setMercadoPagoSurcharge(surcharge);
+            savedOrder.setTotal(savedOrder.getTotal().add(surcharge));
+            savedOrder = orderDao.save(savedOrder);
         }
 
         cart.setStatus(CartStatus.CONVERTED);

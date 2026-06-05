@@ -39,6 +39,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.IntStream;
@@ -58,6 +59,9 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
 
     @Value("${app.inventory.low-stock-threshold:5}")
     private int lowStockThreshold;
+
+    @Value("${app.payment.mercado-pago-surcharge-rate:0.03}")
+    private BigDecimal mercadoPagoSurchargeRate;
 
     public GuestCheckoutServiceImpl(IOrderDao orderDao,
                                     IStoreMembershipDao membershipDao,
@@ -97,6 +101,15 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
 
         Order order = buildGuestOrder(dto, city, itemsByStore);
         Order savedOrder = orderDao.save(order);
+
+        if (dto.paymentMethod() == PaymentMethod.MERCADO_PAGO) {
+            BigDecimal surcharge = savedOrder.getTotal()
+                    .multiply(mercadoPagoSurchargeRate)
+                    .setScale(2, RoundingMode.HALF_UP);
+            savedOrder.setMercadoPagoSurcharge(surcharge);
+            savedOrder.setTotal(savedOrder.getTotal().add(surcharge));
+            savedOrder = orderDao.save(savedOrder);
+        }
 
         String checkoutUrl = switch (dto.paymentMethod()) {
             case MERCADO_PAGO -> paymentService.createMercadoPagoPreference(savedOrder);
@@ -158,7 +171,9 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
                 .map(ShippingEstimateGroupResponse::shippingCost)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        return new ShippingEstimateResponse(groups, itemsTotal, shippingTotal, itemsTotal.add(shippingTotal));
+        BigDecimal grandTotal = itemsTotal.add(shippingTotal);
+        BigDecimal mpSurcharge = grandTotal.multiply(mercadoPagoSurchargeRate).setScale(2, RoundingMode.HALF_UP);
+        return new ShippingEstimateResponse(groups, itemsTotal, shippingTotal, grandTotal, mpSurcharge, grandTotal.add(mpSurcharge));
     }
 
     private Order buildGuestOrder(GuestCreateOrderRequestDto dto, City city,
