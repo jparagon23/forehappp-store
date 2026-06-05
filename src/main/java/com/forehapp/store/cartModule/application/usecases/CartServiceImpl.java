@@ -28,10 +28,12 @@ import com.forehapp.store.userModule.domain.model.StoreRole;
 import com.forehapp.store.userModule.domain.model.UserAddress;
 import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
 import com.forehapp.store.userModule.domain.ports.out.IUserAddressRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +45,9 @@ import java.util.stream.Collectors;
 public class CartServiceImpl implements ICartService {
 
     private static final int MAX_ITEM_QUANTITY = 9999;
+
+    @Value("${app.payment.mercado-pago-surcharge-rate:0.035}")
+    private BigDecimal mercadoPagoSurchargeRate;
 
     private final ICartDao cartDao;
     private final IProductVariantDao productVariantDao;
@@ -225,7 +230,9 @@ public class CartServiceImpl implements ICartService {
                 .map(ShippingEstimateGroupResponse::shippingCost)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        return new ShippingEstimateResponse(groups, itemsTotal, shippingTotal, itemsTotal.add(shippingTotal));
+        BigDecimal grandTotal = itemsTotal.add(shippingTotal);
+        BigDecimal mpSurcharge = grandTotal.multiply(mercadoPagoSurchargeRate).setScale(2, RoundingMode.HALF_UP);
+        return new ShippingEstimateResponse(groups, itemsTotal, shippingTotal, grandTotal, mpSurcharge, grandTotal.add(mpSurcharge));
     }
 
     private BigDecimal resolveShippingCost(Long cityId, Store store, BigDecimal subtotal, List<CartItem> items) {

@@ -31,13 +31,25 @@ public class OrderMapper {
         List<OrderSellerGroupDto> groups = order.getSellerGroups().stream()
                 .map(this::toGroupDto)
                 .toList();
+
+        BigDecimal subtotal = order.getSellerGroups().stream()
+                .map(OrderSellerGroup::getSubtotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal shippingTotal = order.getSellerGroups().stream()
+                .map(OrderSellerGroup::getShippingCost)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
         return new OrderResponse(
                 order.getId(),
                 order.getStatus().name(),
                 order.getPaymentMethod(),
-                order.getTotal(),
+                subtotal,
+                shippingTotal,
                 order.getCouponCode(),
                 order.getCouponDiscount(),
+                order.getMercadoPagoSurcharge(),
+                order.getTotal(),
                 order.getShippingAddress(),
                 order.getShippingCity(),
                 order.getShippingCountry(),
