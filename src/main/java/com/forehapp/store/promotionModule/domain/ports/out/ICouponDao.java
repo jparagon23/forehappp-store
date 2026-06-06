@@ -16,5 +16,6 @@ public interface ICouponDao {
     void delete(Coupon coupon);
     long countRedemptionsByCouponId(Long couponId);
     long countRedemptionsByCouponIdAndProfileId(Long couponId, Long profileId);
+    long countRedemptionsByCouponIdAndGuestEmail(Long couponId, String guestEmail);
     CouponRedemption saveRedemption(CouponRedemption redemption);
 }

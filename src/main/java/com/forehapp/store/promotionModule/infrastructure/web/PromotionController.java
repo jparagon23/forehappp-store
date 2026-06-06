@@ -1,6 +1,7 @@
 package com.forehapp.store.promotionModule.infrastructure.web;
 
 import com.forehapp.store.promotionModule.application.dto.CouponValidationResponse;
+import com.forehapp.store.promotionModule.application.dto.GuestValidateCouponRequestDto;
 import com.forehapp.store.promotionModule.application.dto.RedeemCouponRequestDto;
 import com.forehapp.store.promotionModule.application.dto.ValidateCouponRequestDto;
 import com.forehapp.store.promotionModule.domain.ports.in.IPromotionService;
@@ -36,5 +37,11 @@ public class PromotionController {
             @AuthenticationPrincipal String userId,
             @Valid @RequestBody RedeemCouponRequestDto dto) {
         return promotionService.redeemCoupon(Long.parseLong(userId), dto);
+    }
+
+    @PostMapping("/validate/guest")
+    public CouponValidationResponse validateCouponAsGuest(@Valid @RequestBody GuestValidateCouponRequestDto dto) {
+        return promotionService.validateCouponAsGuest(dto.email(),
+                new ValidateCouponRequestDto(dto.code(), dto.storeId(), dto.orderAmount(), dto.shippingCost()));
     }
 }

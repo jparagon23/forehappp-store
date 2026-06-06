@@ -28,6 +28,9 @@ import com.forehapp.store.productModule.domain.model.ProductStatus;
 import com.forehapp.store.productModule.domain.model.ProductVariant;
 import com.forehapp.store.productModule.domain.ports.out.IProductDao;
 import com.forehapp.store.productModule.domain.ports.out.IProductVariantDao;
+import com.forehapp.store.promotionModule.application.dto.CouponValidationResponse;
+import com.forehapp.store.promotionModule.application.dto.RedeemCouponRequestDto;
+import com.forehapp.store.promotionModule.domain.ports.in.IPromotionService;
 import com.forehapp.store.shippingModule.domain.ports.out.IShippingZoneDao;
 import com.forehapp.store.storeModule.domain.model.Store;
 import com.forehapp.store.storeModule.domain.model.StoreMemberRole;
@@ -56,6 +59,7 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
     private final ApplicationEventPublisher eventPublisher;
     private final IShippingZoneDao shippingZoneDao;
     private final ICityDao cityDao;
+    private final IPromotionService promotionService;
 
     @Value("${app.inventory.low-stock-threshold:5}")
     private int lowStockThreshold;
@@ -71,7 +75,8 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
                                     OrderMapper orderMapper,
                                     ApplicationEventPublisher eventPublisher,
                                     IShippingZoneDao shippingZoneDao,
-                                    ICityDao cityDao) {
+                                    ICityDao cityDao,
+                                    IPromotionService promotionService) {
         this.orderDao = orderDao;
         this.membershipDao = membershipDao;
         this.productVariantDao = productVariantDao;
@@ -81,6 +86,7 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
         this.eventPublisher = eventPublisher;
         this.shippingZoneDao = shippingZoneDao;
         this.cityDao = cityDao;
+        this.promotionService = promotionService;
     }
 
     @Override
@@ -101,6 +107,10 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
 
         Order order = buildGuestOrder(dto, city, itemsByStore);
         Order savedOrder = orderDao.save(order);
+
+        if (dto.couponCode() != null && dto.couponStoreId() != null) {
+            savedOrder = applyGuestCoupon(dto.email(), dto.couponCode(), dto.couponStoreId(), savedOrder);
+        }
 
         if (dto.paymentMethod() == PaymentMethod.MERCADO_PAGO) {
             BigDecimal surcharge = savedOrder.getTotal()
@@ -289,6 +299,29 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
                 .or(shippingZoneDao::findActiveDefault)
                 .map(com.forehapp.store.shippingModule.domain.model.ShippingZone::getCost)
                 .orElse(BigDecimal.ZERO);
+    }
+
+    private Order applyGuestCoupon(String email, String couponCode, Long couponStoreId, Order savedOrder) {
+        boolean hasGroupForStore = savedOrder.getSellerGroups().stream()
+                .anyMatch(g -> g.getStore().getId().equals(couponStoreId));
+        if (!hasGroupForStore) {
+            throw new BadRequestException(ErrorCode.COUPON_INVALID,
+                    "Cart has no items from the coupon's store");
+        }
+
+        OrderSellerGroup group = savedOrder.getSellerGroups().stream()
+                .filter(g -> g.getStore().getId().equals(couponStoreId))
+                .findFirst()
+                .orElseThrow();
+
+        CouponValidationResponse couponResult = promotionService.redeemCouponAsGuest(email,
+                new RedeemCouponRequestDto(couponCode, couponStoreId, group.getSubtotal(),
+                        savedOrder.getId(), group.getShippingCost()));
+
+        savedOrder.setCouponCode(couponCode);
+        savedOrder.setCouponDiscount(couponResult.discountAmount());
+        savedOrder.setTotal(savedOrder.getTotal().subtract(couponResult.discountAmount()).max(BigDecimal.ZERO));
+        return orderDao.save(savedOrder);
     }
 
     private void transitionGroupsToPreparing(Order order) {

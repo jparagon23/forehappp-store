@@ -6,4 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface ICouponRedemptionRepository extends JpaRepository<CouponRedemption, Long> {
     long countByCouponId(Long couponId);
     long countByCouponIdAndProfileId(Long couponId, Long profileId);
+    long countByCouponIdAndGuestEmail(Long couponId, String guestEmail);
 }

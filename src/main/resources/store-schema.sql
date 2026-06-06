@@ -352,7 +352,8 @@ CREATE TABLE IF NOT EXISTS store_coupons (
 CREATE TABLE IF NOT EXISTS store_coupon_redemptions (
     redemption_id    BIGINT AUTO_INCREMENT PRIMARY KEY,
     coupon_id        BIGINT NOT NULL,
-    store_profile_id BIGINT NOT NULL,
+    store_profile_id BIGINT,
+    guest_email      VARCHAR(255),
     order_id         BIGINT,
     discount_applied DECIMAL(14,2) NOT NULL,
     used_at          DATETIME NOT NULL,

@@ -25,8 +25,11 @@ public class CouponRedemption {
     private Coupon coupon;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "store_profile_id", nullable = false)
+    @JoinColumn(name = "store_profile_id")
     private StoreProfile profile;
+
+    @Column(name = "guest_email", length = 255)
+    private String guestEmail;
 
     @Column(name = "order_id")
     private Long orderId;

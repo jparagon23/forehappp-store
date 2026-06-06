@@ -14,7 +14,7 @@ public record CreateCouponRequestDto(
         @NotBlank @Size(max = 50) String code,
         @Size(max = 255) String description,
         @NotNull DiscountType discountType,
-        @NotNull @DecimalMin("0.01") BigDecimal discountValue,
+        @DecimalMin("0.01") BigDecimal discountValue,
         @DecimalMin("0.0") BigDecimal minOrderAmount,
         @Min(1) Integer maxUses,
         @NotNull @Min(1) Integer maxUsesPerUser,
