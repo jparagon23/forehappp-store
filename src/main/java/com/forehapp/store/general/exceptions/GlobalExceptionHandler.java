@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestControllerAdvice
@@ -88,6 +89,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleResponseStatus(ResponseStatusException ex) {
         return ResponseEntity.status(ex.getStatusCode())
                 .body(new ErrorResponse(ErrorCode.INTERNAL_ERROR, ex.getReason()));
+    }
+
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public ResponseEntity<ErrorResponse> handleAsyncNotUsable(AsyncRequestNotUsableException ex) {
+        log.debug("Client disconnected before async response was written: {}", ex.getMessage());
+        return null;
     }
 
     @ExceptionHandler(HttpMessageNotWritableException.class)
