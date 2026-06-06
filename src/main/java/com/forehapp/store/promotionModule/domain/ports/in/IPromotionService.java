@@ -7,4 +7,6 @@ import com.forehapp.store.promotionModule.application.dto.ValidateCouponRequestD
 public interface IPromotionService {
     CouponValidationResponse validateCoupon(Long userId, ValidateCouponRequestDto dto);
     CouponValidationResponse redeemCoupon(Long userId, RedeemCouponRequestDto dto);
+    CouponValidationResponse validateCouponAsGuest(String guestEmail, ValidateCouponRequestDto dto);
+    CouponValidationResponse redeemCouponAsGuest(String guestEmail, RedeemCouponRequestDto dto);
 }

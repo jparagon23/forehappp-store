@@ -39,24 +39,13 @@ public class PromotionServiceImpl implements IPromotionService {
         Coupon coupon = couponDao.findByCode(dto.code().toUpperCase())
                 .orElseThrow(() -> new NotFoundException(ErrorCode.COUPON_NOT_FOUND, "Coupon not found"));
 
-        String error = checkCouponRules(coupon, dto.storeId(), dto.orderAmount(), profile.getId());
+        long userUses = couponDao.countRedemptionsByCouponIdAndProfileId(coupon.getId(), profile.getId());
+        String error = checkCouponRules(coupon, dto.storeId(), dto.orderAmount(), userUses);
         if (error != null) {
             throw new BadRequestException(ErrorCode.COUPON_INVALID, error);
         }
 
-        BigDecimal discountAmount = calculateDiscount(coupon, dto.orderAmount());
-        BigDecimal finalAmount = dto.orderAmount().subtract(discountAmount).max(BigDecimal.ZERO);
-
-        return new CouponValidationResponse(
-                true,
-                coupon.getId(),
-                coupon.getCode(),
-                coupon.getDiscountType().name(),
-                coupon.getDiscountValue(),
-                discountAmount,
-                finalAmount,
-                "Coupon applied successfully"
-        );
+        return buildValidationResponse(coupon, dto.orderAmount(), dto.shippingCost(), "Coupon applied successfully");
     }
 
     @Override
@@ -73,14 +62,13 @@ public class PromotionServiceImpl implements IPromotionService {
             couponDao.save(coupon);
         }
 
-        String error = checkCouponRules(coupon, dto.storeId(), dto.orderAmount(), profile.getId());
+        long userUses = couponDao.countRedemptionsByCouponIdAndProfileId(coupon.getId(), profile.getId());
+        String error = checkCouponRules(coupon, dto.storeId(), dto.orderAmount(), userUses);
         if (error != null) {
             throw new BadRequestException(ErrorCode.COUPON_INVALID, error);
         }
 
-        BigDecimal discountAmount = calculateDiscount(coupon, dto.orderAmount());
-        BigDecimal finalAmount = dto.orderAmount().subtract(discountAmount).max(BigDecimal.ZERO);
-
+        BigDecimal discountAmount = calculateDiscount(coupon, dto.orderAmount(), dto.shippingCost());
         CouponRedemption redemption = new CouponRedemption();
         redemption.setCoupon(coupon);
         redemption.setProfile(profile);
@@ -91,19 +79,58 @@ public class PromotionServiceImpl implements IPromotionService {
         coupon.setUsesCount(coupon.getUsesCount() + 1);
         couponDao.save(coupon);
 
-        return new CouponValidationResponse(
-                true,
-                coupon.getId(),
-                coupon.getCode(),
-                coupon.getDiscountType().name(),
-                coupon.getDiscountValue(),
-                discountAmount,
-                finalAmount,
-                "Coupon redeemed successfully"
-        );
+        return buildValidationResponse(coupon, dto.orderAmount(), dto.shippingCost(), "Coupon redeemed successfully");
     }
 
-    private String checkCouponRules(Coupon coupon, Long storeId, BigDecimal orderAmount, Long profileId) {
+    @Override
+    @Transactional(readOnly = true)
+    public CouponValidationResponse validateCouponAsGuest(String guestEmail, ValidateCouponRequestDto dto) {
+        Coupon coupon = couponDao.findByCode(dto.code().toUpperCase())
+                .orElseThrow(() -> new NotFoundException(ErrorCode.COUPON_NOT_FOUND, "Coupon not found"));
+
+        long userUses = couponDao.countRedemptionsByCouponIdAndGuestEmail(coupon.getId(), guestEmail.toLowerCase());
+        String error = checkCouponRules(coupon, dto.storeId(), dto.orderAmount(), userUses);
+        if (error != null) {
+            throw new BadRequestException(ErrorCode.COUPON_INVALID, error);
+        }
+
+        return buildValidationResponse(coupon, dto.orderAmount(), dto.shippingCost(), "Coupon applied successfully");
+    }
+
+    @Override
+    @Transactional
+    public CouponValidationResponse redeemCouponAsGuest(String guestEmail, RedeemCouponRequestDto dto) {
+        Coupon coupon = couponDao.findByCode(dto.code().toUpperCase())
+                .orElseThrow(() -> new NotFoundException(ErrorCode.COUPON_NOT_FOUND, "Coupon not found"));
+
+        if (coupon.getStatus() == PromotionStatus.ACTIVE
+                && coupon.getValidUntil() != null
+                && LocalDate.now().isAfter(coupon.getValidUntil())) {
+            coupon.setStatus(PromotionStatus.EXPIRED);
+            couponDao.save(coupon);
+        }
+
+        long userUses = couponDao.countRedemptionsByCouponIdAndGuestEmail(coupon.getId(), guestEmail.toLowerCase());
+        String error = checkCouponRules(coupon, dto.storeId(), dto.orderAmount(), userUses);
+        if (error != null) {
+            throw new BadRequestException(ErrorCode.COUPON_INVALID, error);
+        }
+
+        BigDecimal discountAmount = calculateDiscount(coupon, dto.orderAmount(), dto.shippingCost());
+        CouponRedemption redemption = new CouponRedemption();
+        redemption.setCoupon(coupon);
+        redemption.setGuestEmail(guestEmail.toLowerCase());
+        redemption.setOrderId(dto.orderId());
+        redemption.setDiscountApplied(discountAmount);
+        couponDao.saveRedemption(redemption);
+
+        coupon.setUsesCount(coupon.getUsesCount() + 1);
+        couponDao.save(coupon);
+
+        return buildValidationResponse(coupon, dto.orderAmount(), dto.shippingCost(), "Coupon redeemed successfully");
+    }
+
+    private String checkCouponRules(Coupon coupon, Long storeId, BigDecimal orderAmount, long userUses) {
         if (!coupon.getStore().getId().equals(storeId)) {
             return "Coupon is not valid for this store";
         }
@@ -123,20 +150,31 @@ public class PromotionServiceImpl implements IPromotionService {
         if (coupon.getMaxUses() != null && coupon.getUsesCount() >= coupon.getMaxUses()) {
             return "Coupon has reached its usage limit";
         }
-        long userUses = couponDao.countRedemptionsByCouponIdAndProfileId(coupon.getId(), profileId);
         if (userUses >= coupon.getMaxUsesPerUser()) {
             return "You have already used this coupon";
         }
         return null;
     }
 
-    private BigDecimal calculateDiscount(Coupon coupon, BigDecimal orderAmount) {
-        if (coupon.getDiscountType() == DiscountType.PERCENTAGE) {
-            return orderAmount
+    private CouponValidationResponse buildValidationResponse(Coupon coupon, BigDecimal orderAmount,
+                                                              BigDecimal shippingCost, String message) {
+        BigDecimal discountAmount = calculateDiscount(coupon, orderAmount, shippingCost);
+        BigDecimal finalAmount = coupon.getDiscountType() == DiscountType.FREE_SHIPPING
+                ? orderAmount
+                : orderAmount.subtract(discountAmount).max(BigDecimal.ZERO);
+        return new CouponValidationResponse(true, coupon.getId(), coupon.getCode(),
+                coupon.getDiscountType().name(), coupon.getDiscountValue(),
+                discountAmount, finalAmount, message);
+    }
+
+    private BigDecimal calculateDiscount(Coupon coupon, BigDecimal orderAmount, BigDecimal shippingCost) {
+        return switch (coupon.getDiscountType()) {
+            case PERCENTAGE -> orderAmount
                     .multiply(coupon.getDiscountValue())
                     .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-        }
-        return coupon.getDiscountValue().min(orderAmount);
+            case FIXED_AMOUNT -> coupon.getDiscountValue().min(orderAmount);
+            case FREE_SHIPPING -> shippingCost != null ? shippingCost : BigDecimal.ZERO;
+        };
     }
 
     private StoreProfile resolveProfile(Long userId) {

@@ -18,5 +18,7 @@ public record GuestCreateOrderRequestDto(
         @NotEmpty(message = "Order must have at least one item")
         @Size(max = 50, message = "Too many items in a single order")
         @Valid List<GuestOrderItemDto> items,
-        @NotNull(message = "Payment method is required") PaymentMethod paymentMethod
+        @NotNull(message = "Payment method is required") PaymentMethod paymentMethod,
+        String couponCode,
+        Long couponStoreId
 ) {}

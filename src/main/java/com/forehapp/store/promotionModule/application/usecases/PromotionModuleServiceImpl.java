@@ -9,6 +9,7 @@ import com.forehapp.store.promotionModule.application.dto.CouponResponse;
 import com.forehapp.store.promotionModule.application.dto.CreateCouponRequestDto;
 import com.forehapp.store.promotionModule.application.dto.UpdateCouponRequestDto;
 import com.forehapp.store.promotionModule.domain.model.Coupon;
+import com.forehapp.store.promotionModule.domain.model.DiscountType;
 import com.forehapp.store.promotionModule.domain.model.PromotionStatus;
 import com.forehapp.store.promotionModule.domain.ports.in.IPromotionModuleService;
 import com.forehapp.store.promotionModule.domain.ports.out.ICouponDao;
@@ -51,21 +52,11 @@ public class PromotionModuleServiceImpl implements IPromotionModuleService {
         if (couponDao.findByCode(dto.code().toUpperCase()).isPresent()) {
             throw new ConflictException(ErrorCode.COUPON_CODE_DUPLICATE, "Coupon code already exists");
         }
-        if (dto.validUntil() != null && dto.validUntil().isBefore(dto.validFrom())) {
-            throw new BadRequestException(ErrorCode.COUPON_DATE_INVALID, "validUntil must be after validFrom");
-        }
+        validateCreateRequest(dto);
 
         Coupon coupon = new Coupon();
         coupon.setStore(store);
-        coupon.setCode(dto.code().toUpperCase());
-        coupon.setDescription(dto.description());
-        coupon.setDiscountType(dto.discountType());
-        coupon.setDiscountValue(dto.discountValue());
-        coupon.setMinOrderAmount(dto.minOrderAmount());
-        coupon.setMaxUses(dto.maxUses());
-        coupon.setMaxUsesPerUser(dto.maxUsesPerUser());
-        coupon.setValidFrom(dto.validFrom());
-        coupon.setValidUntil(dto.validUntil());
+        populateCouponFields(coupon, dto);
 
         return toResponse(couponDao.save(coupon));
     }
@@ -127,21 +118,11 @@ public class PromotionModuleServiceImpl implements IPromotionModuleService {
         if (couponDao.findByCode(dto.code().toUpperCase()).isPresent()) {
             throw new ConflictException(ErrorCode.COUPON_CODE_DUPLICATE, "Coupon code already exists");
         }
-        if (dto.validUntil() != null && dto.validUntil().isBefore(dto.validFrom())) {
-            throw new BadRequestException(ErrorCode.COUPON_DATE_INVALID, "validUntil must be after validFrom");
-        }
+        validateCreateRequest(dto);
 
         Coupon coupon = new Coupon();
         coupon.setStore(store);
-        coupon.setCode(dto.code().toUpperCase());
-        coupon.setDescription(dto.description());
-        coupon.setDiscountType(dto.discountType());
-        coupon.setDiscountValue(dto.discountValue());
-        coupon.setMinOrderAmount(dto.minOrderAmount());
-        coupon.setMaxUses(dto.maxUses());
-        coupon.setMaxUsesPerUser(dto.maxUsesPerUser());
-        coupon.setValidFrom(dto.validFrom());
-        coupon.setValidUntil(dto.validUntil());
+        populateCouponFields(coupon, dto);
 
         return toResponse(couponDao.save(coupon));
     }
@@ -193,6 +174,30 @@ public class PromotionModuleServiceImpl implements IPromotionModuleService {
         if (!profile.getRoles().contains(StoreRole.STORE_ADMIN)) {
             throw new ForbiddenException(ErrorCode.STORE_ADMIN_REQUIRED, "Admin access required");
         }
+    }
+
+    private void validateCreateRequest(CreateCouponRequestDto dto) {
+        if (dto.discountType() != DiscountType.FREE_SHIPPING && dto.discountValue() == null) {
+            throw new BadRequestException(ErrorCode.COUPON_INVALID,
+                    "discountValue is required for PERCENTAGE and FIXED_AMOUNT coupons");
+        }
+        if (dto.validUntil() != null && dto.validUntil().isBefore(dto.validFrom())) {
+            throw new BadRequestException(ErrorCode.COUPON_DATE_INVALID, "validUntil must be after validFrom");
+        }
+    }
+
+    private void populateCouponFields(Coupon coupon, CreateCouponRequestDto dto) {
+        coupon.setCode(dto.code().toUpperCase());
+        coupon.setDescription(dto.description());
+        coupon.setDiscountType(dto.discountType());
+        coupon.setDiscountValue(dto.discountType() == DiscountType.FREE_SHIPPING
+                ? java.math.BigDecimal.ZERO
+                : dto.discountValue());
+        coupon.setMinOrderAmount(dto.minOrderAmount());
+        coupon.setMaxUses(dto.maxUses());
+        coupon.setMaxUsesPerUser(dto.maxUsesPerUser());
+        coupon.setValidFrom(dto.validFrom());
+        coupon.setValidUntil(dto.validUntil());
     }
 
     private CouponResponse toResponse(Coupon c) {

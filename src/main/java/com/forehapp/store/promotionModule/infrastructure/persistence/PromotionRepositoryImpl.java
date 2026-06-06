@@ -62,6 +62,11 @@ public class PromotionRepositoryImpl implements ICouponDao {
     }
 
     @Override
+    public long countRedemptionsByCouponIdAndGuestEmail(Long couponId, String guestEmail) {
+        return redemptionRepository.countByCouponIdAndGuestEmail(couponId, guestEmail);
+    }
+
+    @Override
     public CouponRedemption saveRedemption(CouponRedemption redemption) {
         return redemptionRepository.save(redemption);
     }

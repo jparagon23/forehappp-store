@@ -363,14 +363,16 @@ public class OrderServiceImpl implements IOrderService {
                     "Cart has no items from the coupon's store");
         }
 
-        BigDecimal groupSubtotal = savedOrder.getSellerGroups().stream()
+        OrderSellerGroup group = savedOrder.getSellerGroups().stream()
                 .filter(g -> g.getStore().getId().equals(couponStoreId))
                 .findFirst()
-                .map(OrderSellerGroup::getSubtotal)
-                .orElse(BigDecimal.ZERO);
+                .orElse(null);
+
+        BigDecimal groupSubtotal = group != null ? group.getSubtotal() : BigDecimal.ZERO;
+        BigDecimal groupShipping = group != null ? group.getShippingCost() : BigDecimal.ZERO;
 
         CouponValidationResponse couponResult = promotionService.redeemCoupon(userId,
-                new RedeemCouponRequestDto(couponCode, couponStoreId, groupSubtotal, savedOrder.getId()));
+                new RedeemCouponRequestDto(couponCode, couponStoreId, groupSubtotal, savedOrder.getId(), groupShipping));
 
         savedOrder.setCouponCode(couponCode);
         savedOrder.setCouponDiscount(couponResult.discountAmount());
