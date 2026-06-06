@@ -47,8 +47,9 @@ public class OrderEmailListener {
             }
         }
 
-        // Confirmar el pedido al comprador
-        if (event.getBuyerEmail() != null) {
+        // MercadoPago orders skip buyer confirmation here — payment is not yet confirmed.
+        // The buyer will receive the "Pago confirmado" email via OrderPaidEvent once the webhook fires.
+        if (event.getBuyerEmail() != null && !"MERCADO_PAGO".equals(event.getPaymentMethod())) {
             try {
                 String html = buildBuyerConfirmationEmail(event);
                 emailSender.sendEmail(
