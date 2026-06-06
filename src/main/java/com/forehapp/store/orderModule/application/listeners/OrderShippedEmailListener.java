@@ -80,17 +80,26 @@ public class OrderShippedEmailListener {
     }
 
     private String buildShippedEmail(OrderStatusChangedEvent event) {
-        return wrapLayout("📦", "#e3f2fd", "#1565c0",
-                "¡Tu pedido está en camino!",
-                "Hola <strong>%s</strong>, el vendedor ya despachó tu pedido.".formatted(event.getBuyerName()),
-                """
-                <table width="100%%" cellpadding="0" cellspacing="0" style="background:#e8f5e9;border-left:4px solid #2e7d32;border-radius:4px;padding:16px 20px;margin-bottom:24px;">
+        boolean hasTracking = event.getTrackingNumber() != null && !event.getTrackingNumber().isBlank();
+
+        String trackingRow = hasTracking
+                ? """
                   <tr>
                     <td style="font-size:13px;color:#555;width:130px;">Guía de envío</td>
                     <td style="font-size:16px;color:#1b5e20;font-weight:700;letter-spacing:1px;">%s</td>
                   </tr>
+                  """.formatted(event.getTrackingNumber())
+                : "";
+
+        String footer = hasTracking
+                ? "Puedes hacer seguimiento de tu envío con la guía indicada arriba."
+                : "El vendedor realizará la entrega directamente. Te avisaremos cuando sea entregado.";
+
+        String infoBox = """
+                <table width="100%%" cellpadding="0" cellspacing="0" style="background:#e8f5e9;border-left:4px solid #2e7d32;border-radius:4px;padding:16px 20px;margin-bottom:24px;">
+                  %s
                   <tr>
-                    <td style="padding-top:6px;font-size:13px;color:#555;">Orden #</td>
+                    <td style="padding-top:6px;font-size:13px;color:#555;width:130px;">Orden #</td>
                     <td style="padding-top:6px;font-size:13px;color:#222;">#%d</td>
                   </tr>
                   <tr>
@@ -98,10 +107,13 @@ public class OrderShippedEmailListener {
                     <td style="padding-top:6px;font-size:13px;color:#222;">%s, %s</td>
                   </tr>
                 </table>
-                """.formatted(event.getTrackingNumber(), event.getOrderId(),
-                        event.getShippingCity(), event.getShippingCountry())
-                        + buildItemTable(event),
-                "Puedes hacer seguimiento de tu envío con la guía indicada arriba.");
+                """.formatted(trackingRow, event.getOrderId(), event.getShippingCity(), event.getShippingCountry());
+
+        return wrapLayout("📦", "#e3f2fd", "#1565c0",
+                "¡Tu pedido está en camino!",
+                "Hola <strong>%s</strong>, el vendedor ya despachó tu pedido.".formatted(event.getBuyerName()),
+                infoBox + buildItemTable(event),
+                footer);
     }
 
     private String buildDeliveredEmail(OrderStatusChangedEvent event) {
