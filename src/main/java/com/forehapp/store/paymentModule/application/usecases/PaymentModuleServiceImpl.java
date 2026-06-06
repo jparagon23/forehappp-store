@@ -7,6 +7,7 @@ import com.forehapp.store.general.exceptions.ConflictException;
 import com.forehapp.store.general.exceptions.ErrorCode;
 import com.forehapp.store.general.exceptions.ForbiddenException;
 import com.forehapp.store.general.exceptions.NotFoundException;
+import com.forehapp.store.orderModule.domain.events.OrderCreatedEvent;
 import com.forehapp.store.orderModule.domain.events.OrderPaidEvent;
 import com.forehapp.store.orderModule.domain.model.Order;
 import com.forehapp.store.orderModule.domain.model.OrderSellerGroup;
@@ -18,9 +19,12 @@ import com.forehapp.store.paymentModule.domain.model.PaymentMethod;
 import com.forehapp.store.paymentModule.domain.model.PaymentStatus;
 import com.forehapp.store.paymentModule.domain.ports.in.IPaymentModuleService;
 import com.forehapp.store.paymentModule.infrastructure.persistence.IPaymentRepository;
+import com.forehapp.store.storeModule.domain.ports.out.IStoreMembershipDao;
 import com.forehapp.store.userModule.domain.model.StoreProfile;
 import com.forehapp.store.userModule.domain.model.StoreRole;
 import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
+
+import java.math.BigDecimal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
@@ -36,17 +40,20 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
     private final IOrderDao orderDao;
     private final IOrderGroupDao orderGroupDao;
     private final IStoreProfileDao storeProfileDao;
+    private final IStoreMembershipDao membershipDao;
     private final ApplicationEventPublisher eventPublisher;
 
     public PaymentModuleServiceImpl(IPaymentRepository paymentRepository,
                                     IOrderDao orderDao,
                                     IOrderGroupDao orderGroupDao,
                                     IStoreProfileDao storeProfileDao,
+                                    IStoreMembershipDao membershipDao,
                                     ApplicationEventPublisher eventPublisher) {
         this.paymentRepository = paymentRepository;
         this.orderDao = orderDao;
         this.orderGroupDao = orderGroupDao;
         this.storeProfileDao = storeProfileDao;
+        this.membershipDao = membershipDao;
         this.eventPublisher = eventPublisher;
     }
 
@@ -99,7 +106,7 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
                 payment.setReference(externalPaymentId);
                 paymentRepository.save(payment);
 
-                Order order = orderDao.findBasicById(orderId).orElse(null);
+                Order order = orderDao.findById(orderId).orElse(null);
                 if (order != null) {
                     order.setStatus(OrderStatus.PAID);
                     orderDao.save(order);
@@ -109,9 +116,12 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
 
                     String buyerEmail = order.getBuyerEmail();
                     String buyerName  = order.resolveContactName();
+
                     eventPublisher.publishEvent(new OrderPaidEvent(
                             order.getId(), buyerEmail, buyerName, order.getTotal(), order.getCreatedAt()
                     ));
+
+                    eventPublisher.publishEvent(buildSellerNotificationEvent(order, buyerName, buyerEmail));
                 }
             }
             case "rejected" -> {
@@ -194,5 +204,34 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
         if (!profile.getRoles().contains(StoreRole.STORE_ADMIN)) {
             throw new ForbiddenException(ErrorCode.PAYMENT_ACCESS_DENIED, "Access denied: STORE_ADMIN role required");
         }
+    }
+
+    private OrderCreatedEvent buildSellerNotificationEvent(Order order, String buyerName, String buyerEmail) {
+        java.util.List<OrderCreatedEvent.SellerGroupData> sellerGroups = order.getSellerGroups().stream()
+                .map(group -> {
+                    java.util.List<String> memberEmails = membershipDao.findActiveByStoreId(group.getStore().getId())
+                            .stream()
+                            .map(m -> m.getStoreProfile().getUser().getEmail())
+                            .toList();
+                    java.util.List<OrderCreatedEvent.ItemData> items = group.getItems().stream()
+                            .map(item -> new OrderCreatedEvent.ItemData(
+                                    item.getVariant().getProduct().getTitle(),
+                                    item.getVariant().getSku(),
+                                    item.getQuantity(),
+                                    item.getUnitPrice(),
+                                    item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity()))
+                            ))
+                            .toList();
+                    return new OrderCreatedEvent.SellerGroupData(memberEmails, group.getStore().getName(),
+                            group.getSubtotal(), items);
+                })
+                .toList();
+
+        return new OrderCreatedEvent(
+                order.getId(), buyerName, buyerEmail,
+                order.getShippingAddress(), order.getShippingCity(), order.getShippingCountry(),
+                order.getCreatedAt(), order.getTotal(), order.getPaymentMethod(),
+                sellerGroups, true
+        );
     }
 }

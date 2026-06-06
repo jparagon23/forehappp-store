@@ -16,6 +16,7 @@ public class OrderCreatedEvent {
     private final BigDecimal total;
     private final String paymentMethod;
     private final List<SellerGroupData> sellerGroups;
+    private final boolean paymentConfirmed;
 
     public OrderCreatedEvent(Long orderId,
                              String buyerName,
@@ -27,6 +28,21 @@ public class OrderCreatedEvent {
                              BigDecimal total,
                              String paymentMethod,
                              List<SellerGroupData> sellerGroups) {
+        this(orderId, buyerName, buyerEmail, shippingAddress, shippingCity, shippingCountry,
+                createdAt, total, paymentMethod, sellerGroups, false);
+    }
+
+    public OrderCreatedEvent(Long orderId,
+                             String buyerName,
+                             String buyerEmail,
+                             String shippingAddress,
+                             String shippingCity,
+                             String shippingCountry,
+                             LocalDateTime createdAt,
+                             BigDecimal total,
+                             String paymentMethod,
+                             List<SellerGroupData> sellerGroups,
+                             boolean paymentConfirmed) {
         this.orderId = orderId;
         this.buyerName = buyerName;
         this.buyerEmail = buyerEmail;
@@ -37,6 +53,7 @@ public class OrderCreatedEvent {
         this.total = total;
         this.paymentMethod = paymentMethod;
         this.sellerGroups = sellerGroups;
+        this.paymentConfirmed = paymentConfirmed;
     }
 
     public Long getOrderId()             { return orderId; }
@@ -49,6 +66,7 @@ public class OrderCreatedEvent {
     public BigDecimal getTotal()         { return total; }
     public String getPaymentMethod()     { return paymentMethod; }
     public List<SellerGroupData> getSellerGroups() { return sellerGroups; }
+    public boolean isPaymentConfirmed()  { return paymentConfirmed; }
 
     public record SellerGroupData(
             List<String> memberEmails,

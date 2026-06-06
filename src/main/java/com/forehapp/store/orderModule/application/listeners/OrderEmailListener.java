@@ -30,26 +30,29 @@ public class OrderEmailListener {
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onOrderCreated(OrderCreatedEvent event) {
-        // Notificar a todos los miembros de cada tienda involucrada
-        for (OrderCreatedEvent.SellerGroupData group : event.getSellerGroups()) {
-            String html = buildSellerEmail(event, group);
-            for (String email : group.memberEmails()) {
-                try {
-                    emailSender.sendEmail(
-                            email,
-                            "Nueva orden #" + event.getOrderId() + " recibida en Forehapp",
-                            html
-                    );
-                    log.info("[OrderEmail] Sent new order email to member={} orderId={}", email, event.getOrderId());
-                } catch (Exception e) {
-                    log.error("[OrderEmail] Failed to send email to member={} orderId={}", email, event.getOrderId(), e);
+        boolean isMercadoPago = "MERCADO_PAGO".equals(event.getPaymentMethod());
+
+        // For MP orders, seller notifications are held until payment is confirmed by the webhook.
+        if (!isMercadoPago || event.isPaymentConfirmed()) {
+            for (OrderCreatedEvent.SellerGroupData group : event.getSellerGroups()) {
+                String html = buildSellerEmail(event, group);
+                for (String email : group.memberEmails()) {
+                    try {
+                        emailSender.sendEmail(
+                                email,
+                                "Nueva orden #" + event.getOrderId() + " recibida en Forehapp",
+                                html
+                        );
+                        log.info("[OrderEmail] Sent new order email to member={} orderId={}", email, event.getOrderId());
+                    } catch (Exception e) {
+                        log.error("[OrderEmail] Failed to send email to member={} orderId={}", email, event.getOrderId(), e);
+                    }
                 }
             }
         }
 
-        // MercadoPago orders skip buyer confirmation here — payment is not yet confirmed.
-        // The buyer will receive the "Pago confirmado" email via OrderPaidEvent once the webhook fires.
-        if (event.getBuyerEmail() != null && !"MERCADO_PAGO".equals(event.getPaymentMethod())) {
+        // MP buyer confirmation is handled by OrderPaidEvent once the webhook confirms payment.
+        if (event.getBuyerEmail() != null && !isMercadoPago) {
             try {
                 String html = buildBuyerConfirmationEmail(event);
                 emailSender.sendEmail(
