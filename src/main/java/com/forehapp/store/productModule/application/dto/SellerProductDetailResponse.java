@@ -1,6 +1,7 @@
 package com.forehapp.store.productModule.application.dto;
 
 import com.forehapp.store.productModule.domain.model.Product;
+import com.forehapp.store.productModule.domain.model.ProductTag;
 import lombok.Getter;
 
 import java.time.LocalDateTime;
@@ -19,6 +20,7 @@ public class SellerProductDetailResponse {
     private final String category;
     private final String status;
     private final LocalDateTime createdAt;
+    private final List<String> tags;
     private final List<ProductVariantResponse> variants;
     private final List<ProductImageResponse> images;
 
@@ -33,6 +35,7 @@ public class SellerProductDetailResponse {
         this.category = product.getCategory().getDescription();
         this.status = product.getStatus().name();
         this.createdAt = product.getCreatedAt();
+        this.tags = product.getTags().stream().map(ProductTag::getTag).toList();
         this.variants = product.getVariants().stream()
                 .map(ProductVariantResponse::new)
                 .toList();

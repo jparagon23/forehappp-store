@@ -149,6 +149,15 @@ CREATE TABLE IF NOT EXISTS store_products (
     CONSTRAINT store_fk_prod_category FOREIGN KEY (category_id) REFERENCES store_categories(category_id)
 );
 
+CREATE TABLE IF NOT EXISTS store_product_tags (
+    id         BIGINT AUTO_INCREMENT PRIMARY KEY,
+    product_id BIGINT NOT NULL,
+    tag        VARCHAR(50) NOT NULL,
+    CONSTRAINT uk_product_tag             UNIQUE (product_id, tag),
+    CONSTRAINT store_fk_pt_product        FOREIGN KEY (product_id) REFERENCES store_products(product_id) ON DELETE CASCADE,
+    INDEX idx_product_tag_tag (tag)
+);
+
 CREATE TABLE IF NOT EXISTS store_product_images (
     id            BIGINT AUTO_INCREMENT PRIMARY KEY,
     product_id    BIGINT NOT NULL,
