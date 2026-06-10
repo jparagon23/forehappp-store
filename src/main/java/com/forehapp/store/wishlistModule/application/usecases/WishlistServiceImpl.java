@@ -17,6 +17,8 @@ import com.forehapp.store.wishlistModule.domain.model.Wishlist;
 import com.forehapp.store.wishlistModule.domain.model.WishlistItem;
 import com.forehapp.store.wishlistModule.domain.ports.in.IWishlistService;
 import com.forehapp.store.wishlistModule.domain.ports.out.IWishlistDao;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,6 +47,7 @@ public class WishlistServiceImpl implements IWishlistService {
     }
 
     @Override
+    @Cacheable(value = "wishlist", key = "#userId")
     @Transactional(readOnly = true)
     public WishlistResponse getWishlist(Long userId) {
         StoreProfile owner = resolveProfile(userId);
@@ -54,6 +57,7 @@ public class WishlistServiceImpl implements IWishlistService {
     }
 
     @Override
+    @CacheEvict(value = "wishlist", key = "#userId")
     @Transactional
     public WishlistResponse addItem(Long userId, AddToWishlistDto dto) {
         StoreProfile owner = resolveProfile(userId);
@@ -87,6 +91,7 @@ public class WishlistServiceImpl implements IWishlistService {
     }
 
     @Override
+    @CacheEvict(value = "wishlist", key = "#userId")
     @Transactional
     public WishlistResponse removeItem(Long userId, Long itemId) {
         StoreProfile owner = resolveProfile(userId);
@@ -97,6 +102,7 @@ public class WishlistServiceImpl implements IWishlistService {
     }
 
     @Override
+    @CacheEvict(value = "wishlist", key = "#userId")
     @Transactional
     public void clearWishlist(Long userId) {
         StoreProfile owner = resolveProfile(userId);
