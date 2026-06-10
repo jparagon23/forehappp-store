@@ -20,6 +20,8 @@ public class CacheConfig {
                 caffeineCache("public-products",              500,  180),
                 caffeineCache("public-product-brand-facets", 500,  180),
                 caffeineCache("discovery-sections",           50, 3600),
+                caffeineCache("seller-products",             200,   60),
+                caffeineCache("seller-product-detail",       500,   60),
                 caffeineCache("location-countries",    50, 86400),
                 caffeineCache("location-states",      500, 86400),
                 caffeineCache("location-cities",     5000, 86400),

@@ -4,7 +4,6 @@ import com.forehapp.store.productModule.domain.model.Product;
 import lombok.Getter;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Getter
 public class ProductResponse {
@@ -19,8 +18,8 @@ public class ProductResponse {
     private final String category;
     private final String status;
     private final LocalDateTime createdAt;
-    private final List<ProductVariantResponse> variants;
     private final boolean freeShipping;
+    private final int variantCount;
     private final String thumbnailUrl;
 
     public ProductResponse(Product product) {
@@ -38,10 +37,8 @@ public class ProductResponse {
         this.category = product.getCategory().getDescription();
         this.status = product.getStatus().name();
         this.createdAt = product.getCreatedAt();
-        this.variants = product.getVariants().stream()
-                .map(ProductVariantResponse::new)
-                .toList();
         this.freeShipping = Boolean.TRUE.equals(product.getFreeShipping());
+        this.variantCount = product.getVariantCount();
         this.thumbnailUrl = thumbnailUrl;
     }
 }

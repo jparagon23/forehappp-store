@@ -24,6 +24,7 @@ import com.forehapp.store.storeModule.domain.model.StoreMembership;
 import com.forehapp.store.storeModule.domain.model.StoreMemberRole;
 import com.forehapp.store.storeModule.domain.ports.out.IStoreMembershipDao;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -77,6 +78,7 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
+    @CacheEvict(value = {"public-products", "discovery-sections", "seller-products", "seller-product-detail"}, allEntries = true)
     public ProductResponse createProduct(CreateProductRequestDto dto, Long storeId, Long userId) {
         Store store = resolveStoreAccess(storeId, userId).getStore();
 
@@ -110,7 +112,7 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    @CacheEvict(value = {"public-products", "discovery-sections"}, allEntries = true)
+    @CacheEvict(value = {"public-products", "discovery-sections", "seller-products", "seller-product-detail"}, allEntries = true)
     public ProductResponse updateProduct(Long productId, UpdateProductRequestDto dto, Long storeId, Long userId) {
         resolveStoreAccess(storeId, userId);
         Product product = resolveStoreProduct(productId, storeId);
@@ -146,7 +148,7 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    @CacheEvict(value = {"public-products", "discovery-sections"}, allEntries = true)
+    @CacheEvict(value = {"public-products", "discovery-sections", "seller-products", "seller-product-detail"}, allEntries = true)
     public ProductVariantResponse addVariant(Long productId, CreateVariantDto dto, Long storeId, Long userId) {
         resolveStoreAccess(storeId, userId);
         Product product = resolveStoreProduct(productId, storeId);
@@ -185,7 +187,7 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    @CacheEvict(value = {"public-products", "discovery-sections"}, allEntries = true)
+    @CacheEvict(value = {"public-products", "discovery-sections", "seller-products", "seller-product-detail"}, allEntries = true)
     public ProductVariantResponse updateVariant(Long productId, Long variantId, UpdateVariantDto dto, Long storeId, Long userId) {
         resolveStoreAccess(storeId, userId);
         resolveStoreProduct(productId, storeId);
@@ -210,7 +212,7 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    @CacheEvict(value = {"public-products", "discovery-sections"}, allEntries = true)
+    @CacheEvict(value = {"public-products", "discovery-sections", "seller-products", "seller-product-detail"}, allEntries = true)
     public ProductResponse publish(Long productId, Long storeId, Long userId) {
         resolveStoreAccess(storeId, userId);
         Product product = resolveStoreProduct(productId, storeId);
@@ -239,7 +241,7 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    @CacheEvict(value = {"public-products", "discovery-sections"}, allEntries = true)
+    @CacheEvict(value = {"public-products", "discovery-sections", "seller-products", "seller-product-detail"}, allEntries = true)
     public ProductResponse deactivate(Long productId, Long storeId, Long userId) {
         resolveStoreAccess(storeId, userId);
         Product product = resolveStoreProduct(productId, storeId);
@@ -257,7 +259,7 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    @CacheEvict(value = {"public-products", "discovery-sections"}, allEntries = true)
+    @CacheEvict(value = {"public-products", "discovery-sections", "seller-products", "seller-product-detail"}, allEntries = true)
     public ProductResponse activate(Long productId, Long storeId, Long userId) {
         resolveStoreAccess(storeId, userId);
         Product product = resolveStoreProduct(productId, storeId);
@@ -275,7 +277,7 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    @CacheEvict(value = {"public-products", "discovery-sections"}, allEntries = true)
+    @CacheEvict(value = {"public-products", "discovery-sections", "seller-products", "seller-product-detail"}, allEntries = true)
     public void deleteProduct(Long productId, Long storeId, Long userId) {
         resolveStoreAccess(storeId, userId);
         Product product = resolveStoreProduct(productId, storeId);
@@ -290,7 +292,7 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    @CacheEvict(value = {"public-products", "discovery-sections"}, allEntries = true)
+    @CacheEvict(value = {"public-products", "discovery-sections", "seller-products", "seller-product-detail"}, allEntries = true)
     public void deleteVariant(Long productId, Long variantId, Long storeId, Long userId) {
         resolveStoreAccess(storeId, userId);
         Product product = resolveStoreProduct(productId, storeId);
@@ -322,6 +324,7 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(value = "seller-product-detail", key = "#storeId + ':' + #productId")
     public SellerProductDetailResponse getStoreProductById(Long productId, Long storeId, Long userId) {
         resolveStoreAccess(storeId, userId);
         Product product = resolveStoreProduct(productId, storeId);
@@ -333,6 +336,7 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(value = "seller-products", key = "#storeId")
     public List<ProductResponse> getStoreProducts(Long storeId, Long userId) {
         resolveStoreAccess(storeId, userId);
         return productDao.findAllByStoreId(storeId).stream()
@@ -349,7 +353,7 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    @CacheEvict(value = {"public-products", "discovery-sections"}, allEntries = true)
+    @CacheEvict(value = {"public-products", "discovery-sections", "seller-products", "seller-product-detail"}, allEntries = true)
     public ProductVariantResponse deactivateVariant(Long productId, Long variantId, Long storeId, Long userId) {
         resolveStoreAccess(storeId, userId);
         Product product = resolveStoreProduct(productId, storeId);
@@ -384,7 +388,7 @@ public class ProductServiceImpl implements IProductService {
 
     @Override
     @Transactional
-    @CacheEvict(value = {"public-products", "discovery-sections"}, allEntries = true)
+    @CacheEvict(value = {"public-products", "discovery-sections", "seller-products", "seller-product-detail"}, allEntries = true)
     public ProductVariantResponse activateVariant(Long productId, Long variantId, Long storeId, Long userId) {
         resolveStoreAccess(storeId, userId);
         resolveStoreProduct(productId, storeId);
