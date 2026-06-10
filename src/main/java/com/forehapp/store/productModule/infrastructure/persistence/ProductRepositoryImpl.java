@@ -5,6 +5,7 @@ import com.forehapp.store.productModule.domain.model.Product;
 import com.forehapp.store.productModule.domain.model.ProductDiscoverySection;
 import com.forehapp.store.productModule.domain.model.ProductSortBy;
 import com.forehapp.store.productModule.domain.model.ProductStatus;
+import com.forehapp.store.productModule.domain.model.ProductTag;
 import com.forehapp.store.productModule.domain.ports.out.IProductDao;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.CriteriaBuilder;
@@ -118,10 +119,20 @@ public class ProductRepositoryImpl implements IProductDao {
         if (search != null && !search.isBlank()) {
             String pattern = "%" + search.toLowerCase() + "%";
             Join<Object, Object> categoryJoin = root.join("category", JoinType.LEFT);
+
+            Subquery<Long> tagSub = query.subquery(Long.class);
+            Root<ProductTag> tagRoot = tagSub.from(ProductTag.class);
+            tagSub.select(cb.literal(1L))
+                    .where(
+                            cb.equal(tagRoot.get("product"), root),
+                            cb.like(cb.lower(tagRoot.get("tag")), pattern)
+                    );
+
             predicates.add(cb.or(
                     cb.like(cb.lower(root.get("title")), pattern),
                     cb.like(cb.lower(brandJoin.get("description")), pattern),
-                    cb.like(cb.lower(categoryJoin.get("description")), pattern)
+                    cb.like(cb.lower(categoryJoin.get("description")), pattern),
+                    cb.exists(tagSub)
             ));
         }
         if (categoryId != null) {

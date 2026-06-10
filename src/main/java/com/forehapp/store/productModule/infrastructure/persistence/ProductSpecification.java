@@ -2,6 +2,7 @@ package com.forehapp.store.productModule.infrastructure.persistence;
 
 import com.forehapp.store.productModule.domain.model.Product;
 import com.forehapp.store.productModule.domain.model.ProductStatus;
+import com.forehapp.store.productModule.domain.model.ProductTag;
 import com.forehapp.store.productModule.domain.model.ProductVariant;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Root;
@@ -22,11 +23,21 @@ public class ProductSpecification {
 
     public static Specification<Product> matchesSearch(String search) {
         String pattern = "%" + search.toLowerCase() + "%";
-        return (root, query, cb) -> cb.or(
-                cb.like(cb.lower(root.get("title")), pattern),
-                cb.like(cb.lower(root.join("category").get("description")), pattern),
-                cb.like(cb.lower(root.join("brand").get("description")), pattern)
-        );
+        return (root, query, cb) -> {
+            Subquery<Long> tagSub = query.subquery(Long.class);
+            Root<ProductTag> tagRoot = tagSub.from(ProductTag.class);
+            tagSub.select(cb.literal(1L))
+                    .where(
+                            cb.equal(tagRoot.get("product"), root),
+                            cb.like(cb.lower(tagRoot.get("tag")), pattern)
+                    );
+            return cb.or(
+                    cb.like(cb.lower(root.get("title")), pattern),
+                    cb.like(cb.lower(root.join("category").get("description")), pattern),
+                    cb.like(cb.lower(root.join("brand").get("description")), pattern),
+                    cb.exists(tagSub)
+            );
+        };
     }
 
     public static Specification<Product> hasCategory(Long categoryId) {

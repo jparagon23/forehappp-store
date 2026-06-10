@@ -1,6 +1,7 @@
 package com.forehapp.store.productModule.application.dto;
 
 import com.forehapp.store.productModule.domain.model.Product;
+import com.forehapp.store.productModule.domain.model.ProductTag;
 import com.forehapp.store.storeModule.domain.model.Store;
 import lombok.Getter;
 
@@ -24,6 +25,7 @@ public class PublicProductDetailResponse {
     private final String category;
     private final LocalDateTime createdAt;
     private final boolean freeShipping;
+    private final List<String> tags;
     private final List<ProductVariantResponse> variants;
     private final List<ProductImageResponse> images;
     private final SellerInfo store;
@@ -37,6 +39,7 @@ public class PublicProductDetailResponse {
         this.category = product.getCategory().getDescription();
         this.createdAt = product.getCreatedAt();
         this.freeShipping = Boolean.TRUE.equals(product.getFreeShipping());
+        this.tags = product.getTags().stream().map(ProductTag::getTag).toList();
         this.variants = product.getVariants().stream()
                 .filter(v -> Boolean.TRUE.equals(v.getActive()))
                 .map(ProductVariantResponse::new)
