@@ -46,7 +46,7 @@ public class ProductImageServiceImpl implements IProductImageService {
 
     @Override
     @Transactional
-    @CacheEvict(value = {"public-products", "discovery-sections"}, allEntries = true)
+    @CacheEvict(value = {"public-products", "discovery-sections", "seller-products", "seller-product-detail"}, allEntries = true)
     public ProductImageResponse upload(Long productId, MultipartFile file, Long storeId, Long userId) {
         validateFile(file);
         resolveStoreAccess(storeId, userId);
@@ -68,7 +68,7 @@ public class ProductImageServiceImpl implements IProductImageService {
 
     @Override
     @Transactional
-    @CacheEvict(value = {"public-products", "discovery-sections"}, allEntries = true)
+    @CacheEvict(value = {"public-products", "discovery-sections", "seller-products", "seller-product-detail"}, allEntries = true)
     public void delete(Long productId, Long imageId, Long storeId, Long userId) {
         resolveStoreAccess(storeId, userId);
         productDao.findByIdAndStoreId(productId, storeId)
