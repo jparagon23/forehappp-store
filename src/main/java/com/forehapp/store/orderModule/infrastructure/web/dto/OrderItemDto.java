@@ -9,6 +9,7 @@ public record OrderItemDto(
         String sku,
         String productTitle,
         String categoryName,
+        String brandName,
         String lineName,
         List<VariantAttributeDto> attributes,
         Integer quantity,

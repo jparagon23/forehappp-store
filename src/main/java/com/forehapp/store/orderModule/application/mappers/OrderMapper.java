@@ -110,6 +110,7 @@ public class OrderMapper {
                 item.getVariant().getSku(),
                 product.getTitle(),
                 product.getCategory().getDescription(),
+                product.getBrand().getDescription(),
                 product.getLine() != null ? product.getLine().getDescription() : null,
                 attributes,
                 item.getQuantity(),

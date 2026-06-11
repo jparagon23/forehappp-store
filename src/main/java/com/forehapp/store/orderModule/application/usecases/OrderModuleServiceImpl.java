@@ -220,6 +220,7 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
                             i.getVariant().getSku(),
                             product.getTitle(),
                             product.getCategory().getDescription(),
+                            product.getBrand().getDescription(),
                             product.getLine() != null ? product.getLine().getDescription() : null,
                             attributes,
                             i.getQuantity(),
