@@ -17,7 +17,10 @@ public interface IOrderSellerGroupRepository extends JpaRepository<OrderSellerGr
             LEFT JOIN FETCH b.user
             LEFT JOIN FETCH g.items i
             LEFT JOIN FETCH i.variant v
-            LEFT JOIN FETCH v.product
+            LEFT JOIN FETCH v.product p
+            JOIN FETCH p.category
+            JOIN FETCH p.brand
+            LEFT JOIN FETCH p.line
             WHERE g.id = :groupId
             """)
     Optional<OrderSellerGroup> findByIdWithDetails(@Param("groupId") Long groupId);
@@ -29,7 +32,10 @@ public interface IOrderSellerGroupRepository extends JpaRepository<OrderSellerGr
             LEFT JOIN FETCH b.user
             LEFT JOIN FETCH g.items i
             LEFT JOIN FETCH i.variant v
-            LEFT JOIN FETCH v.product
+            LEFT JOIN FETCH v.product p
+            JOIN FETCH p.category
+            JOIN FETCH p.brand
+            LEFT JOIN FETCH p.line
             WHERE g.store.id = :storeId
               AND g.status <> com.forehapp.store.orderModule.domain.model.OrderSellerGroupStatus.PENDING
             ORDER BY o.createdAt DESC
