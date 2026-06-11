@@ -15,7 +15,11 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/products/public")
@@ -33,6 +37,9 @@ public class PublicProductController {
             @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false) Long brandId,
             @RequestParam(required = false) Boolean freeShipping,
+            @RequestParam(required = false) Long storeId,
+            @RequestParam(required = false) BigDecimal maxPrice,
+            @RequestParam(required = false) String excludeProductIds,
             @RequestParam(defaultValue = "NEWEST") String sortBy,
             @RequestParam(defaultValue = "0") String page,
             @RequestParam(defaultValue = "20") String size) {
@@ -40,13 +47,14 @@ public class PublicProductController {
         int pageNum = parseIntSafe(page, 0);
         int pageSize = Math.min(parseIntSafe(size, 20), 50);
         ProductSortBy sort = parseSortBy(sortBy);
+        List<Long> excludeIds = parseExcludeIds(excludeProductIds);
 
         Pageable pageable = sort == ProductSortBy.NEWEST
                 ? PageRequest.of(pageNum, pageSize, Sort.by(Sort.Direction.DESC, "createdAt"))
                 : PageRequest.of(pageNum, pageSize);
 
         Page<PublicProductSummaryResponse> productsPage =
-                publicProductService.findActiveProducts(search, categoryId, brandId, freeShipping, sort, pageable);
+                publicProductService.findActiveProducts(search, categoryId, brandId, freeShipping, sort, pageable, storeId, maxPrice, excludeIds);
 
         ProductFacetsResponse facets = null;
         if (search != null || categoryId != null) {
@@ -56,6 +64,18 @@ public class PublicProductController {
         }
 
         return ResponseEntity.ok(new ProductListingResponse(productsPage, facets));
+    }
+
+    private List<Long> parseExcludeIds(String csv) {
+        if (csv == null || csv.isBlank()) return Collections.emptyList();
+        return Arrays.stream(csv.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .flatMap(s -> {
+                    try { return java.util.stream.Stream.of(Long.parseLong(s)); }
+                    catch (NumberFormatException e) { return java.util.stream.Stream.empty(); }
+                })
+                .collect(Collectors.toList());
     }
 
     private int parseIntSafe(String value, int defaultValue) {

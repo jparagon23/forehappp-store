@@ -12,6 +12,7 @@ import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 public class ProductSpecification {
 
@@ -63,6 +64,24 @@ public class ProductSpecification {
             }
             return cb.conjunction();
         };
+    }
+
+    public static Specification<Product> hasStore(Long storeId) {
+        return (root, query, cb) -> cb.equal(root.get("store").get("id"), storeId);
+    }
+
+    public static Specification<Product> maxPrice(BigDecimal maxPrice) {
+        return (root, query, cb) -> {
+            Subquery<BigDecimal> sub = query.subquery(BigDecimal.class);
+            Root<ProductVariant> v = sub.from(ProductVariant.class);
+            sub.select(cb.min(v.get("price")))
+                    .where(cb.equal(v.get("product"), root), cb.isTrue(v.get("active")));
+            return cb.lessThanOrEqualTo(sub, maxPrice);
+        };
+    }
+
+    public static Specification<Product> excludeIds(List<Long> ids) {
+        return (root, query, cb) -> root.get("id").in(ids).not();
     }
 
     public static Specification<Product> withDiscoveryOrder() {

@@ -335,6 +335,7 @@ public class CartServiceImpl implements ICartService {
         return new CartItemResponse(
                 item.getId(),
                 variant.getId(),
+                variant.getProduct().getId(),
                 variant.getSku(),
                 variant.getProduct().getTitle(),
                 item.getQuantity(),

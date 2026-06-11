@@ -21,6 +21,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
@@ -40,10 +41,10 @@ public class PublicProductServiceImpl implements IPublicProductService {
 
     @Override
     @Cacheable(value = "public-products",
-               key = "#search + ':' + #categoryId + ':' + #brandId + ':' + #freeShipping + ':' + #sortBy + ':' + (#sortBy.name() == 'DISCOVERY' ? T(java.time.LocalDate).now().toString() : '') + ':' + #pageable.pageNumber + ':' + #pageable.pageSize")
+               key = "#search + ':' + #categoryId + ':' + #brandId + ':' + #freeShipping + ':' + #sortBy + ':' + (#sortBy.name() == 'DISCOVERY' ? T(java.time.LocalDate).now().toString() : '') + ':' + #pageable.pageNumber + ':' + #pageable.pageSize + ':' + #storeId + ':' + #maxPrice + ':' + #excludeProductIds")
     @Transactional(readOnly = true)
-    public Page<PublicProductSummaryResponse> findActiveProducts(String search, Long categoryId, Long brandId, Boolean freeShipping, ProductSortBy sortBy, Pageable pageable) {
-        return productDao.findActiveProducts(search, categoryId, brandId, freeShipping, sortBy, pageable)
+    public Page<PublicProductSummaryResponse> findActiveProducts(String search, Long categoryId, Long brandId, Boolean freeShipping, ProductSortBy sortBy, Pageable pageable, Long storeId, BigDecimal maxPrice, List<Long> excludeProductIds) {
+        return productDao.findActiveProducts(search, categoryId, brandId, freeShipping, sortBy, pageable, storeId, maxPrice, excludeProductIds)
                 .map(p -> {
                     String thumbnail = p.getImages().stream()
                             .findFirst()

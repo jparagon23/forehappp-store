@@ -8,6 +8,7 @@ import com.forehapp.store.productModule.domain.model.ProductStatus;
 import com.forehapp.store.productModule.domain.model.ProductTag;
 import com.forehapp.store.productModule.domain.ports.out.IProductDao;
 import jakarta.persistence.EntityManager;
+import java.math.BigDecimal;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Expression;
@@ -61,8 +62,9 @@ public class ProductRepositoryImpl implements IProductDao {
     }
 
     @Override
-    public Page<Product> findActiveProducts(String search, Long categoryId, Long brandId, Boolean freeShipping, ProductSortBy sortBy, Pageable pageable) {
-        if (sortBy == ProductSortBy.DISCOVERY && search == null && categoryId == null && brandId == null && !Boolean.TRUE.equals(freeShipping)) {
+    public Page<Product> findActiveProducts(String search, Long categoryId, Long brandId, Boolean freeShipping, ProductSortBy sortBy, Pageable pageable, Long storeId, BigDecimal maxPrice, List<Long> excludeProductIds) {
+        boolean hasRecommendationFilters = storeId != null || maxPrice != null || (excludeProductIds != null && !excludeProductIds.isEmpty());
+        if (sortBy == ProductSortBy.DISCOVERY && search == null && categoryId == null && brandId == null && !Boolean.TRUE.equals(freeShipping) && !hasRecommendationFilters) {
             return findDiscoveryProducts(pageable);
         }
 
@@ -78,6 +80,15 @@ public class ProductRepositoryImpl implements IProductDao {
         }
         if (Boolean.TRUE.equals(freeShipping)) {
             spec = spec.and(ProductSpecification.hasFreeShipping());
+        }
+        if (storeId != null) {
+            spec = spec.and(ProductSpecification.hasStore(storeId));
+        }
+        if (maxPrice != null) {
+            spec = spec.and(ProductSpecification.maxPrice(maxPrice));
+        }
+        if (excludeProductIds != null && !excludeProductIds.isEmpty()) {
+            spec = spec.and(ProductSpecification.excludeIds(excludeProductIds));
         }
         if (sortBy == ProductSortBy.PRICE_ASC) {
             spec = spec.and(ProductSpecification.withPriceOrder(Sort.Direction.ASC));
