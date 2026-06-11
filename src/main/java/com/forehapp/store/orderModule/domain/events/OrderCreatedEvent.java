@@ -72,6 +72,7 @@ public class OrderCreatedEvent {
             List<String> memberEmails,
             String storeName,
             BigDecimal subtotal,
+            BigDecimal shippingCost,
             List<ItemData> items
     ) {}
 

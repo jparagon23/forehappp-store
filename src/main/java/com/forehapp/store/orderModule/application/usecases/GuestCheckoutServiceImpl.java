@@ -350,7 +350,7 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
                             ))
                             .toList();
                     return new OrderCreatedEvent.SellerGroupData(memberEmails, store.getName(),
-                            group.getSubtotal(), items);
+                            group.getSubtotal(), group.getShippingCost(), items);
                 })
                 .toList();
 

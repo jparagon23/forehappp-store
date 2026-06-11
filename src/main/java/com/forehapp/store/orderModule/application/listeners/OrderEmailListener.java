@@ -151,8 +151,18 @@ public class OrderEmailListener {
                           <!-- Total -->
                           <table width="100%%" cellpadding="0" cellspacing="0" style="margin-top:12px;">
                             <tr>
-                              <td style="text-align:right;padding:12px 8px;font-size:16px;color:#333;">
-                                <strong>Total de tu parte:</strong>
+                              <td style="text-align:right;padding:6px 8px;font-size:13px;color:#555;">
+                                Subtotal productos: <strong>$%s COP</strong>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="text-align:right;padding:6px 8px;font-size:13px;color:#555;">
+                                Costo de envío: <strong>$%s COP</strong>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="text-align:right;padding:10px 8px;font-size:16px;color:#333;border-top:2px solid #e8e8e8;">
+                                <strong>Total a cobrar:</strong>
                                 <span style="color:#1a1a2e;font-size:18px;margin-left:12px;">$%s COP</span>
                               </td>
                             </tr>
@@ -184,7 +194,9 @@ public class OrderEmailListener {
                 event.getBuyerName(),
                 event.getShippingAddress(), event.getShippingCity(), event.getShippingCountry(),
                 rows.toString(),
-                formatAmount(group.subtotal())
+                formatAmount(group.subtotal()),
+                formatAmount(group.shippingCost()),
+                formatAmount(group.subtotal().add(group.shippingCost()))
         );
     }
 

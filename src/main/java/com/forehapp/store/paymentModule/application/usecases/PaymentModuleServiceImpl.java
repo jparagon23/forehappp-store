@@ -223,7 +223,7 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
                             ))
                             .toList();
                     return new OrderCreatedEvent.SellerGroupData(memberEmails, group.getStore().getName(),
-                            group.getSubtotal(), items);
+                            group.getSubtotal(), group.getShippingCost(), items);
                 })
                 .toList();
 

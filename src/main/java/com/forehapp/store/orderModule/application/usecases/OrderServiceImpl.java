@@ -337,7 +337,7 @@ public class OrderServiceImpl implements IOrderService {
                             ))
                             .toList();
 
-                    return new OrderCreatedEvent.SellerGroupData(memberEmails, store.getName(), group.getSubtotal(), items);
+                    return new OrderCreatedEvent.SellerGroupData(memberEmails, store.getName(), group.getSubtotal(), group.getShippingCost(), items);
                 })
                 .toList();
 
