@@ -9,6 +9,7 @@ import com.forehapp.store.orderModule.infrastructure.web.dto.OrderResponse;
 import com.forehapp.store.orderModule.infrastructure.web.dto.OrderSellerGroupDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.OrderSummaryDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.VariantAttributeDto;
+import com.forehapp.store.productModule.domain.model.Product;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -102,11 +103,14 @@ public class OrderMapper {
                         av.getAttribute().getDescription(),
                         av.getDescription()))
                 .toList();
+        Product product = item.getVariant().getProduct();
         return new OrderItemDto(
                 item.getId(),
                 item.getVariant().getId(),
                 item.getVariant().getSku(),
-                item.getVariant().getProduct().getTitle(),
+                product.getTitle(),
+                product.getCategory().getDescription(),
+                product.getLine() != null ? product.getLine().getDescription() : null,
                 attributes,
                 item.getQuantity(),
                 item.getUnitPrice(),

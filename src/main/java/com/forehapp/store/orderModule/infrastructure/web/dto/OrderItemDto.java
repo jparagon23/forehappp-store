@@ -8,6 +8,8 @@ public record OrderItemDto(
         Long variantId,
         String sku,
         String productTitle,
+        String categoryName,
+        String lineName,
         List<VariantAttributeDto> attributes,
         Integer quantity,
         BigDecimal unitPrice,

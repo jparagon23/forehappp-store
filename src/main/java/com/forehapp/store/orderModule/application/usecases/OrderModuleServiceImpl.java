@@ -19,6 +19,7 @@ import com.forehapp.store.orderModule.infrastructure.web.dto.VariantAttributeDto
 import com.forehapp.store.paymentModule.domain.model.PaymentMethod;
 import com.forehapp.store.paymentModule.domain.model.PaymentStatus;
 import com.forehapp.store.paymentModule.infrastructure.persistence.IPaymentRepository;
+import com.forehapp.store.productModule.domain.model.Product;
 import com.forehapp.store.storeModule.domain.ports.out.IStoreMembershipDao;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -212,11 +213,14 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
                                     av.getAttribute().getDescription(),
                                     av.getDescription()))
                             .toList();
+                    Product product = i.getVariant().getProduct();
                     return new OrderItemDto(
                             i.getId(),
                             i.getVariant().getId(),
                             i.getVariant().getSku(),
-                            i.getVariant().getProduct().getTitle(),
+                            product.getTitle(),
+                            product.getCategory().getDescription(),
+                            product.getLine() != null ? product.getLine().getDescription() : null,
                             attributes,
                             i.getQuantity(),
                             i.getUnitPrice(),
