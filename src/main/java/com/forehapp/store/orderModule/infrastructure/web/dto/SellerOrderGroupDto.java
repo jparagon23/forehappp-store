@@ -17,6 +17,7 @@ public record SellerOrderGroupDto(
         String orderPaymentStatus,
         String status,
         BigDecimal subtotal,
+        BigDecimal shippingCost,
         String trackingNumber,
         LocalDateTime preparedAt,
         LocalDateTime shippedAt,
