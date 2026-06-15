@@ -28,6 +28,11 @@ import com.forehapp.store.productModule.domain.model.ProductStatus;
 import com.forehapp.store.productModule.domain.model.ProductVariant;
 import com.forehapp.store.productModule.domain.ports.out.IProductDao;
 import com.forehapp.store.productModule.domain.ports.out.IProductVariantDao;
+import com.forehapp.store.ambassadorModule.domain.model.Ambassador;
+import com.forehapp.store.ambassadorModule.domain.model.AmbassadorCommission;
+import com.forehapp.store.ambassadorModule.domain.model.AmbassadorStatus;
+import com.forehapp.store.ambassadorModule.domain.ports.out.IAmbassadorDao;
+import com.forehapp.store.ambassadorModule.domain.ports.out.ICommissionDao;
 import com.forehapp.store.promotionModule.application.dto.CouponValidationResponse;
 import com.forehapp.store.promotionModule.application.dto.RedeemCouponRequestDto;
 import com.forehapp.store.promotionModule.domain.ports.in.IPromotionService;
@@ -60,6 +65,8 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
     private final IShippingZoneDao shippingZoneDao;
     private final ICityDao cityDao;
     private final IPromotionService promotionService;
+    private final IAmbassadorDao ambassadorDao;
+    private final ICommissionDao commissionDao;
 
     @Value("${app.inventory.low-stock-threshold:5}")
     private int lowStockThreshold;
@@ -76,7 +83,9 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
                                     ApplicationEventPublisher eventPublisher,
                                     IShippingZoneDao shippingZoneDao,
                                     ICityDao cityDao,
-                                    IPromotionService promotionService) {
+                                    IPromotionService promotionService,
+                                    IAmbassadorDao ambassadorDao,
+                                    ICommissionDao commissionDao) {
         this.orderDao = orderDao;
         this.membershipDao = membershipDao;
         this.productVariantDao = productVariantDao;
@@ -87,6 +96,8 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
         this.shippingZoneDao = shippingZoneDao;
         this.cityDao = cityDao;
         this.promotionService = promotionService;
+        this.ambassadorDao = ambassadorDao;
+        this.commissionDao = commissionDao;
     }
 
     @Override
@@ -110,6 +121,10 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
 
         if (dto.couponCode() != null && dto.couponStoreId() != null) {
             savedOrder = applyGuestCoupon(dto.email(), dto.couponCode(), dto.couponStoreId(), savedOrder);
+        }
+
+        if (dto.referralCode() != null && !dto.referralCode().isBlank()) {
+            applyReferralCode(dto.referralCode().toUpperCase(), savedOrder);
         }
 
         if (dto.paymentMethod() == PaymentMethod.MERCADO_PAGO) {
@@ -378,6 +393,26 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
                             + " " + ownerMembership.getStoreProfile().getUser().getLastname();
                     eventPublisher.publishEvent(new LowStockEvent(ownerEmail, ownerName,
                             variant.getProduct().getTitle(), variant.getSku(), newStock));
+                });
+    }
+
+    private void applyReferralCode(String referralCode, Order order) {
+        ambassadorDao.findByReferralCode(referralCode)
+                .filter(a -> a.getStatus() == AmbassadorStatus.ACTIVE)
+                .ifPresent(ambassador -> {
+                    order.setReferralCode(referralCode);
+                    orderDao.save(order);
+
+                    java.math.BigDecimal commissionAmount = order.getTotal()
+                            .multiply(ambassador.getCommissionPercentage())
+                            .divide(java.math.BigDecimal.valueOf(100), 2, java.math.RoundingMode.HALF_UP);
+
+                    AmbassadorCommission commission = new AmbassadorCommission();
+                    commission.setAmbassador(ambassador);
+                    commission.setOrderId(order.getId());
+                    commission.setCommissionAmount(commissionAmount);
+                    commission.setCommissionPercentage(ambassador.getCommissionPercentage());
+                    commissionDao.save(commission);
                 });
     }
 

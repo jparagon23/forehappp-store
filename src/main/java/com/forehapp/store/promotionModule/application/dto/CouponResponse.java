@@ -19,5 +19,6 @@ public record CouponResponse(
         LocalDate validFrom,
         LocalDate validUntil,
         String status,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        Long assignedToProfileId
 ) {}

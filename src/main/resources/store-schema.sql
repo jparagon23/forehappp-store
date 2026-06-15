@@ -696,3 +696,54 @@ SET @s = (SELECT IF(COUNT(*) = 0,
   'SELECT 1')
   FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_orders' AND COLUMN_NAME = 'mercado_pago_surcharge');
 PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- =====================
+-- Migration: store_coupons — assigned_to_profile_id (personalized coupons)
+-- =====================
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_coupons ADD COLUMN assigned_to_profile_id BIGINT, ADD CONSTRAINT store_fk_coupon_profile FOREIGN KEY (assigned_to_profile_id) REFERENCES store_profiles(store_profile_id)',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_coupons' AND COLUMN_NAME = 'assigned_to_profile_id');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- =====================
+-- Ambassador Program
+-- =====================
+
+INSERT IGNORE INTO store_roles (role_name) VALUES ('AMBASSADOR');
+
+CREATE TABLE IF NOT EXISTS store_ambassadors (
+    ambassador_id         BIGINT AUTO_INCREMENT PRIMARY KEY,
+    store_profile_id      BIGINT NOT NULL,
+    referral_code         VARCHAR(50) NOT NULL,
+    commission_percentage DECIMAL(5,2) NOT NULL,
+    status                VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    created_at            DATETIME NOT NULL,
+    CONSTRAINT uk_ambassador_profile      UNIQUE (store_profile_id),
+    CONSTRAINT uk_ambassador_referral_code UNIQUE (referral_code),
+    CONSTRAINT store_fk_amb_profile FOREIGN KEY (store_profile_id) REFERENCES store_profiles(store_profile_id)
+);
+
+CREATE TABLE IF NOT EXISTS store_ambassador_commissions (
+    commission_id         BIGINT AUTO_INCREMENT PRIMARY KEY,
+    ambassador_id         BIGINT NOT NULL,
+    order_id              BIGINT NOT NULL,
+    commission_amount     DECIMAL(14,2) NOT NULL,
+    commission_percentage DECIMAL(5,2) NOT NULL,
+    status                VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    created_at            DATETIME NOT NULL,
+    CONSTRAINT uk_ambassador_commission_order UNIQUE (order_id),
+    CONSTRAINT store_fk_ac_ambassador FOREIGN KEY (ambassador_id) REFERENCES store_ambassadors(ambassador_id),
+    CONSTRAINT store_fk_ac_order      FOREIGN KEY (order_id)      REFERENCES store_orders(order_id)
+);
+
+-- =====================
+-- Migration: store_orders — referral_code
+-- =====================
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_orders ADD COLUMN referral_code VARCHAR(50)',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_orders' AND COLUMN_NAME = 'referral_code');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;

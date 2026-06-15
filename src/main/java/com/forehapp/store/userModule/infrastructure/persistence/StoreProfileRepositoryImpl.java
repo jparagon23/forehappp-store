@@ -16,6 +16,11 @@ public class StoreProfileRepositoryImpl implements IStoreProfileDao {
     }
 
     @Override
+    public Optional<StoreProfile> findById(Long profileId) {
+        return jpaRepository.findById(profileId);
+    }
+
+    @Override
     public Optional<StoreProfile> findByUserId(Long userId) {
         return jpaRepository.findByUserId(userId);
     }

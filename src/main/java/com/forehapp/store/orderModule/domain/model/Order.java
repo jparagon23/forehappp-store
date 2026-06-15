@@ -78,6 +78,9 @@ public class Order {
     @Column(name = "mercado_pago_surcharge", precision = 14, scale = 2)
     private BigDecimal mercadoPagoSurcharge;
 
+    @Column(name = "referral_code", length = 50)
+    private String referralCode;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

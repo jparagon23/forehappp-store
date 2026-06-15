@@ -40,7 +40,7 @@ public class PromotionServiceImpl implements IPromotionService {
                 .orElseThrow(() -> new NotFoundException(ErrorCode.COUPON_NOT_FOUND, "Coupon not found"));
 
         long userUses = couponDao.countRedemptionsByCouponIdAndProfileId(coupon.getId(), profile.getId());
-        String error = checkCouponRules(coupon, dto.storeId(), dto.orderAmount(), userUses);
+        String error = checkCouponRules(coupon, dto.storeId(), dto.orderAmount(), userUses, profile.getId());
         if (error != null) {
             throw new BadRequestException(ErrorCode.COUPON_INVALID, error);
         }
@@ -63,7 +63,7 @@ public class PromotionServiceImpl implements IPromotionService {
         }
 
         long userUses = couponDao.countRedemptionsByCouponIdAndProfileId(coupon.getId(), profile.getId());
-        String error = checkCouponRules(coupon, dto.storeId(), dto.orderAmount(), userUses);
+        String error = checkCouponRules(coupon, dto.storeId(), dto.orderAmount(), userUses, profile.getId());
         if (error != null) {
             throw new BadRequestException(ErrorCode.COUPON_INVALID, error);
         }
@@ -89,7 +89,7 @@ public class PromotionServiceImpl implements IPromotionService {
                 .orElseThrow(() -> new NotFoundException(ErrorCode.COUPON_NOT_FOUND, "Coupon not found"));
 
         long userUses = couponDao.countRedemptionsByCouponIdAndGuestEmail(coupon.getId(), guestEmail.toLowerCase());
-        String error = checkCouponRules(coupon, dto.storeId(), dto.orderAmount(), userUses);
+        String error = checkCouponRules(coupon, dto.storeId(), dto.orderAmount(), userUses, null);
         if (error != null) {
             throw new BadRequestException(ErrorCode.COUPON_INVALID, error);
         }
@@ -111,7 +111,7 @@ public class PromotionServiceImpl implements IPromotionService {
         }
 
         long userUses = couponDao.countRedemptionsByCouponIdAndGuestEmail(coupon.getId(), guestEmail.toLowerCase());
-        String error = checkCouponRules(coupon, dto.storeId(), dto.orderAmount(), userUses);
+        String error = checkCouponRules(coupon, dto.storeId(), dto.orderAmount(), userUses, null);
         if (error != null) {
             throw new BadRequestException(ErrorCode.COUPON_INVALID, error);
         }
@@ -130,7 +130,7 @@ public class PromotionServiceImpl implements IPromotionService {
         return buildValidationResponse(coupon, dto.orderAmount(), dto.shippingCost(), "Coupon redeemed successfully");
     }
 
-    private String checkCouponRules(Coupon coupon, Long storeId, BigDecimal orderAmount, long userUses) {
+    private String checkCouponRules(Coupon coupon, Long storeId, BigDecimal orderAmount, long userUses, Long profileId) {
         if (!coupon.getStore().getId().equals(storeId)) {
             return "Coupon is not valid for this store";
         }
@@ -149,6 +149,11 @@ public class PromotionServiceImpl implements IPromotionService {
         }
         if (coupon.getMaxUses() != null && coupon.getUsesCount() >= coupon.getMaxUses()) {
             return "Coupon has reached its usage limit";
+        }
+        if (coupon.getAssignedToProfile() != null) {
+            if (profileId == null || !coupon.getAssignedToProfile().getId().equals(profileId)) {
+                return "This coupon is assigned to a specific user and cannot be used by you";
+            }
         }
         if (userUses >= coupon.getMaxUsesPerUser()) {
             return "You have already used this coupon";

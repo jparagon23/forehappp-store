@@ -20,5 +20,6 @@ public record GuestCreateOrderRequestDto(
         @Valid List<GuestOrderItemDto> items,
         @NotNull(message = "Payment method is required") PaymentMethod paymentMethod,
         String couponCode,
-        Long couponStoreId
+        Long couponStoreId,
+        String referralCode
 ) {}

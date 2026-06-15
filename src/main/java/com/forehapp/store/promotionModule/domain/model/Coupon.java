@@ -1,6 +1,7 @@
 package com.forehapp.store.promotionModule.domain.model;
 
 import com.forehapp.store.storeModule.domain.model.Store;
+import com.forehapp.store.userModule.domain.model.StoreProfile;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -55,6 +56,10 @@ public class Coupon {
 
     @Column(name = "valid_until")
     private LocalDate validUntil;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assigned_to_profile_id")
+    private StoreProfile assignedToProfile;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

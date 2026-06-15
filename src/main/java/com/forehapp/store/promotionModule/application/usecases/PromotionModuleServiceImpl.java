@@ -198,6 +198,13 @@ public class PromotionModuleServiceImpl implements IPromotionModuleService {
         coupon.setMaxUsesPerUser(dto.maxUsesPerUser());
         coupon.setValidFrom(dto.validFrom());
         coupon.setValidUntil(dto.validUntil());
+        if (dto.assignedToProfileId() != null) {
+            coupon.setAssignedToProfile(
+                    storeProfileDao.findById(dto.assignedToProfileId())
+                            .orElseThrow(() -> new NotFoundException(ErrorCode.USER_PROFILE_NOT_FOUND,
+                                    "Assigned profile not found"))
+            );
+        }
     }
 
     private CouponResponse toResponse(Coupon c) {
@@ -216,7 +223,8 @@ public class PromotionModuleServiceImpl implements IPromotionModuleService {
                 c.getValidFrom(),
                 c.getValidUntil(),
                 c.getStatus().name(),
-                c.getCreatedAt()
+                c.getCreatedAt(),
+                c.getAssignedToProfile() != null ? c.getAssignedToProfile().getId() : null
         );
     }
 }
