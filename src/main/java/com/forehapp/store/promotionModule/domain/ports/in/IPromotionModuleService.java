@@ -13,6 +13,7 @@ public interface IPromotionModuleService {
     CouponResponse getCoupon(Long storeId, Long userId, Long couponId);
     Page<CouponResponse> listAllCoupons(Long userId, int page, int size);
     CouponResponse adminCreateCoupon(Long adminUserId, Long storeId, CreateCouponRequestDto dto);
+    CouponResponse adminCreateDonationCoupon(Long adminUserId, CreateCouponRequestDto dto);
     CouponResponse adminUpdateCoupon(Long adminUserId, Long couponId, UpdateCouponRequestDto dto);
     CouponResponse adminDeactivateCoupon(Long adminUserId, Long couponId);
 }

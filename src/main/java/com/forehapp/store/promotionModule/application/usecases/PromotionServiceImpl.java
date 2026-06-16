@@ -131,8 +131,10 @@ public class PromotionServiceImpl implements IPromotionService {
     }
 
     private String checkCouponRules(Coupon coupon, Long storeId, BigDecimal orderAmount, long userUses, Long profileId) {
-        if (!coupon.getStore().getId().equals(storeId)) {
-            return "Coupon is not valid for this store";
+        if (coupon.getStore() != null) {
+            if (storeId == null || !coupon.getStore().getId().equals(storeId)) {
+                return "Coupon is not valid for this store";
+            }
         }
         if (coupon.getStatus() != PromotionStatus.ACTIVE) {
             return "Coupon is not active";
@@ -163,13 +165,37 @@ public class PromotionServiceImpl implements IPromotionService {
 
     private CouponValidationResponse buildValidationResponse(Coupon coupon, BigDecimal orderAmount,
                                                               BigDecimal shippingCost, String message) {
+        boolean isDonation = coupon.getDiscountType() == DiscountType.DONATION;
+
         BigDecimal discountAmount = calculateDiscount(coupon, orderAmount, shippingCost);
-        BigDecimal finalAmount = coupon.getDiscountType() == DiscountType.FREE_SHIPPING
-                ? orderAmount
-                : orderAmount.subtract(discountAmount).max(BigDecimal.ZERO);
-        return new CouponValidationResponse(true, coupon.getId(), coupon.getCode(),
-                coupon.getDiscountType().name(), coupon.getDiscountValue(),
-                discountAmount, finalAmount, message);
+
+        BigDecimal donationAmount = isDonation
+                ? orderAmount.multiply(coupon.getDiscountValue())
+                        .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
+                : null;
+
+        BigDecimal finalAmount = switch (coupon.getDiscountType()) {
+            case FREE_SHIPPING, DONATION -> orderAmount;
+            default -> orderAmount.subtract(discountAmount).max(BigDecimal.ZERO);
+        };
+
+        Long foundationId = isDonation && coupon.getFoundation() != null ? coupon.getFoundation().getId() : null;
+        String foundationName = isDonation && coupon.getFoundation() != null ? coupon.getFoundation().getName() : null;
+
+        return new CouponValidationResponse(
+                true,
+                coupon.getId(),
+                coupon.getCode(),
+                coupon.getDiscountType().name(),
+                coupon.getDiscountValue(),
+                discountAmount,
+                finalAmount,
+                message,
+                isDonation,
+                donationAmount,
+                foundationId,
+                foundationName
+        );
     }
 
     private BigDecimal calculateDiscount(Coupon coupon, BigDecimal orderAmount, BigDecimal shippingCost) {
@@ -179,6 +205,7 @@ public class PromotionServiceImpl implements IPromotionService {
                     .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
             case FIXED_AMOUNT -> coupon.getDiscountValue().min(orderAmount);
             case FREE_SHIPPING -> shippingCost != null ? shippingCost : BigDecimal.ZERO;
+            case DONATION -> BigDecimal.ZERO;
         };
     }
 

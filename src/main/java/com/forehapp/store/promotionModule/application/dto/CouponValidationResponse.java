@@ -10,5 +10,9 @@ public record CouponValidationResponse(
         BigDecimal discountValue,
         BigDecimal discountAmount,
         BigDecimal finalAmount,
-        String message
+        String message,
+        boolean isDonation,
+        BigDecimal donationAmount,
+        Long foundationId,
+        String foundationName
 ) {}

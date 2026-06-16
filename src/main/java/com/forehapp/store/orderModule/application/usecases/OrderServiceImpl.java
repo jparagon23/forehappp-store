@@ -24,6 +24,10 @@ import com.forehapp.store.ambassadorModule.domain.model.AmbassadorCommission;
 import com.forehapp.store.ambassadorModule.domain.model.AmbassadorStatus;
 import com.forehapp.store.ambassadorModule.domain.ports.out.IAmbassadorDao;
 import com.forehapp.store.ambassadorModule.domain.ports.out.ICommissionDao;
+import com.forehapp.store.donationModule.domain.model.DonationFoundation;
+import com.forehapp.store.donationModule.domain.model.DonationRecord;
+import com.forehapp.store.donationModule.domain.ports.out.IDonationFoundationDao;
+import com.forehapp.store.donationModule.domain.ports.out.IDonationRecordDao;
 import com.forehapp.store.promotionModule.application.dto.CouponValidationResponse;
 import com.forehapp.store.promotionModule.application.dto.RedeemCouponRequestDto;
 import com.forehapp.store.promotionModule.domain.ports.in.IPromotionService;
@@ -77,6 +81,8 @@ public class OrderServiceImpl implements IOrderService {
     private final IPromotionService promotionService;
     private final IAmbassadorDao ambassadorDao;
     private final ICommissionDao commissionDao;
+    private final IDonationFoundationDao donationFoundationDao;
+    private final IDonationRecordDao donationRecordDao;
 
     @Value("${app.inventory.low-stock-threshold:5}")
     private int lowStockThreshold;
@@ -97,7 +103,9 @@ public class OrderServiceImpl implements IOrderService {
                             IShippingZoneDao shippingZoneDao,
                             IPromotionService promotionService,
                             IAmbassadorDao ambassadorDao,
-                            ICommissionDao commissionDao) {
+                            ICommissionDao commissionDao,
+                            IDonationFoundationDao donationFoundationDao,
+                            IDonationRecordDao donationRecordDao) {
         this.cartDao = cartDao;
         this.orderDao = orderDao;
         this.storeProfileDao = storeProfileDao;
@@ -112,6 +120,8 @@ public class OrderServiceImpl implements IOrderService {
         this.promotionService = promotionService;
         this.ambassadorDao = ambassadorDao;
         this.commissionDao = commissionDao;
+        this.donationFoundationDao = donationFoundationDao;
+        this.donationRecordDao = donationRecordDao;
     }
 
     @Override
@@ -148,8 +158,8 @@ public class OrderServiceImpl implements IOrderService {
         order.setPaymentMethod(dto.paymentMethod().name());
         Order savedOrder = orderDao.save(order);
 
-        if (dto.couponCode() != null && dto.couponStoreId() != null) {
-            savedOrder = applyCoupon(userId, dto.couponCode(), dto.couponStoreId(), savedOrder);
+        if (dto.couponCode() != null) {
+            savedOrder = applyCoupon(userId, dto.couponCode(), dto.couponStoreId(), savedOrder, dto.referralCode());
         }
 
         if (dto.referralCode() != null && !dto.referralCode().isBlank()) {
@@ -370,28 +380,54 @@ public class OrderServiceImpl implements IOrderService {
         );
     }
 
-    private Order applyCoupon(Long userId, String couponCode, Long couponStoreId, Order savedOrder) {
-        boolean hasGroupForStore = savedOrder.getSellerGroups().stream()
-                .anyMatch(g -> g.getStore().getId().equals(couponStoreId));
-        if (!hasGroupForStore) {
-            throw new BadRequestException(ErrorCode.COUPON_INVALID,
-                    "Cart has no items from the coupon's store");
+    private Order applyCoupon(Long userId, String couponCode, Long couponStoreId, Order savedOrder, String referralCode) {
+        BigDecimal applicableAmount;
+        BigDecimal applicableShipping = BigDecimal.ZERO;
+
+        if (couponStoreId != null) {
+            boolean hasGroupForStore = savedOrder.getSellerGroups().stream()
+                    .anyMatch(g -> g.getStore().getId().equals(couponStoreId));
+            if (!hasGroupForStore) {
+                throw new BadRequestException(ErrorCode.COUPON_INVALID,
+                        "Cart has no items from the coupon's store");
+            }
+            OrderSellerGroup group = savedOrder.getSellerGroups().stream()
+                    .filter(g -> g.getStore().getId().equals(couponStoreId))
+                    .findFirst()
+                    .orElse(null);
+            applicableAmount = group != null ? group.getSubtotal() : BigDecimal.ZERO;
+            applicableShipping = group != null ? group.getShippingCost() : BigDecimal.ZERO;
+        } else {
+            applicableAmount = savedOrder.getTotal();
         }
 
-        OrderSellerGroup group = savedOrder.getSellerGroups().stream()
-                .filter(g -> g.getStore().getId().equals(couponStoreId))
-                .findFirst()
-                .orElse(null);
-
-        BigDecimal groupSubtotal = group != null ? group.getSubtotal() : BigDecimal.ZERO;
-        BigDecimal groupShipping = group != null ? group.getShippingCost() : BigDecimal.ZERO;
-
         CouponValidationResponse couponResult = promotionService.redeemCoupon(userId,
-                new RedeemCouponRequestDto(couponCode, couponStoreId, groupSubtotal, savedOrder.getId(), groupShipping));
+                new RedeemCouponRequestDto(couponCode, couponStoreId, applicableAmount, savedOrder.getId(), applicableShipping));
 
-        savedOrder.setCouponCode(couponCode);
-        savedOrder.setCouponDiscount(couponResult.discountAmount());
-        savedOrder.setTotal(savedOrder.getTotal().subtract(couponResult.discountAmount()).max(BigDecimal.ZERO));
+        if (couponResult.isDonation()) {
+            if (referralCode != null && !referralCode.isBlank()) {
+                throw new BadRequestException(ErrorCode.DONATION_COUPON_INCOMPATIBLE_WITH_REFERRAL,
+                        "Donation coupons cannot be combined with ambassador referral codes");
+            }
+            savedOrder.setCouponCode(couponCode);
+            savedOrder.setCouponDiscount(BigDecimal.ZERO);
+
+            DonationFoundation foundation = donationFoundationDao.findById(couponResult.foundationId())
+                    .orElseThrow(() -> new NotFoundException(ErrorCode.DONATION_FOUNDATION_NOT_FOUND, "Foundation not found"));
+            DonationRecord record = new DonationRecord();
+            record.setFoundation(foundation);
+            record.setOrderId(savedOrder.getId());
+            record.setCouponCode(couponCode);
+            record.setDonorProfile(savedOrder.getBuyer());
+            record.setDonorEmail(savedOrder.getBuyerEmail());
+            record.setDonationAmount(couponResult.donationAmount());
+            record.setDonationPercentage(couponResult.discountValue());
+            donationRecordDao.save(record);
+        } else {
+            savedOrder.setCouponCode(couponCode);
+            savedOrder.setCouponDiscount(couponResult.discountAmount());
+            savedOrder.setTotal(savedOrder.getTotal().subtract(couponResult.discountAmount()).max(BigDecimal.ZERO));
+        }
         return orderDao.save(savedOrder);
     }
 

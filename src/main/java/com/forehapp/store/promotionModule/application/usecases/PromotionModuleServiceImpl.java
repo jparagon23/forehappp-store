@@ -1,5 +1,7 @@
 package com.forehapp.store.promotionModule.application.usecases;
 
+import com.forehapp.store.donationModule.domain.model.DonationFoundation;
+import com.forehapp.store.donationModule.domain.ports.out.IDonationFoundationDao;
 import com.forehapp.store.general.exceptions.BadRequestException;
 import com.forehapp.store.general.exceptions.ConflictException;
 import com.forehapp.store.general.exceptions.ErrorCode;
@@ -33,15 +35,18 @@ public class PromotionModuleServiceImpl implements IPromotionModuleService {
     private final IStoreMembershipDao membershipDao;
     private final IStoreProfileDao storeProfileDao;
     private final IStoreDao storeDao;
+    private final IDonationFoundationDao donationFoundationDao;
 
     public PromotionModuleServiceImpl(ICouponDao couponDao,
                                       IStoreMembershipDao membershipDao,
                                       IStoreProfileDao storeProfileDao,
-                                      IStoreDao storeDao) {
+                                      IStoreDao storeDao,
+                                      IDonationFoundationDao donationFoundationDao) {
         this.couponDao = couponDao;
         this.membershipDao = membershipDao;
         this.storeProfileDao = storeProfileDao;
         this.storeDao = storeDao;
+        this.donationFoundationDao = donationFoundationDao;
     }
 
     @Override
@@ -129,6 +134,26 @@ public class PromotionModuleServiceImpl implements IPromotionModuleService {
 
     @Override
     @Transactional
+    public CouponResponse adminCreateDonationCoupon(Long adminUserId, CreateCouponRequestDto dto) {
+        requireAdmin(adminUserId);
+
+        if (dto.discountType() != DiscountType.DONATION) {
+            throw new BadRequestException(ErrorCode.COUPON_INVALID,
+                    "This endpoint is only for DONATION type coupons");
+        }
+        if (couponDao.findByCode(dto.code().toUpperCase()).isPresent()) {
+            throw new ConflictException(ErrorCode.COUPON_CODE_DUPLICATE, "Coupon code already exists");
+        }
+        validateCreateRequest(dto);
+
+        Coupon coupon = new Coupon();
+        populateCouponFields(coupon, dto);
+
+        return toResponse(couponDao.save(coupon));
+    }
+
+    @Override
+    @Transactional
     public CouponResponse adminUpdateCoupon(Long adminUserId, Long couponId, UpdateCouponRequestDto dto) {
         requireAdmin(adminUserId);
         Coupon coupon = couponDao.findById(couponId)
@@ -177,7 +202,17 @@ public class PromotionModuleServiceImpl implements IPromotionModuleService {
     }
 
     private void validateCreateRequest(CreateCouponRequestDto dto) {
-        if (dto.discountType() != DiscountType.FREE_SHIPPING && dto.discountValue() == null) {
+        if (dto.discountType() == DiscountType.DONATION) {
+            if (dto.foundationId() == null) {
+                throw new BadRequestException(ErrorCode.COUPON_INVALID,
+                        "foundationId is required for DONATION coupons");
+            }
+            if (dto.discountValue() == null || dto.discountValue().compareTo(java.math.BigDecimal.ZERO) <= 0
+                    || dto.discountValue().compareTo(java.math.BigDecimal.valueOf(100)) > 0) {
+                throw new BadRequestException(ErrorCode.COUPON_INVALID,
+                        "discountValue must be between 0.01 and 100 for DONATION coupons (represents the donation percentage)");
+            }
+        } else if (dto.discountType() != DiscountType.FREE_SHIPPING && dto.discountValue() == null) {
             throw new BadRequestException(ErrorCode.COUPON_INVALID,
                     "discountValue is required for PERCENTAGE and FIXED_AMOUNT coupons");
         }
@@ -205,13 +240,19 @@ public class PromotionModuleServiceImpl implements IPromotionModuleService {
                                     "Assigned profile not found"))
             );
         }
+        if (dto.foundationId() != null) {
+            DonationFoundation foundation = donationFoundationDao.findById(dto.foundationId())
+                    .orElseThrow(() -> new NotFoundException(ErrorCode.DONATION_FOUNDATION_NOT_FOUND,
+                            "Foundation not found"));
+            coupon.setFoundation(foundation);
+        }
     }
 
     private CouponResponse toResponse(Coupon c) {
         return new CouponResponse(
                 c.getId(),
-                c.getStore().getId(),
-                c.getStore().getName(),
+                c.getStore() != null ? c.getStore().getId() : null,
+                c.getStore() != null ? c.getStore().getName() : null,
                 c.getCode(),
                 c.getDescription(),
                 c.getDiscountType().name(),
@@ -224,7 +265,9 @@ public class PromotionModuleServiceImpl implements IPromotionModuleService {
                 c.getValidUntil(),
                 c.getStatus().name(),
                 c.getCreatedAt(),
-                c.getAssignedToProfile() != null ? c.getAssignedToProfile().getId() : null
+                c.getAssignedToProfile() != null ? c.getAssignedToProfile().getId() : null,
+                c.getFoundation() != null ? c.getFoundation().getId() : null,
+                c.getFoundation() != null ? c.getFoundation().getName() : null
         );
     }
 }

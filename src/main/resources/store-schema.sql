@@ -747,3 +747,47 @@ SET @s = (SELECT IF(COUNT(*) = 0,
   'SELECT 1')
   FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_orders' AND COLUMN_NAME = 'referral_code');
 PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- =====================
+-- Donation Module: foundations + coupon donation type
+-- =====================
+
+CREATE TABLE IF NOT EXISTS store_donation_foundations (
+    foundation_id  BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name           VARCHAR(150) NOT NULL,
+    description    VARCHAR(255),
+    status         VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    created_at     DATETIME NOT NULL,
+    CONSTRAINT uk_donation_foundation_name UNIQUE (name)
+);
+
+CREATE TABLE IF NOT EXISTS store_donation_records (
+    donation_record_id  BIGINT AUTO_INCREMENT PRIMARY KEY,
+    foundation_id       BIGINT NOT NULL,
+    order_id            BIGINT NOT NULL,
+    coupon_code         VARCHAR(50) NOT NULL,
+    donor_profile_id    BIGINT,
+    donor_email         VARCHAR(255),
+    donation_amount     DECIMAL(14,2) NOT NULL,
+    donation_percentage DECIMAL(5,2) NOT NULL,
+    status              VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    created_at          DATETIME NOT NULL,
+    CONSTRAINT uk_donation_record_order    UNIQUE (order_id),
+    CONSTRAINT store_fk_dr_foundation FOREIGN KEY (foundation_id) REFERENCES store_donation_foundations(foundation_id),
+    CONSTRAINT store_fk_dr_order      FOREIGN KEY (order_id)      REFERENCES store_orders(order_id),
+    CONSTRAINT store_fk_dr_profile    FOREIGN KEY (donor_profile_id) REFERENCES store_profiles(store_profile_id)
+);
+
+-- Migration: store_coupons — add foundation_id for DONATION type coupons (nullable)
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_coupons ADD COLUMN foundation_id BIGINT, ADD CONSTRAINT store_fk_coupon_foundation FOREIGN KEY (foundation_id) REFERENCES store_donation_foundations(foundation_id)',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_coupons' AND COLUMN_NAME = 'foundation_id');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- Migration: store_coupons — make store_id nullable to support marketplace-level DONATION coupons
+SET @s = (SELECT IF(
+  (SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_coupons' AND COLUMN_NAME = 'store_id') = 'NO',
+  'ALTER TABLE store_coupons MODIFY COLUMN store_id BIGINT',
+  'SELECT 1'));
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;

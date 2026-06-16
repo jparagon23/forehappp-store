@@ -45,6 +45,14 @@ public class PromotionAdminController {
         return promotionModuleService.adminCreateCoupon(Long.parseLong(userId), storeId, dto);
     }
 
+    @PostMapping("/donation")
+    @ResponseStatus(HttpStatus.CREATED)
+    public CouponResponse createDonationCoupon(
+            @AuthenticationPrincipal String userId,
+            @Valid @RequestBody CreateCouponRequestDto dto) {
+        return promotionModuleService.adminCreateDonationCoupon(Long.parseLong(userId), dto);
+    }
+
     @PatchMapping("/{couponId}")
     public CouponResponse updateCoupon(
             @AuthenticationPrincipal String userId,

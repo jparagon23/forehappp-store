@@ -8,7 +8,7 @@ import java.math.BigDecimal;
 
 public record RedeemCouponRequestDto(
         @NotBlank String code,
-        @NotNull Long storeId,
+        Long storeId,
         @NotNull @DecimalMin("0.01") BigDecimal orderAmount,
         @NotNull Long orderId,
         @DecimalMin("0.0") BigDecimal shippingCost

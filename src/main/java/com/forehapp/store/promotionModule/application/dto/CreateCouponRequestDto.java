@@ -20,5 +20,6 @@ public record CreateCouponRequestDto(
         @NotNull @Min(1) Integer maxUsesPerUser,
         @NotNull LocalDate validFrom,
         LocalDate validUntil,
-        Long assignedToProfileId
+        Long assignedToProfileId,
+        Long foundationId
 ) {}

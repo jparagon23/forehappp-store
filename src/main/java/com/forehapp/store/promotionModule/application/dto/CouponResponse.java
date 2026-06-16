@@ -20,5 +20,7 @@ public record CouponResponse(
         LocalDate validUntil,
         String status,
         LocalDateTime createdAt,
-        Long assignedToProfileId
+        Long assignedToProfileId,
+        Long foundationId,
+        String foundationName
 ) {}

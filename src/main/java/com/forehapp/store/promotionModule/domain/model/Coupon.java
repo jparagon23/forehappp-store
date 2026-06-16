@@ -1,5 +1,6 @@
 package com.forehapp.store.promotionModule.domain.model;
 
+import com.forehapp.store.donationModule.domain.model.DonationFoundation;
 import com.forehapp.store.storeModule.domain.model.Store;
 import com.forehapp.store.userModule.domain.model.StoreProfile;
 import jakarta.persistence.*;
@@ -23,8 +24,12 @@ public class Coupon {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "store_id", nullable = false)
+    @JoinColumn(name = "store_id")
     private Store store;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "foundation_id")
+    private DonationFoundation foundation;
 
     @Column(nullable = false, length = 50, unique = true)
     private String code;
