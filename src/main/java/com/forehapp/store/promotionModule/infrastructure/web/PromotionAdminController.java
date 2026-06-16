@@ -2,6 +2,7 @@ package com.forehapp.store.promotionModule.infrastructure.web;
 
 import com.forehapp.store.promotionModule.application.dto.CouponResponse;
 import com.forehapp.store.promotionModule.application.dto.CreateCouponRequestDto;
+import com.forehapp.store.promotionModule.application.dto.CreateDonationCouponRequestDto;
 import com.forehapp.store.promotionModule.application.dto.UpdateCouponRequestDto;
 import com.forehapp.store.promotionModule.domain.ports.in.IPromotionModuleService;
 import jakarta.validation.Valid;
@@ -49,7 +50,7 @@ public class PromotionAdminController {
     @ResponseStatus(HttpStatus.CREATED)
     public CouponResponse createDonationCoupon(
             @AuthenticationPrincipal String userId,
-            @Valid @RequestBody CreateCouponRequestDto dto) {
+            @Valid @RequestBody CreateDonationCouponRequestDto dto) {
         return promotionModuleService.adminCreateDonationCoupon(Long.parseLong(userId), dto);
     }
 

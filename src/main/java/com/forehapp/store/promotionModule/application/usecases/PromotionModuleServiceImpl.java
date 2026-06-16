@@ -9,6 +9,7 @@ import com.forehapp.store.general.exceptions.ForbiddenException;
 import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.promotionModule.application.dto.CouponResponse;
 import com.forehapp.store.promotionModule.application.dto.CreateCouponRequestDto;
+import com.forehapp.store.promotionModule.application.dto.CreateDonationCouponRequestDto;
 import com.forehapp.store.promotionModule.application.dto.UpdateCouponRequestDto;
 import com.forehapp.store.promotionModule.domain.model.Coupon;
 import com.forehapp.store.promotionModule.domain.model.DiscountType;
@@ -134,20 +135,29 @@ public class PromotionModuleServiceImpl implements IPromotionModuleService {
 
     @Override
     @Transactional
-    public CouponResponse adminCreateDonationCoupon(Long adminUserId, CreateCouponRequestDto dto) {
+    public CouponResponse adminCreateDonationCoupon(Long adminUserId, CreateDonationCouponRequestDto dto) {
         requireAdmin(adminUserId);
 
-        if (dto.discountType() != DiscountType.DONATION) {
-            throw new BadRequestException(ErrorCode.COUPON_INVALID,
-                    "This endpoint is only for DONATION type coupons");
-        }
         if (couponDao.findByCode(dto.code().toUpperCase()).isPresent()) {
             throw new ConflictException(ErrorCode.COUPON_CODE_DUPLICATE, "Coupon code already exists");
         }
-        validateCreateRequest(dto);
+        if (dto.validUntil() != null && dto.validUntil().isBefore(dto.validFrom())) {
+            throw new BadRequestException(ErrorCode.COUPON_DATE_INVALID, "validUntil must be after validFrom");
+        }
+        DonationFoundation foundation = donationFoundationDao.findById(dto.foundationId())
+                .orElseThrow(() -> new NotFoundException(ErrorCode.DONATION_FOUNDATION_NOT_FOUND, "Foundation not found"));
 
         Coupon coupon = new Coupon();
-        populateCouponFields(coupon, dto);
+        coupon.setCode(dto.code().toUpperCase());
+        coupon.setDescription(dto.description());
+        coupon.setDiscountType(DiscountType.DONATION);
+        coupon.setDiscountValue(dto.discountValue());
+        coupon.setMinOrderAmount(dto.minOrderAmount());
+        coupon.setMaxUses(dto.maxUses());
+        coupon.setMaxUsesPerUser(dto.maxUsesPerUser());
+        coupon.setValidFrom(dto.validFrom());
+        coupon.setValidUntil(dto.validUntil());
+        coupon.setFoundation(foundation);
 
         return toResponse(couponDao.save(coupon));
     }
