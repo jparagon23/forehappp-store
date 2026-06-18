@@ -116,6 +116,7 @@ public enum ErrorCode {
     COUPON_NOT_FOUND,
     COUPON_INVALID,
     COUPON_ACCESS_DENIED,
+    COUPON_ALREADY_REDEEMED,
 
     // Return
     RETURN_NOT_FOUND,

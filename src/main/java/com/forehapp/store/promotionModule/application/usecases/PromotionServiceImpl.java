@@ -1,6 +1,7 @@
 package com.forehapp.store.promotionModule.application.usecases;
 
 import com.forehapp.store.general.exceptions.BadRequestException;
+import com.forehapp.store.general.exceptions.ConflictException;
 import com.forehapp.store.general.exceptions.ErrorCode;
 import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.promotionModule.application.dto.CouponValidationResponse;
@@ -62,6 +63,10 @@ public class PromotionServiceImpl implements IPromotionService {
             couponDao.save(coupon);
         }
 
+        if (couponDao.existsRedemptionByOrderId(dto.orderId())) {
+            throw new ConflictException(ErrorCode.COUPON_ALREADY_REDEEMED, "This order already has a coupon applied");
+        }
+
         long userUses = couponDao.countRedemptionsByCouponIdAndProfileId(coupon.getId(), profile.getId());
         String error = checkCouponRules(coupon, dto.storeId(), dto.orderAmount(), userUses, profile.getId());
         if (error != null) {
@@ -108,6 +113,10 @@ public class PromotionServiceImpl implements IPromotionService {
                 && LocalDate.now().isAfter(coupon.getValidUntil())) {
             coupon.setStatus(PromotionStatus.EXPIRED);
             couponDao.save(coupon);
+        }
+
+        if (couponDao.existsRedemptionByOrderId(dto.orderId())) {
+            throw new ConflictException(ErrorCode.COUPON_ALREADY_REDEEMED, "This order already has a coupon applied");
         }
 
         long userUses = couponDao.countRedemptionsByCouponIdAndGuestEmail(coupon.getId(), guestEmail.toLowerCase());

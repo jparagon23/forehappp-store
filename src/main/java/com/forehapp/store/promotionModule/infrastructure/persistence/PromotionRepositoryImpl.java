@@ -67,6 +67,11 @@ public class PromotionRepositoryImpl implements ICouponDao {
     }
 
     @Override
+    public boolean existsRedemptionByOrderId(Long orderId) {
+        return redemptionRepository.existsByOrderId(orderId);
+    }
+
+    @Override
     public CouponRedemption saveRedemption(CouponRedemption redemption) {
         return redemptionRepository.save(redemption);
     }

@@ -7,4 +7,5 @@ public interface ICouponRedemptionRepository extends JpaRepository<CouponRedempt
     long countByCouponId(Long couponId);
     long countByCouponIdAndProfileId(Long couponId, Long profileId);
     long countByCouponIdAndGuestEmail(Long couponId, String guestEmail);
+    boolean existsByOrderId(Long orderId);
 }

@@ -17,5 +17,6 @@ public interface ICouponDao {
     long countRedemptionsByCouponId(Long couponId);
     long countRedemptionsByCouponIdAndProfileId(Long couponId, Long profileId);
     long countRedemptionsByCouponIdAndGuestEmail(Long couponId, String guestEmail);
+    boolean existsRedemptionByOrderId(Long orderId);
     CouponRedemption saveRedemption(CouponRedemption redemption);
 }
