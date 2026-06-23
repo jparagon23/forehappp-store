@@ -9,17 +9,17 @@ INSERT IGNORE INTO store_roles (role_name) VALUES
 -- =====================
 -- CATEGORIES
 -- =====================
-INSERT IGNORE INTO store_categories (category_id, description) VALUES
-(1,  'Raquetas'),
-(2,  'Cuerdas'),
-(3,  'Pelotas'),
-(4,  'Zapatillas de Tenis'),
-(5,  'Ropa'),
-(6,  'Bolsos y Mochilas'),
-(7,  'Grips y Overgrips'),
-(8,  'Antivibradores'),
-(9,  'Equipamiento de Entrenamiento'),
-(10, 'Accesorios');
+INSERT IGNORE INTO store_categories (category_id, description, sort_order) VALUES
+(7,  'Grips y Overgrips',              10),
+(3,  'Pelotas',                        20),
+(1,  'Raquetas',                       30),
+(2,  'Cuerdas',                        40),
+(8,  'Antivibradores',                 50),
+(4,  'Zapatillas de Tenis',            60),
+(5,  'Ropa',                           70),
+(6,  'Bolsos y Mochilas',              80),
+(9,  'Equipamiento de Entrenamiento',  90),
+(10, 'Accesorios',                    100);
 
 -- =====================
 -- BRANDS

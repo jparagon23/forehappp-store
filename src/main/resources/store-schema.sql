@@ -99,7 +99,8 @@ CREATE TABLE IF NOT EXISTS store_brands (
 
 CREATE TABLE IF NOT EXISTS store_categories (
     category_id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    description VARCHAR(150) NOT NULL
+    description VARCHAR(150) NOT NULL,
+    sort_order  INT NOT NULL DEFAULT 999
 );
 
 CREATE TABLE IF NOT EXISTS store_attributes (

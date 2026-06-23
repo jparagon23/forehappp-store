@@ -18,4 +18,7 @@ public class Category {
 
     @Column(nullable = false, length = 150)
     private String description;
+
+    @Column(name = "sort_order", nullable = false)
+    private int sortOrder = 999;
 }

@@ -70,8 +70,9 @@ public interface IProductRepository extends JpaRepository<Product, Long>, JpaSpe
                         AND pv.stock > 0
                   )
             ) ranked
+            JOIN store_categories c ON c.category_id = ranked.category_id
             WHERE ranked.rn <= :limit
-            ORDER BY ranked.cat_total DESC, ranked.category_id, ranked.rn
+            ORDER BY c.sort_order ASC, ranked.cat_total DESC, ranked.category_id, ranked.rn
             """, nativeQuery = true)
     List<DiscoveryProductIdView> findDiscoverySectionIds(@Param("seed") int seed, @Param("limit") int limit);
 }

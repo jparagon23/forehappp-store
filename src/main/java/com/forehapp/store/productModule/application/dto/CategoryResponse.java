@@ -2,8 +2,8 @@ package com.forehapp.store.productModule.application.dto;
 
 import com.forehapp.store.productModule.domain.model.Category;
 
-public record CategoryResponse(Long id, String name) {
+public record CategoryResponse(Long id, String name, int sortOrder) {
     public CategoryResponse(Category category) {
-        this(category.getId(), category.getDescription());
+        this(category.getId(), category.getDescription(), category.getSortOrder());
     }
 }

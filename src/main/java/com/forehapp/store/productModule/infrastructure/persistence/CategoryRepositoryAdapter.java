@@ -30,7 +30,7 @@ public class CategoryRepositoryAdapter implements ICategoryDao {
 
     @Override
     public List<Category> findAll() {
-        return categoryRepository.findAll();
+        return categoryRepository.findAllOrdered();
     }
 
     @Override

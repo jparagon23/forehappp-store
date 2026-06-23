@@ -8,6 +8,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/v1/admin")
 public class AdminCatalogController {
@@ -80,9 +82,17 @@ public class AdminCatalogController {
     }
 
     // ── Category ───────────────────────────────────────────────────────────────
-    // POST   /api/v1/admin/categories                  → create category
-    // PATCH  /api/v1/admin/categories/{categoryId}     → update category name
-    // DELETE /api/v1/admin/categories/{categoryId}     → delete category (fails if products use it)
+    // GET    /api/v1/admin/categories                                    → list all categories (with sortOrder)
+    // POST   /api/v1/admin/categories                                    → create category
+    // PATCH  /api/v1/admin/categories/{categoryId}                       → update category name
+    // PATCH  /api/v1/admin/categories/{categoryId}/discovery-order       → update discovery sort order
+    // DELETE /api/v1/admin/categories/{categoryId}                       → delete category (fails if products use it)
+
+    @GetMapping("/categories")
+    public ResponseEntity<List<CategoryResponse>> listCategories(
+            @AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(adminCatalogService.listCategories(Long.parseLong(userId)));
+    }
 
     @PostMapping("/categories")
     public ResponseEntity<CategoryResponse> createCategory(
@@ -98,6 +108,14 @@ public class AdminCatalogController {
             @Valid @RequestBody CreateCategoryRequestDto dto,
             @AuthenticationPrincipal String userId) {
         return ResponseEntity.ok(adminCatalogService.updateCategory(categoryId, dto, Long.parseLong(userId)));
+    }
+
+    @PatchMapping("/categories/{categoryId}/discovery-order")
+    public ResponseEntity<CategoryResponse> updateCategoryDiscoveryOrder(
+            @PathVariable Long categoryId,
+            @Valid @RequestBody UpdateCategoryDiscoveryOrderRequestDto dto,
+            @AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(adminCatalogService.updateCategoryDiscoveryOrder(categoryId, dto, Long.parseLong(userId)));
     }
 
     @DeleteMapping("/categories/{categoryId}")

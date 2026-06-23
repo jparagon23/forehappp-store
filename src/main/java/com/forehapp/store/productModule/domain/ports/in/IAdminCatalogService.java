@@ -2,6 +2,8 @@ package com.forehapp.store.productModule.domain.ports.in;
 
 import com.forehapp.store.productModule.application.dto.*;
 
+import java.util.List;
+
 public interface IAdminCatalogService {
 
     // Brand
@@ -15,8 +17,10 @@ public interface IAdminCatalogService {
     void deleteLine(Long brandId, Long lineId, Long userId);
 
     // Category
+    List<CategoryResponse> listCategories(Long userId);
     CategoryResponse createCategory(CreateCategoryRequestDto dto, Long userId);
     CategoryResponse updateCategory(Long categoryId, CreateCategoryRequestDto dto, Long userId);
+    CategoryResponse updateCategoryDiscoveryOrder(Long categoryId, UpdateCategoryDiscoveryOrderRequestDto dto, Long userId);
     void deleteCategory(Long categoryId, Long userId);
 
     // Attribute

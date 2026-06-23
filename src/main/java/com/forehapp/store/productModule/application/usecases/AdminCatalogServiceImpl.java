@@ -12,6 +12,7 @@ import com.forehapp.store.productModule.domain.ports.out.*;
 import com.forehapp.store.userModule.domain.model.StoreProfile;
 import com.forehapp.store.userModule.domain.model.StoreRole;
 import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -122,6 +123,15 @@ public class AdminCatalogServiceImpl implements IAdminCatalogService {
     // ── Category ─────────────────────────────────────────────────────────────
 
     @Override
+    @Transactional(readOnly = true)
+    public List<CategoryResponse> listCategories(Long userId) {
+        resolveAdmin(userId);
+        return categoryDao.findAll().stream()
+                .map(CategoryResponse::new)
+                .toList();
+    }
+
+    @Override
     @Transactional
     public CategoryResponse createCategory(CreateCategoryRequestDto dto, Long userId) {
         resolveAdmin(userId);
@@ -137,6 +147,17 @@ public class AdminCatalogServiceImpl implements IAdminCatalogService {
         Category category = categoryDao.findById(categoryId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Category not found"));
         category.setDescription(dto.getName().trim());
+        return new CategoryResponse(categoryDao.save(category));
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = "discovery-sections", allEntries = true)
+    public CategoryResponse updateCategoryDiscoveryOrder(Long categoryId, UpdateCategoryDiscoveryOrderRequestDto dto, Long userId) {
+        resolveAdmin(userId);
+        Category category = categoryDao.findById(categoryId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Category not found"));
+        category.setSortOrder(dto.getSortOrder());
         return new CategoryResponse(categoryDao.save(category));
     }
 
