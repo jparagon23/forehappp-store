@@ -15,6 +15,7 @@ public interface ICategoryDao {
     Category save(Category category);
     void delete(Category category);
     boolean isUsedByProducts(Long categoryId);
+    boolean existsByDescriptionIgnoreCase(String description);
     boolean existsCategoryAttribute(Long categoryId, Long attributeId);
     CategoryAttribute saveCategoryAttribute(CategoryAttribute categoryAttribute);
     void deleteCategoryAttribute(CategoryAttribute categoryAttribute);

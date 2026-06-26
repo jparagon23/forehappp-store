@@ -1,6 +1,7 @@
 package com.forehapp.store.ambassadorModule.infrastructure.web;
 
 import com.forehapp.store.ambassadorModule.application.dto.AmbassadorStatsDto;
+import com.forehapp.store.ambassadorModule.application.dto.AmbassadorValidationResponse;
 import com.forehapp.store.ambassadorModule.application.dto.CommissionResponse;
 import com.forehapp.store.ambassadorModule.domain.ports.in.IAmbassadorDashboardService;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +18,11 @@ public class AmbassadorDashboardController {
 
     public AmbassadorDashboardController(IAmbassadorDashboardService dashboardService) {
         this.dashboardService = dashboardService;
+    }
+
+    @GetMapping("/validate")
+    public ResponseEntity<AmbassadorValidationResponse> validate(@RequestParam String code) {
+        return ResponseEntity.ok(dashboardService.validateCode(code));
     }
 
     @GetMapping("/me")

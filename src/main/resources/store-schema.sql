@@ -786,6 +786,24 @@ SET @s = (SELECT IF(COUNT(*) = 0,
   FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_coupons' AND COLUMN_NAME = 'foundation_id');
 PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
 
+-- Catalog requests: sellers propose new brands or categories for admin approval
+CREATE TABLE IF NOT EXISTS store_catalog_requests (
+    catalog_request_id  BIGINT AUTO_INCREMENT PRIMARY KEY,
+    type                VARCHAR(20)  NOT NULL,
+    suggested_name      VARCHAR(100) NOT NULL,
+    requested_by        BIGINT       NOT NULL,
+    store_id            BIGINT       NOT NULL,
+    status              VARCHAR(20)  NOT NULL DEFAULT 'PENDING',
+    rejection_reason    VARCHAR(255),
+    resolved_by         BIGINT,
+    result_id           BIGINT,
+    created_at          DATETIME     NOT NULL,
+    resolved_at         DATETIME,
+    CONSTRAINT store_fk_cr_requested_by FOREIGN KEY (requested_by) REFERENCES store_profiles(store_profile_id),
+    CONSTRAINT store_fk_cr_store        FOREIGN KEY (store_id)     REFERENCES stores(store_id),
+    CONSTRAINT store_fk_cr_resolved_by  FOREIGN KEY (resolved_by)  REFERENCES store_profiles(store_profile_id)
+);
+
 -- Migration: store_coupons — make store_id nullable to support marketplace-level DONATION coupons
 SET @s = (SELECT IF(
   (SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_coupons' AND COLUMN_NAME = 'store_id') = 'NO',

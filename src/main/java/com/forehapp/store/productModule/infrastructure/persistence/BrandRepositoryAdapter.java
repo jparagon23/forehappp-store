@@ -44,4 +44,9 @@ public class BrandRepositoryAdapter implements IBrandDao {
     public boolean isUsedByProducts(Long brandId) {
         return productRepository.existsByBrandId(brandId);
     }
+
+    @Override
+    public boolean existsByDescriptionIgnoreCase(String description) {
+        return jpaRepository.existsByDescriptionIgnoreCase(description);
+    }
 }

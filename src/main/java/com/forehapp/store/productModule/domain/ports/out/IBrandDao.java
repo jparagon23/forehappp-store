@@ -11,4 +11,5 @@ public interface IBrandDao {
     Brand save(Brand brand);
     void delete(Brand brand);
     boolean isUsedByProducts(Long brandId);
+    boolean existsByDescriptionIgnoreCase(String description);
 }

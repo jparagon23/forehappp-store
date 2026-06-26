@@ -77,4 +77,9 @@ public class CategoryRepositoryAdapter implements ICategoryDao {
     public void deleteCategoryAttribute(CategoryAttribute categoryAttribute) {
         categoryAttributeRepository.delete(categoryAttribute);
     }
+
+    @Override
+    public boolean existsByDescriptionIgnoreCase(String description) {
+        return categoryRepository.existsByDescriptionIgnoreCase(description);
+    }
 }

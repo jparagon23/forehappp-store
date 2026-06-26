@@ -1,6 +1,7 @@
 package com.forehapp.store.ambassadorModule.application.usecases;
 
 import com.forehapp.store.ambassadorModule.application.dto.AmbassadorStatsDto;
+import com.forehapp.store.ambassadorModule.application.dto.AmbassadorValidationResponse;
 import com.forehapp.store.ambassadorModule.application.dto.CommissionResponse;
 import com.forehapp.store.ambassadorModule.domain.model.Ambassador;
 import com.forehapp.store.ambassadorModule.domain.model.AmbassadorCommission;
@@ -8,6 +9,7 @@ import com.forehapp.store.ambassadorModule.domain.model.CommissionStatus;
 import com.forehapp.store.ambassadorModule.domain.ports.in.IAmbassadorDashboardService;
 import com.forehapp.store.ambassadorModule.domain.ports.out.IAmbassadorDao;
 import com.forehapp.store.ambassadorModule.domain.ports.out.ICommissionDao;
+import com.forehapp.store.ambassadorModule.domain.model.AmbassadorStatus;
 import com.forehapp.store.general.exceptions.ErrorCode;
 import com.forehapp.store.general.exceptions.ForbiddenException;
 import com.forehapp.store.general.exceptions.NotFoundException;
@@ -49,6 +51,21 @@ public class AmbassadorDashboardServiceImpl implements IAmbassadorDashboardServi
         return commissionDao.findByAmbassadorId(ambassador.getId()).stream()
                 .map(this::toCommissionResponse)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AmbassadorValidationResponse validateCode(String referralCode) {
+        Ambassador ambassador = ambassadorDao.findByReferralCode(referralCode.toUpperCase())
+                .orElseThrow(() -> new NotFoundException(ErrorCode.AMBASSADOR_NOT_FOUND,
+                        "Ambassador not found for code: " + referralCode));
+        if (ambassador.getStatus() != AmbassadorStatus.ACTIVE) {
+            throw new NotFoundException(ErrorCode.AMBASSADOR_INACTIVE,
+                    "Ambassador is not active");
+        }
+        String name = ambassador.getStoreProfile().getUser().getName()
+                + " " + ambassador.getStoreProfile().getUser().getLastname();
+        return new AmbassadorValidationResponse(ambassador.getReferralCode(), name);
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────
