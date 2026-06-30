@@ -810,3 +810,31 @@ SET @s = (SELECT IF(
   'ALTER TABLE store_coupons MODIFY COLUMN store_id BIGINT',
   'SELECT 1'));
 PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- =====================
+-- Migration: Variant cost tracking
+-- =====================
+
+-- Add cost field to variants (nullable; existing variants have no cost)
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_product_variants ADD COLUMN cost DECIMAL(14,2)',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_product_variants' AND COLUMN_NAME = 'cost');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- Cost history: every change to variant cost is logged here
+CREATE TABLE IF NOT EXISTS store_variant_cost_history (
+    id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+    variant_id  BIGINT NOT NULL,
+    cost        DECIMAL(14,2) NOT NULL,
+    notes       VARCHAR(255),
+    changed_at  DATETIME NOT NULL,
+    CONSTRAINT store_fk_vch_variant FOREIGN KEY (variant_id) REFERENCES store_product_variants(variant_id)
+);
+
+-- Add unit_cost snapshot to order items (nullable; reflects cost at purchase time)
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_order_items ADD COLUMN unit_cost DECIMAL(14,2)',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_order_items' AND COLUMN_NAME = 'unit_cost');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;

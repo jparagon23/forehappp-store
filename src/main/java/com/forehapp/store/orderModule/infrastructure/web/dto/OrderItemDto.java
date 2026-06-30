@@ -14,5 +14,8 @@ public record OrderItemDto(
         List<VariantAttributeDto> attributes,
         Integer quantity,
         BigDecimal unitPrice,
-        BigDecimal subtotal
+        BigDecimal subtotal,
+        BigDecimal unitCost,
+        BigDecimal totalCost,
+        BigDecimal unitMargin
 ) {}

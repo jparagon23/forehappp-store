@@ -285,6 +285,7 @@ public class OrderServiceImpl implements IOrderService {
             orderItem.setVariant(variant);
             orderItem.setQuantity(cartItem.getQuantity());
             orderItem.setUnitPrice(variant.getPrice());
+            orderItem.setUnitCost(variant.getCost());
             group.getItems().add(orderItem);
 
             subtotal = subtotal.add(variant.getPrice().multiply(BigDecimal.valueOf(cartItem.getQuantity())));

@@ -27,5 +27,8 @@ public record SellerOrderGroupDto(
         LocalDateTime deliveredAt,
         LocalDateTime cancelledAt,
         String cancellationReason,
-        List<OrderItemDto> items
+        List<OrderItemDto> items,
+        BigDecimal totalCost,
+        BigDecimal totalMargin,
+        BigDecimal marginPercent
 ) {}

@@ -24,6 +24,12 @@ public class CreateVariantDto {
     @DecimalMin(value = "0.0", inclusive = false, message = "Compare-at price must be greater than 0")
     private BigDecimal compareAtPrice;
 
+    @DecimalMin(value = "0.0", inclusive = false, message = "Cost must be greater than 0")
+    private BigDecimal cost;
+
+    @Size(max = 255, message = "Cost notes must not exceed 255 characters")
+    private String costNotes;
+
     @NotNull(message = "Stock is required")
     @Min(value = 0, message = "Stock cannot be negative")
     private Integer stock;

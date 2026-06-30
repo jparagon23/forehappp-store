@@ -35,6 +35,9 @@ public class ProductVariant {
     @Column(name = "compare_at_price", precision = 14, scale = 2)
     private BigDecimal compareAtPrice;
 
+    @Column(precision = 14, scale = 2)
+    private BigDecimal cost;
+
     @Column(nullable = false)
     private Integer stock = 0;
 

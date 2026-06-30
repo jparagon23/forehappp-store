@@ -284,6 +284,7 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
             orderItem.setVariant(variant);
             orderItem.setQuantity(item.quantity());
             orderItem.setUnitPrice(variant.getPrice());
+            orderItem.setUnitCost(variant.getCost());
             group.getItems().add(orderItem);
             loadedVariants.add(variant);
 

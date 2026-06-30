@@ -8,6 +8,7 @@ import com.forehapp.store.productModule.application.dto.ProductVariantResponse;
 import com.forehapp.store.productModule.application.dto.SellerProductDetailResponse;
 import com.forehapp.store.productModule.application.dto.UpdateProductRequestDto;
 import com.forehapp.store.productModule.application.dto.UpdateVariantDto;
+import com.forehapp.store.productModule.application.dto.VariantCostHistoryResponse;
 import com.forehapp.store.productModule.domain.ports.in.IProductImageService;
 import com.forehapp.store.productModule.domain.ports.in.IProductService;
 import jakarta.validation.Valid;
@@ -110,6 +111,15 @@ public class ProductController {
             @PathVariable Long variantId,
             @AuthenticationPrincipal String userId) {
         return ResponseEntity.ok(productService.activateVariant(productId, variantId, storeId, Long.parseLong(userId)));
+    }
+
+    @GetMapping("/{productId}/variants/{variantId}/cost-history")
+    public ResponseEntity<List<VariantCostHistoryResponse>> getVariantCostHistory(
+            @PathVariable Long storeId,
+            @PathVariable Long productId,
+            @PathVariable Long variantId,
+            @AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(productService.getVariantCostHistory(productId, variantId, storeId, Long.parseLong(userId)));
     }
 
     @DeleteMapping("/{productId}/variants/{variantId}")

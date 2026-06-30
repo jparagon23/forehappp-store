@@ -13,12 +13,14 @@ import com.forehapp.store.productModule.application.dto.ProductVariantResponse;
 import com.forehapp.store.productModule.application.dto.SellerProductDetailResponse;
 import com.forehapp.store.productModule.application.dto.UpdateProductRequestDto;
 import com.forehapp.store.productModule.application.dto.UpdateVariantDto;
+import com.forehapp.store.productModule.application.dto.VariantCostHistoryResponse;
 import com.forehapp.store.productModule.domain.model.*;
 import com.forehapp.store.general.storage.StorageService;
 import com.forehapp.store.productModule.domain.ports.in.IProductService;
 import com.forehapp.store.cartModule.domain.ports.out.ICartDao;
 import com.forehapp.store.orderModule.domain.ports.out.IOrderItemDao;
 import com.forehapp.store.productModule.domain.ports.out.*;
+import com.forehapp.store.productModule.domain.ports.out.IVariantCostHistoryDao;
 import com.forehapp.store.storeModule.domain.model.Store;
 import com.forehapp.store.storeModule.domain.model.StoreMembership;
 import com.forehapp.store.storeModule.domain.model.StoreMemberRole;
@@ -46,6 +48,7 @@ public class ProductServiceImpl implements IProductService {
     private final IProductImageDao productImageDao;
     private final IProductVariantDao variantDao;
     private final IInventoryMovementDao movementDao;
+    private final IVariantCostHistoryDao costHistoryDao;
     private final IOrderItemDao orderItemDao;
     private final ICartDao cartDao;
     private final StorageService storageService;
@@ -59,6 +62,7 @@ public class ProductServiceImpl implements IProductService {
                               IProductImageDao productImageDao,
                               IProductVariantDao variantDao,
                               IInventoryMovementDao movementDao,
+                              IVariantCostHistoryDao costHistoryDao,
                               IOrderItemDao orderItemDao,
                               ICartDao cartDao,
                               StorageService storageService) {
@@ -71,6 +75,7 @@ public class ProductServiceImpl implements IProductService {
         this.productImageDao = productImageDao;
         this.variantDao = variantDao;
         this.movementDao = movementDao;
+        this.costHistoryDao = costHistoryDao;
         this.orderItemDao = orderItemDao;
         this.cartDao = cartDao;
         this.storageService = storageService;
@@ -169,6 +174,7 @@ public class ProductServiceImpl implements IProductService {
         variant.setSku(dto.getSku() != null && !dto.getSku().isBlank() ? dto.getSku().trim() : null);
         variant.setPrice(dto.getPrice());
         variant.setCompareAtPrice(dto.getCompareAtPrice());
+        variant.setCost(dto.getCost());
         variant.setStock(dto.getStock());
         variant.setAttributeValues(attrValues);
 
@@ -180,6 +186,14 @@ public class ProductServiceImpl implements IProductService {
             movement.setQuantity(dto.getStock());
             movement.setReason(MovementReason.RESTOCK);
             movementDao.save(movement);
+        }
+
+        if (dto.getCost() != null) {
+            VariantCostHistory history = new VariantCostHistory();
+            history.setVariant(saved);
+            history.setCost(dto.getCost());
+            history.setNotes(dto.getCostNotes());
+            costHistoryDao.save(history);
         }
 
         return new ProductVariantResponse(saved);
@@ -207,7 +221,26 @@ public class ProductServiceImpl implements IProductService {
             variant.setCompareAtPrice(dto.getCompareAtPrice());
         }
 
-        return new ProductVariantResponse(variantDao.save(variant));
+        boolean costChanged = false;
+        if (dto.isClearCost()) {
+            variant.setCost(null);
+            costChanged = true;
+        } else if (dto.getCost() != null && !dto.getCost().equals(variant.getCost())) {
+            variant.setCost(dto.getCost());
+            costChanged = true;
+        }
+
+        ProductVariant saved = variantDao.save(variant);
+
+        if (costChanged && saved.getCost() != null) {
+            VariantCostHistory history = new VariantCostHistory();
+            history.setVariant(saved);
+            history.setCost(saved.getCost());
+            history.setNotes(dto.getCostNotes());
+            costHistoryDao.save(history);
+        }
+
+        return new ProductVariantResponse(saved);
     }
 
     @Override
@@ -401,6 +434,18 @@ public class ProductServiceImpl implements IProductService {
 
         variant.setActive(true);
         return new ProductVariantResponse(variantDao.save(variant));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<VariantCostHistoryResponse> getVariantCostHistory(Long productId, Long variantId, Long storeId, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        resolveStoreProduct(productId, storeId);
+        variantDao.findByIdAndProductId(variantId, productId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Variant not found"));
+        return costHistoryDao.findByVariantIdOrderByChangedAtDesc(variantId).stream()
+                .map(VariantCostHistoryResponse::new)
+                .toList();
     }
 
     private StoreMembership resolveStoreAccess(Long storeId, Long userId) {

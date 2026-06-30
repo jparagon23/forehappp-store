@@ -7,6 +7,7 @@ import com.forehapp.store.productModule.application.dto.ProductVariantResponse;
 import com.forehapp.store.productModule.application.dto.SellerProductDetailResponse;
 import com.forehapp.store.productModule.application.dto.UpdateProductRequestDto;
 import com.forehapp.store.productModule.application.dto.UpdateVariantDto;
+import com.forehapp.store.productModule.application.dto.VariantCostHistoryResponse;
 
 import java.util.List;
 
@@ -15,6 +16,7 @@ public interface IProductService {
     ProductResponse updateProduct(Long productId, UpdateProductRequestDto dto, Long storeId, Long userId);
     ProductVariantResponse addVariant(Long productId, CreateVariantDto dto, Long storeId, Long userId);
     ProductVariantResponse updateVariant(Long productId, Long variantId, UpdateVariantDto dto, Long storeId, Long userId);
+    List<VariantCostHistoryResponse> getVariantCostHistory(Long productId, Long variantId, Long storeId, Long userId);
     ProductResponse publish(Long productId, Long storeId, Long userId);
     ProductResponse activate(Long productId, Long storeId, Long userId);
     ProductResponse deactivate(Long productId, Long storeId, Long userId);

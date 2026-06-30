@@ -26,6 +26,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -208,6 +209,12 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
         List<OrderItemDto> items = group.getItems().stream()
                 .map(i -> {
                     BigDecimal subtotal = i.getUnitPrice().multiply(BigDecimal.valueOf(i.getQuantity()));
+                    BigDecimal totalCostItem = i.getUnitCost() != null
+                            ? i.getUnitCost().multiply(BigDecimal.valueOf(i.getQuantity()))
+                            : null;
+                    BigDecimal unitMargin = i.getUnitCost() != null
+                            ? i.getUnitPrice().subtract(i.getUnitCost())
+                            : null;
                     List<VariantAttributeDto> attributes = i.getVariant().getAttributeValues().stream()
                             .map(av -> new VariantAttributeDto(
                                     av.getAttribute().getDescription(),
@@ -225,9 +232,22 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
                             attributes,
                             i.getQuantity(),
                             i.getUnitPrice(),
-                            subtotal);
+                            subtotal,
+                            i.getUnitCost(),
+                            totalCostItem,
+                            unitMargin);
                 })
                 .toList();
+
+        boolean allHaveCost = items.stream().allMatch(i -> i.unitCost() != null);
+        BigDecimal totalCost = allHaveCost
+                ? items.stream().map(i -> i.totalCost()).reduce(BigDecimal.ZERO, BigDecimal::add)
+                : null;
+        BigDecimal totalMargin = totalCost != null ? group.getSubtotal().subtract(totalCost) : null;
+        BigDecimal marginPercent = totalMargin != null && group.getSubtotal().compareTo(BigDecimal.ZERO) > 0
+                ? totalMargin.divide(group.getSubtotal(), 4, RoundingMode.HALF_UP)
+                        .multiply(BigDecimal.valueOf(100)).setScale(2, RoundingMode.HALF_UP)
+                : null;
 
         return new SellerOrderGroupDto(
                 group.getId(),
@@ -252,7 +272,10 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
                 group.getDeliveredAt(),
                 group.getCancelledAt(),
                 group.getCancellationReason(),
-                items
+                items,
+                totalCost,
+                totalMargin,
+                marginPercent
         );
     }
 }

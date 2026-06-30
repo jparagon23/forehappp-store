@@ -98,6 +98,12 @@ public class OrderMapper {
 
     private OrderItemDto toItemDto(OrderItem item) {
         BigDecimal subtotal = item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity()));
+        BigDecimal totalCost = item.getUnitCost() != null
+                ? item.getUnitCost().multiply(BigDecimal.valueOf(item.getQuantity()))
+                : null;
+        BigDecimal unitMargin = item.getUnitCost() != null
+                ? item.getUnitPrice().subtract(item.getUnitCost())
+                : null;
         List<VariantAttributeDto> attributes = item.getVariant().getAttributeValues().stream()
                 .map(av -> new VariantAttributeDto(
                         av.getAttribute().getDescription(),
@@ -115,7 +121,10 @@ public class OrderMapper {
                 attributes,
                 item.getQuantity(),
                 item.getUnitPrice(),
-                subtotal
+                subtotal,
+                item.getUnitCost(),
+                totalCost,
+                unitMargin
         );
     }
 }
