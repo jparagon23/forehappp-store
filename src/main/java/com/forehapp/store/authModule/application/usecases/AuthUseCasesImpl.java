@@ -25,6 +25,7 @@ import com.forehapp.store.userModule.domain.ports.out.UserRepository;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -93,6 +94,7 @@ public class AuthUseCasesImpl implements RegisterUseCase, VerifyCodeUseCase, Res
 
     @Override
     @Transactional
+    @CacheEvict(value = "admin-user-stats", allEntries = true)
     public LoginResponseDto verifyCode(VerifyCodeRequestDto dto) {
         ConfirmationToken token = confirmationTokenService.findByCode(dto.getCode())
                 .orElseThrow(() -> new BadRequestException(ErrorCode.AUTH_CODE_INVALID, "Código inválido"));
@@ -143,6 +145,7 @@ public class AuthUseCasesImpl implements RegisterUseCase, VerifyCodeUseCase, Res
 
     @Override
     @Transactional
+    @CacheEvict(value = "admin-user-stats", allEntries = true)
     public LoginResponseDto loginWithGoogle(String idToken) {
         GoogleIdToken.Payload payload = googleAuthService.verifyToken(idToken);
         String email = payload.getEmail().trim().toLowerCase();
@@ -175,6 +178,7 @@ public class AuthUseCasesImpl implements RegisterUseCase, VerifyCodeUseCase, Res
 
     @Override
     @Transactional
+    @CacheEvict(value = "admin-user-stats", allEntries = true)
     public LoginResponseDto registerWithGoogle(String idToken) {
         GoogleIdToken.Payload payload = googleAuthService.verifyToken(idToken);
         String email = payload.getEmail().trim().toLowerCase();
