@@ -41,7 +41,7 @@ public class AmbassadorAdminServiceImpl implements IAmbassadorAdminService {
     @Transactional
     public AmbassadorResponse create(Long adminUserId, CreateAmbassadorRequestDto dto) {
         requireAdmin(adminUserId);
-        StoreProfile profile = storeProfileDao.findById(dto.profileId())
+        StoreProfile profile = storeProfileDao.findByUserId(dto.userId())
                 .orElseThrow(() -> new NotFoundException(ErrorCode.USER_PROFILE_NOT_FOUND, "Store profile not found"));
 
         if (ambassadorDao.existsByReferralCode(dto.referralCode().toUpperCase())) {
@@ -49,7 +49,7 @@ public class AmbassadorAdminServiceImpl implements IAmbassadorAdminService {
                     "Referral code already in use: " + dto.referralCode());
         }
 
-        ambassadorDao.findByProfileId(dto.profileId()).ifPresent(existing -> {
+        ambassadorDao.findByProfileId(profile.getId()).ifPresent(existing -> {
             throw new ConflictException(ErrorCode.AMBASSADOR_ALREADY_EXISTS,
                     "This profile is already registered as an ambassador");
         });

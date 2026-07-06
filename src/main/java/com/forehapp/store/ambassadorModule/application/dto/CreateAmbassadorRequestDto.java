@@ -5,7 +5,7 @@ import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 
 public record CreateAmbassadorRequestDto(
-        @NotNull(message = "Profile ID is required") Long profileId,
+        @NotNull(message = "User ID is required") Long userId,
         @NotBlank(message = "Referral code is required")
         @Size(min = 3, max = 50, message = "Referral code must be between 3 and 50 characters")
         @Pattern(regexp = "^[A-Z0-9_]+$", message = "Referral code must contain only uppercase letters, digits and underscores")
