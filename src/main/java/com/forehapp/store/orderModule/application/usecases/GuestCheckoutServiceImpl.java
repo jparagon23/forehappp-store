@@ -442,9 +442,10 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
                     order.setReferralCode(referralCode);
                     orderDao.save(order);
 
-                    java.math.BigDecimal commissionAmount = order.getTotal()
+                    BigDecimal profit = calculateOrderProfit(order);
+                    BigDecimal commissionAmount = profit
                             .multiply(ambassador.getCommissionPercentage())
-                            .divide(java.math.BigDecimal.valueOf(100), 2, java.math.RoundingMode.HALF_UP);
+                            .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
 
                     AmbassadorCommission commission = new AmbassadorCommission();
                     commission.setAmbassador(ambassador);
@@ -453,6 +454,36 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
                     commission.setCommissionPercentage(ambassador.getCommissionPercentage());
                     commissionDao.save(commission);
                 });
+    }
+
+    private BigDecimal calculateOrderProfit(Order order) {
+        BigDecimal totalRevenue = BigDecimal.ZERO;
+        for (OrderSellerGroup group : order.getSellerGroups()) {
+            for (OrderItem item : group.getItems()) {
+                totalRevenue = totalRevenue.add(item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity())));
+            }
+        }
+
+        BigDecimal couponDiscount = order.getCouponDiscount();
+        BigDecimal discountRatio = (couponDiscount != null && couponDiscount.signum() > 0 && totalRevenue.signum() > 0)
+                ? couponDiscount.divide(totalRevenue, 10, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO;
+
+        BigDecimal totalProfit = BigDecimal.ZERO;
+        for (OrderSellerGroup group : order.getSellerGroups()) {
+            for (OrderItem item : group.getItems()) {
+                if (item.getUnitCost() == null) {
+                    continue;
+                }
+                BigDecimal itemRevenue = item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity()));
+                BigDecimal adjustedRevenue = itemRevenue.multiply(BigDecimal.ONE.subtract(discountRatio));
+                BigDecimal itemCost = item.getUnitCost().multiply(BigDecimal.valueOf(item.getQuantity()));
+                BigDecimal itemProfit = adjustedRevenue.subtract(itemCost).max(BigDecimal.ZERO);
+                totalProfit = totalProfit.add(itemProfit);
+            }
+        }
+
+        return totalProfit.setScale(2, RoundingMode.HALF_UP);
     }
 
     private void markOutOfStockIfNeeded(Long productId) {
