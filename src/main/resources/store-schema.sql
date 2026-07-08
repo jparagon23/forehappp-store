@@ -629,6 +629,25 @@ SET @s = (SELECT IF(COUNT(*) = 0,
 PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
 
 -- =====================
+-- Backfill: store_order_seller_groups.shipping_covered_by_coupon for orders
+-- placed before shipping_covered_by_coupon existed. Only touches rows still
+-- at their default (0), so it's a no-op once applied — safe to run on every
+-- startup. Matches a FREE_SHIPPING coupon redemption to the one group whose
+-- shipping_cost equals the order's recorded coupon_discount, restricted to
+-- the coupon's own store when the coupon has one.
+-- =====================
+
+UPDATE store_order_seller_groups g
+JOIN store_orders o ON o.order_id = g.order_id
+JOIN store_coupons c ON UPPER(c.code) = UPPER(o.coupon_code)
+SET g.shipping_covered_by_coupon = g.shipping_cost
+WHERE c.discount_type = 'FREE_SHIPPING'
+  AND g.shipping_cost > 0
+  AND o.coupon_discount = g.shipping_cost
+  AND (c.store_id IS NULL OR c.store_id = g.store_id)
+  AND g.shipping_covered_by_coupon = 0;
+
+-- =====================
 -- Migration: store_orders — coupon fields
 -- =====================
 
