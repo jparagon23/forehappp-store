@@ -59,6 +59,18 @@ public class OrderSellerGroup {
     @Column(name = "cancellation_reason", length = 500)
     private String cancellationReason;
 
+    @Column(name = "shipping_cost_waived", precision = 14, scale = 2)
+    private BigDecimal shippingCostWaived;
+
+    @Column(name = "shipping_removed_at")
+    private LocalDateTime shippingRemovedAt;
+
+    @Column(name = "shipping_removed_reason", length = 500)
+    private String shippingRemovedReason;
+
+    @Column(name = "shipping_removed_by_user_id")
+    private Long shippingRemovedByUserId;
+
     @BatchSize(size = 30)
     @OneToMany(mappedBy = "sellerGroup", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderItem> items = new ArrayList<>();

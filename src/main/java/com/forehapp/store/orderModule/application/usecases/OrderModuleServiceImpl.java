@@ -5,6 +5,7 @@ import com.forehapp.store.general.exceptions.ErrorCode;
 import com.forehapp.store.general.exceptions.ForbiddenException;
 import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.orderModule.domain.events.OrderStatusChangedEvent;
+import com.forehapp.store.orderModule.domain.events.ShippingCostRemovedEvent;
 import com.forehapp.store.orderModule.domain.model.Order;
 import com.forehapp.store.orderModule.domain.model.OrderItem;
 import com.forehapp.store.orderModule.domain.model.OrderSellerGroup;
@@ -160,6 +161,39 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
         eventPublisher.publishEvent(buildStatusEvent(group));
     }
 
+    @Override
+    @Transactional
+    public void removeShippingCost(Long storeId, Long groupId, String reason, Long userId) {
+        resolveStoreAccess(storeId, userId);
+        OrderSellerGroup group = resolveGroup(groupId, storeId);
+
+        if (group.getStatus() == OrderSellerGroupStatus.DELIVERED
+                || group.getStatus() == OrderSellerGroupStatus.CANCELLED) {
+            throw new ConflictException(ErrorCode.ORDER_GROUP_INVALID_STATUS,
+                    "Cannot remove shipping cost for a group in " + group.getStatus() + " status");
+        }
+
+        if (group.getShippingCost().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ConflictException(ErrorCode.ORDER_GROUP_SHIPPING_ALREADY_REMOVED,
+                    "This group has no shipping cost to remove");
+        }
+
+        BigDecimal waivedAmount = group.getShippingCost();
+
+        Order order = group.getOrder();
+        order.setTotal(order.getTotal().subtract(waivedAmount));
+        orderDao.save(order);
+
+        group.setShippingCostWaived(waivedAmount);
+        group.setShippingCost(BigDecimal.ZERO);
+        group.setShippingRemovedAt(LocalDateTime.now());
+        group.setShippingRemovedReason(reason.trim());
+        group.setShippingRemovedByUserId(userId);
+        orderGroupDao.save(group);
+
+        eventPublisher.publishEvent(buildShippingRemovedEvent(group, waivedAmount, order.getTotal()));
+    }
+
     // ── helpers ────────────────────────────────────────────────────────────────
 
     private void resolveStoreAccess(Long storeId, Long userId) {
@@ -200,6 +234,20 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
                 group.getOrder().getShippingCity(),
                 group.getOrder().getShippingCountry(),
                 items
+        );
+    }
+
+    private ShippingCostRemovedEvent buildShippingRemovedEvent(OrderSellerGroup group, BigDecimal waivedAmount,
+                                                                BigDecimal newOrderTotal) {
+        return new ShippingCostRemovedEvent(
+                group.getId(),
+                group.getOrder().getId(),
+                group.getOrder().getBuyerEmail(),
+                group.getOrder().resolveContactName(),
+                group.getStore().getName(),
+                waivedAmount,
+                newOrderTotal,
+                group.getShippingRemovedReason()
         );
     }
 
@@ -272,6 +320,9 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
                 group.getDeliveredAt(),
                 group.getCancelledAt(),
                 group.getCancellationReason(),
+                group.getShippingCostWaived(),
+                group.getShippingRemovedAt(),
+                group.getShippingRemovedReason(),
                 items,
                 totalCost,
                 totalMargin,

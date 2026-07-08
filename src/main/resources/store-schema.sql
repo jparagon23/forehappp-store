@@ -595,6 +595,34 @@ SET @s = (SELECT IF(COUNT(*) = 0,
 PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
 
 -- =====================
+-- Migration: store_order_seller_groups — shipping cost removal trace
+-- =====================
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_order_seller_groups ADD COLUMN shipping_cost_waived DECIMAL(14,2)',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_order_seller_groups' AND COLUMN_NAME = 'shipping_cost_waived');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_order_seller_groups ADD COLUMN shipping_removed_at DATETIME',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_order_seller_groups' AND COLUMN_NAME = 'shipping_removed_at');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_order_seller_groups ADD COLUMN shipping_removed_reason VARCHAR(500)',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_order_seller_groups' AND COLUMN_NAME = 'shipping_removed_reason');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_order_seller_groups ADD COLUMN shipping_removed_by_user_id BIGINT',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_order_seller_groups' AND COLUMN_NAME = 'shipping_removed_by_user_id');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- =====================
 -- Migration: store_orders — coupon fields
 -- =====================
 

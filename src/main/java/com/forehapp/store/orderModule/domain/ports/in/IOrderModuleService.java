@@ -11,4 +11,5 @@ public interface IOrderModuleService {
     void shipGroup(Long storeId, Long groupId, String trackingNumber, Long userId);
     void deliverGroup(Long storeId, Long groupId, Long userId);
     void cancelGroup(Long storeId, Long groupId, String reason, Long userId);
+    void removeShippingCost(Long storeId, Long groupId, String reason, Long userId);
 }

@@ -2,6 +2,7 @@ package com.forehapp.store.orderModule.infrastructure.web;
 
 import com.forehapp.store.orderModule.domain.ports.in.IOrderModuleService;
 import com.forehapp.store.orderModule.infrastructure.web.dto.CancelGroupRequestDto;
+import com.forehapp.store.orderModule.infrastructure.web.dto.RemoveShippingCostRequestDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.SellerOrderGroupDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.ShipGroupRequestDto;
 import jakarta.validation.Valid;
@@ -71,6 +72,16 @@ public class OrderAdminController {
             @Valid @RequestBody CancelGroupRequestDto dto,
             @AuthenticationPrincipal String userId) {
         orderModuleService.cancelGroup(storeId, groupId, dto.reason(), Long.parseLong(userId));
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{groupId}/remove-shipping-cost")
+    public ResponseEntity<Void> removeShippingCost(
+            @PathVariable Long storeId,
+            @PathVariable Long groupId,
+            @Valid @RequestBody RemoveShippingCostRequestDto dto,
+            @AuthenticationPrincipal String userId) {
+        orderModuleService.removeShippingCost(storeId, groupId, dto.reason(), Long.parseLong(userId));
         return ResponseEntity.noContent().build();
     }
 }
