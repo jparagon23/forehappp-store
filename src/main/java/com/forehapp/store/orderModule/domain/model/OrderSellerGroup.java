@@ -41,6 +41,9 @@ public class OrderSellerGroup {
     @Column(name = "shipping_cost", nullable = false, precision = 14, scale = 2)
     private BigDecimal shippingCost = BigDecimal.ZERO;
 
+    @Column(name = "shipping_covered_by_coupon", nullable = false, precision = 14, scale = 2)
+    private BigDecimal shippingCoveredByCoupon = BigDecimal.ZERO;
+
     @Column(name = "tracking_number", length = 100)
     private String trackingNumber;
 

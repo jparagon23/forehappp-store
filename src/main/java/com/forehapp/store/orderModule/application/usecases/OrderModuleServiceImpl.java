@@ -173,12 +173,13 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
                     "Cannot remove shipping cost for a group in " + group.getStatus() + " status");
         }
 
-        if (group.getShippingCost().compareTo(BigDecimal.ZERO) <= 0) {
+        BigDecimal shippingChargedNet = group.getShippingCost().subtract(group.getShippingCoveredByCoupon());
+        if (shippingChargedNet.compareTo(BigDecimal.ZERO) <= 0) {
             throw new ConflictException(ErrorCode.ORDER_GROUP_SHIPPING_ALREADY_REMOVED,
                     "This group has no shipping cost to remove");
         }
 
-        BigDecimal waivedAmount = group.getShippingCost();
+        BigDecimal waivedAmount = shippingChargedNet;
 
         Order order = group.getOrder();
         order.setTotal(order.getTotal().subtract(waivedAmount));
@@ -311,6 +312,7 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
                 group.getStatus().name(),
                 group.getSubtotal(),
                 group.getShippingCost(),
+                group.getShippingCost().subtract(group.getShippingCoveredByCoupon()),
                 group.getOrder().getTotal(),
                 group.getOrder().getCouponCode(),
                 group.getOrder().getCouponDiscount(),

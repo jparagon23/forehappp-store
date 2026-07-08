@@ -384,6 +384,7 @@ public class OrderServiceImpl implements IOrderService {
     private Order applyCoupon(Long userId, String couponCode, Long couponStoreId, Order savedOrder, String referralCode) {
         BigDecimal applicableAmount;
         BigDecimal applicableShipping = BigDecimal.ZERO;
+        OrderSellerGroup targetGroup = null;
 
         if (couponStoreId != null) {
             boolean hasGroupForStore = savedOrder.getSellerGroups().stream()
@@ -392,18 +393,22 @@ public class OrderServiceImpl implements IOrderService {
                 throw new BadRequestException(ErrorCode.COUPON_INVALID,
                         "Cart has no items from the coupon's store");
             }
-            OrderSellerGroup group = savedOrder.getSellerGroups().stream()
+            targetGroup = savedOrder.getSellerGroups().stream()
                     .filter(g -> g.getStore().getId().equals(couponStoreId))
                     .findFirst()
                     .orElse(null);
-            applicableAmount = group != null ? group.getSubtotal() : BigDecimal.ZERO;
-            applicableShipping = group != null ? group.getShippingCost() : BigDecimal.ZERO;
+            applicableAmount = targetGroup != null ? targetGroup.getSubtotal() : BigDecimal.ZERO;
+            applicableShipping = targetGroup != null ? targetGroup.getShippingCost() : BigDecimal.ZERO;
         } else {
             applicableAmount = savedOrder.getTotal();
         }
 
         CouponValidationResponse couponResult = promotionService.redeemCoupon(userId,
                 new RedeemCouponRequestDto(couponCode, couponStoreId, applicableAmount, savedOrder.getId(), applicableShipping));
+
+        if ("FREE_SHIPPING".equals(couponResult.discountType()) && targetGroup != null) {
+            targetGroup.setShippingCoveredByCoupon(couponResult.discountAmount());
+        }
 
         if (couponResult.isDonation()) {
             if (referralCode != null && !referralCode.isBlank()) {

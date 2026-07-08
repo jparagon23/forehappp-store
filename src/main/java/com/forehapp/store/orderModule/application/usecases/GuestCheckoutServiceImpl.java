@@ -330,6 +330,7 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
     private Order applyGuestCoupon(String email, String couponCode, Long couponStoreId, Order savedOrder, String referralCode) {
         BigDecimal applicableAmount;
         BigDecimal applicableShipping = BigDecimal.ZERO;
+        OrderSellerGroup targetGroup = null;
 
         if (couponStoreId != null) {
             boolean hasGroupForStore = savedOrder.getSellerGroups().stream()
@@ -338,12 +339,12 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
                 throw new BadRequestException(ErrorCode.COUPON_INVALID,
                         "Cart has no items from the coupon's store");
             }
-            OrderSellerGroup group = savedOrder.getSellerGroups().stream()
+            targetGroup = savedOrder.getSellerGroups().stream()
                     .filter(g -> g.getStore().getId().equals(couponStoreId))
                     .findFirst()
                     .orElseThrow();
-            applicableAmount = group.getSubtotal();
-            applicableShipping = group.getShippingCost();
+            applicableAmount = targetGroup.getSubtotal();
+            applicableShipping = targetGroup.getShippingCost();
         } else {
             applicableAmount = savedOrder.getTotal();
         }
@@ -351,6 +352,10 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
         CouponValidationResponse couponResult = promotionService.redeemCouponAsGuest(email,
                 new RedeemCouponRequestDto(couponCode, couponStoreId, applicableAmount,
                         savedOrder.getId(), applicableShipping));
+
+        if ("FREE_SHIPPING".equals(couponResult.discountType()) && targetGroup != null) {
+            targetGroup.setShippingCoveredByCoupon(couponResult.discountAmount());
+        }
 
         if (couponResult.isDonation()) {
             if (referralCode != null && !referralCode.isBlank()) {

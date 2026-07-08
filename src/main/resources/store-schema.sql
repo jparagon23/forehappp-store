@@ -622,6 +622,12 @@ SET @s = (SELECT IF(COUNT(*) = 0,
   FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_order_seller_groups' AND COLUMN_NAME = 'shipping_removed_by_user_id');
 PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
 
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_order_seller_groups ADD COLUMN shipping_covered_by_coupon DECIMAL(14,2) NOT NULL DEFAULT 0',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_order_seller_groups' AND COLUMN_NAME = 'shipping_covered_by_coupon');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
 -- =====================
 -- Migration: store_orders — coupon fields
 -- =====================

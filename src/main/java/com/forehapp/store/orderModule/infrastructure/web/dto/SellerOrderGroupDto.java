@@ -18,6 +18,7 @@ public record SellerOrderGroupDto(
         String status,
         BigDecimal subtotal,
         BigDecimal shippingCost,
+        BigDecimal shippingChargedNet,
         BigDecimal orderTotal,
         String couponCode,
         BigDecimal couponDiscount,
