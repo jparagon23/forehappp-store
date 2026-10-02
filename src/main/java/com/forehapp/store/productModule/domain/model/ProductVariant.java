@@ -44,6 +44,10 @@ public class ProductVariant {
     @Column(nullable = false)
     private Boolean active = true;
 
+    // Overrides Product.repurchaseDays for this variant (e.g. larger packs); null = inherit
+    @Column(name = "repurchase_days")
+    private Integer repurchaseDays;
+
     @BatchSize(size = 25)
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(

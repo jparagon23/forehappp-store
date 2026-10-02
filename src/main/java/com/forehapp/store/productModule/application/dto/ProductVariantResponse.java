@@ -19,6 +19,7 @@ public class ProductVariantResponse {
     private final BigDecimal marginPercent;
     private final Integer stock;
     private final Boolean active;
+    private final Integer repurchaseDays;
     private final List<AttributeValueInfo> attributes;
 
     public ProductVariantResponse(ProductVariant variant) {
@@ -29,6 +30,7 @@ public class ProductVariantResponse {
         this.cost = variant.getCost();
         this.stock = variant.getStock();
         this.active = variant.getActive();
+        this.repurchaseDays = variant.getRepurchaseDays();
         this.attributes = variant.getAttributeValues().stream()
                 .map(av -> new AttributeValueInfo(
                         av.getId(),

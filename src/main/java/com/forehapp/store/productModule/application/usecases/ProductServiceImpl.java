@@ -111,6 +111,7 @@ public class ProductServiceImpl implements IProductService {
         product.setCategory(category);
         product.setStatus(ProductStatus.DRAFT);
         product.setFreeShipping(Boolean.TRUE.equals(dto.getFreeShipping()));
+        product.setRepurchaseDays(dto.getRepurchaseDays());
 
         return new ProductResponse(productDao.save(product));
     }
@@ -147,6 +148,11 @@ public class ProductServiceImpl implements IProductService {
         if (dto.getFreeShipping() != null) {
             product.setFreeShipping(dto.getFreeShipping());
         }
+        if (dto.isClearRepurchaseDays()) {
+            product.setRepurchaseDays(null);
+        } else if (dto.getRepurchaseDays() != null) {
+            product.setRepurchaseDays(dto.getRepurchaseDays());
+        }
 
         return new ProductResponse(productDao.save(product));
     }
@@ -176,6 +182,7 @@ public class ProductServiceImpl implements IProductService {
         variant.setCompareAtPrice(dto.getCompareAtPrice());
         variant.setCost(dto.getCost());
         variant.setStock(dto.getStock());
+        variant.setRepurchaseDays(dto.getRepurchaseDays());
         variant.setAttributeValues(attrValues);
 
         ProductVariant saved = variantDao.save(variant);
@@ -228,6 +235,12 @@ public class ProductServiceImpl implements IProductService {
         } else if (dto.getCost() != null && !dto.getCost().equals(variant.getCost())) {
             variant.setCost(dto.getCost());
             costChanged = true;
+        }
+
+        if (dto.isClearRepurchaseDays()) {
+            variant.setRepurchaseDays(null);
+        } else if (dto.getRepurchaseDays() != null) {
+            variant.setRepurchaseDays(dto.getRepurchaseDays());
         }
 
         ProductVariant saved = variantDao.save(variant);

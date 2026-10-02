@@ -1,5 +1,7 @@
 package com.forehapp.store.productModule.application.dto;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -24,4 +26,8 @@ public class CreateProductRequestDto {
     private Long categoryId;
 
     private Boolean freeShipping = false;
+
+    @Min(value = 1, message = "Repurchase days must be at least 1")
+    @Max(value = 365, message = "Repurchase days cannot exceed 365")
+    private Integer repurchaseDays;
 }

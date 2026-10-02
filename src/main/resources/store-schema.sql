@@ -891,3 +891,44 @@ SET @s = (SELECT IF(COUNT(*) = 0,
   'SELECT 1')
   FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_order_items' AND COLUMN_NAME = 'unit_cost');
 PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- =====================
+-- Migration: Repurchase reminders
+-- =====================
+
+-- Days one unit lasts before the buyer needs to repurchase (set by the seller; null = no reminder)
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_products ADD COLUMN repurchase_days INT',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_products' AND COLUMN_NAME = 'repurchase_days');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- Optional per-variant override of store_products.repurchase_days (e.g. larger packs)
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_product_variants ADD COLUMN repurchase_days INT',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_product_variants' AND COLUMN_NAME = 'repurchase_days');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- One row per order item already included in a reminder email. The unique key on
+-- order_item_id is what keeps a second run (or a second instance) from emailing twice.
+CREATE TABLE IF NOT EXISTS store_repurchase_reminders (
+    reminder_id   BIGINT AUTO_INCREMENT PRIMARY KEY,
+    order_item_id BIGINT       NOT NULL,
+    order_id      BIGINT       NOT NULL,
+    product_id    BIGINT       NOT NULL,
+    email         VARCHAR(150) NOT NULL,
+    due_date      DATE         NOT NULL,
+    sent_at       DATETIME     NOT NULL,
+    CONSTRAINT store_uk_rr_order_item UNIQUE (order_item_id),
+    CONSTRAINT store_fk_rr_order_item FOREIGN KEY (order_item_id) REFERENCES store_order_items(item_id) ON DELETE CASCADE,
+    INDEX idx_rr_email (email)
+);
+
+-- Emails that opted out of marketing emails (keyed by email so it also covers guest buyers)
+CREATE TABLE IF NOT EXISTS store_email_unsubscribes (
+    unsubscribe_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    email          VARCHAR(150) NOT NULL,
+    created_at     DATETIME     NOT NULL,
+    CONSTRAINT store_uk_eu_email UNIQUE (email)
+);
