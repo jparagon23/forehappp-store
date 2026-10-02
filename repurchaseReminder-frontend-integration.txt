@@ -14,11 +14,11 @@ producto NO genera recordatorios. Por eso el campo en el formulario del
 seller es la pieza más importante del lado del front: sin él no sale ningún
 correo.
 
-El front tiene tres impactos:
+El front tiene estos impactos:
 
   1. Formulario de producto y de variante del seller  → campo nuevo (OBLIGATORIO)
   2. Página pública de baja de correos                → página nueva (OBLIGATORIO)
-  3. Ruta del producto a la que apunta el correo      → confirmar (OBLIGATORIO)
+  3. Ruta del producto a la que apunta el correo      → ya coincide (/product/:id)
   4. Panel admin: vista previa de envíos              → opcional
 
 
@@ -219,14 +219,13 @@ Notas:
 
 El botón "Comprar de nuevo" apunta a:
 
-  {FRONTEND_URL}/products/{productId}?utm_source=repurchase_reminder&utm_medium=email
+  {FRONTEND_URL}/product/{productId}?utm_source=repurchase_reminder&utm_medium=email
 
-PENDIENTE DE CONFIRMAR: que /products/{productId} sea la ruta real del
-detalle público de producto en el front. Si es otra (por ejemplo
-/producto/{id} o /p/{id}), no hay que tocar código: se cambia la propiedad
-del backend
+Coincide con la ruta pública del detalle de producto en forehapp-store
+('product/:id'). Si esa ruta cambia, no hay que tocar código del backend:
+se ajusta la propiedad
 
-  app.repurchase.product-path=/products/{productId}
+  app.repurchase.product-path=/product/{productId}
 
 La ruta debe funcionar sin login y resolver el producto solo con su id.
 
@@ -299,5 +298,5 @@ RESUMEN DE TAREAS FRONT
   [ ] Formulario de variante: enviar clearRepurchaseDays=true al vaciarlo
   [ ] Precargar ambos campos desde las respuestas del seller
   [ ] Página pública /email/unsubscribe con confirmación y deshacer
-  [ ] Confirmar la ruta pública del detalle de producto
+  [x] Ruta pública del detalle de producto confirmada: /product/:id
   [ ] (Opcional) Pantalla admin de vista previa de recordatorios
