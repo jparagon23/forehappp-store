@@ -1,0 +1,303 @@
+================================================================================
+  RECORDATORIO DE RECOMPRA — INTEGRACIÓN FRONTEND
+  Forehapp Store · Implementado: 2026-10-02
+================================================================================
+
+CONTEXTO
+--------
+El backend envía un correo a quienes ya compraron cuando calcula que el
+producto se les está acabando, invitándolos a comprarlo de nuevo.
+
+El cálculo depende de un dato que llena el seller: cuántos días dura una
+unidad del producto ("repurchaseDays"). Si el seller no lo llena, ese
+producto NO genera recordatorios. Por eso el campo en el formulario del
+seller es la pieza más importante del lado del front: sin él no sale ningún
+correo.
+
+El front tiene tres impactos:
+
+  1. Formulario de producto y de variante del seller  → campo nuevo (OBLIGATORIO)
+  2. Página pública de baja de correos                → página nueva (OBLIGATORIO)
+  3. Ruta del producto a la que apunta el correo      → confirmar (OBLIGATORIO)
+  4. Panel admin: vista previa de envíos              → opcional
+
+
+================================================================================
+CÓMO FUNCIONA (para dar contexto al texto de ayuda del formulario)
+================================================================================
+
+  Duración estimada = repurchaseDays × cantidad comprada   (tope: 365 días)
+  Fecha de aviso    = fecha de entrega + 80% de la duración
+
+  Ejemplo: 2 tubos de pelotas con repurchaseDays = 30, entregados el 1 de
+  octubre → duran 60 días → el correo sale el día 48 (18 de noviembre).
+
+  - La variante puede sobreescribir el valor del producto (packs grandes).
+  - Si la variante no tiene valor, hereda el del producto.
+  - Si ninguno tiene valor, no hay recordatorio.
+
+  Reglas para no saturar al comprador (todas en el backend):
+  - Un solo correo por comprador con todos los productos que le tocan.
+  - Máximo un correo de recompra cada 30 días por comprador.
+  - Un solo recordatorio por compra; no se insiste.
+  - No se envía si ya recompró el producto, si está inactivo o sin stock.
+  - Tras 2 recordatorios sin compra, se pausa hasta que vuelva a comprar.
+  - No se envía a quien se dio de baja.
+
+
+================================================================================
+1. FORMULARIO DEL SELLER — CAMPO "repurchaseDays"
+================================================================================
+
+Campo numérico opcional. Entero entre 1 y 365. Vacío = sin recordatorio.
+
+Texto sugerido:
+  Label:  "¿Cada cuántos días se recompra?"
+  Ayuda:  "Días que le dura una unidad a un jugador promedio. Lo usamos para
+           recordarle al comprador cuando se le esté acabando. Déjalo vacío
+           si el producto no se recompra (raquetas, ropa, bolsos)."
+
+En la variante:
+  Label:  "Días de recompra de esta variante (opcional)"
+  Ayuda:  "Solo si esta presentación dura distinto al producto, por ejemplo
+           un pack más grande. Vacío = usa el valor del producto."
+
+------------------------------------------------------------------------
+1.1 CREAR PRODUCTO
+    POST /api/v1/stores/{storeId}/products
+------------------------------------------------------------------------
+Campo nuevo opcional en el body:
+
+  {
+    "title": "Pelotas Wilson US Open",
+    "brandId": 3,
+    "categoryId": 3,
+    "freeShipping": false,
+    "repurchaseDays": 30          ← NUEVO (opcional, 1–365)
+  }
+
+------------------------------------------------------------------------
+1.2 EDITAR PRODUCTO
+    PATCH /api/v1/stores/{storeId}/products/{productId}
+------------------------------------------------------------------------
+Dos campos nuevos opcionales:
+
+  { "repurchaseDays": 45 }               → cambia el valor
+  { "clearRepurchaseDays": true }        → lo deja vacío (sin recordatorio)
+  (no enviar ninguno)                    → no se modifica
+
+IMPORTANTE: enviar "repurchaseDays": null NO borra el valor (se interpreta
+como "no modificar"). Para borrarlo hay que enviar clearRepurchaseDays: true.
+Es el mismo patrón de clearCompareAtPrice / clearCost en variantes.
+
+------------------------------------------------------------------------
+1.3 CREAR VARIANTE
+    POST /api/v1/stores/{storeId}/products/{productId}/variants
+------------------------------------------------------------------------
+Campo nuevo opcional en el body:
+
+  {
+    "price": 28000,
+    "stock": 20,
+    "attributeValueIds": [10],
+    "repurchaseDays": 40          ← NUEVO (opcional, 1–365)
+  }
+
+------------------------------------------------------------------------
+1.4 EDITAR VARIANTE
+    PATCH /api/v1/stores/{storeId}/products/{productId}/variants/{variantId}
+------------------------------------------------------------------------
+  { "repurchaseDays": 40 }               → cambia el valor
+  { "clearRepurchaseDays": true }        → vuelve a heredar del producto
+
+------------------------------------------------------------------------
+1.5 RESPUESTAS QUE AHORA INCLUYEN EL CAMPO
+------------------------------------------------------------------------
+Solo en las respuestas del seller (no en las públicas):
+
+  ProductResponse               → "repurchaseDays": 30 | null
+    (crear, editar, listar productos de la tienda, publicar, etc.)
+
+  SellerProductDetailResponse   → "repurchaseDays": 30 | null
+    GET /api/v1/stores/{storeId}/products/{productId}
+
+  ProductVariantResponse        → "repurchaseDays": 40 | null
+    (dentro de variants[] del detalle, y al crear/editar variante)
+
+Para precargar el formulario de edición usar estos valores. null = vacío.
+
+------------------------------------------------------------------------
+1.6 ERRORES DE VALIDACIÓN
+------------------------------------------------------------------------
+HTTP 400 con code VALIDATION_ERROR si el valor es menor a 1 o mayor a 365:
+  "repurchaseDays: Repurchase days must be at least 1"
+  "repurchaseDays: Repurchase days cannot exceed 365"
+
+Validar también en el front: entero, mínimo 1, máximo 365.
+
+
+================================================================================
+2. PÁGINA PÚBLICA DE BAJA DE CORREOS
+================================================================================
+
+El pie de cada correo trae el link:
+
+  {FRONTEND_URL}/email/unsubscribe?token=<token>
+
+Hay que crear esa ruta. Es PÚBLICA (sin login): la reciben también los
+compradores invitados, que no tienen cuenta. El token es la única credencial.
+
+Flujo de la página:
+
+  1. Leer "token" del query string.
+     Si no viene → mostrar "El enlace no es válido".
+
+  2. Mostrar confirmación ANTES de dar de baja:
+       "¿Quieres dejar de recibir recordatorios de recompra?"
+       [ Sí, darme de baja ]
+
+     NO llamar al endpoint automáticamente al cargar la página: los
+     antivirus y clientes de correo abren los links solos para revisarlos y
+     darían de baja a la gente sin que lo pidiera.
+
+  3. Al confirmar → POST /api/v1/email-preferences/unsubscribe
+
+  4. Mostrar resultado:
+       "Listo. No enviaremos más recordatorios a j***@gmail.com"
+       [ Me arrepentí, quiero seguir recibiéndolos ]
+
+  5. Si hace clic en deshacer → POST /api/v1/email-preferences/resubscribe
+       "Listo, seguirás recibiendo recordatorios."
+
+------------------------------------------------------------------------
+2.1 DARSE DE BAJA
+    POST /api/v1/email-preferences/unsubscribe      (público, sin JWT)
+------------------------------------------------------------------------
+Request:
+  { "token": "YnV5ZXJAbWFpbC5jb20.x8f3...firma" }
+
+Response 200:
+  { "email": "j***@gmail.com", "subscribed": false }
+
+Es idempotente: llamarlo dos veces devuelve 200 las dos veces.
+
+------------------------------------------------------------------------
+2.2 VOLVER A SUSCRIBIRSE
+    POST /api/v1/email-preferences/resubscribe      (público, sin JWT)
+------------------------------------------------------------------------
+Request:
+  { "token": "<el mismo token>" }
+
+Response 200:
+  { "email": "j***@gmail.com", "subscribed": true }
+
+------------------------------------------------------------------------
+2.3 ERRORES
+------------------------------------------------------------------------
+HTTP 400  code: EMAIL_PREFERENCE_TOKEN_INVALID
+  Token alterado, incompleto o inválido.
+  → Mostrar: "El enlace no es válido o está incompleto."
+
+HTTP 400  code: VALIDATION_ERROR
+  Token vacío.
+
+HTTP 429
+  Límite de 60 requests por minuto por IP (igual que los demás públicos).
+
+Notas:
+  - El email viene enmascarado a propósito; el front nunca recibe el
+    correo completo.
+  - El token no vence. El mismo link del correo sirve siempre.
+  - La baja aplica al correo, no a la cuenta: cubre recordatorios de
+    recompra. Los correos transaccionales (confirmación de orden, pago,
+    envío) se siguen enviando.
+
+
+================================================================================
+3. RUTA DEL PRODUCTO EN EL CORREO
+================================================================================
+
+El botón "Comprar de nuevo" apunta a:
+
+  {FRONTEND_URL}/products/{productId}?utm_source=repurchase_reminder&utm_medium=email
+
+PENDIENTE DE CONFIRMAR: que /products/{productId} sea la ruta real del
+detalle público de producto en el front. Si es otra (por ejemplo
+/producto/{id} o /p/{id}), no hay que tocar código: se cambia la propiedad
+del backend
+
+  app.repurchase.product-path=/products/{productId}
+
+La ruta debe funcionar sin login y resolver el producto solo con su id.
+
+Lo mismo aplica para la página de baja:
+
+  app.repurchase.unsubscribe-path=/email/unsubscribe
+
+Y la base de ambos links sale de la variable de entorno FRONTEND_URL del
+backend, que debe apuntar al dominio público de la tienda en cada ambiente.
+
+Los parámetros utm_source / utm_medium sirven para medir en analytics
+cuántas visitas y compras vienen del recordatorio. El front no tiene que
+hacer nada con ellos salvo no romperse si vienen en la URL.
+
+
+================================================================================
+4. PANEL ADMIN — VISTA PREVIA (OPCIONAL)
+================================================================================
+
+No es necesario para que la funcionalidad opere: el envío es automático,
+todos los días a las 10:00 a. m. (hora Colombia). Este endpoint sirve para
+revisar a quién le llegaría el correo antes de activar el envío automático.
+
+------------------------------------------------------------------------
+    POST /api/v1/admin/repurchase-reminders/run?dryRun=true
+    Requiere JWT con rol STORE_ADMIN
+------------------------------------------------------------------------
+  dryRun=true  (por defecto) → solo calcula, NO envía ni registra nada
+  dryRun=false               → envía los correos de verdad
+
+Response 200:
+  {
+    "dryRun": true,
+    "emails": 2,
+    "products": 3,
+    "recipients": [
+      {
+        "email": "comprador@gmail.com",
+        "products": [
+          {
+            "productId": 15,
+            "title": "Pelotas Wilson US Open",
+            "orderId": 204,
+            "purchasedOn": "2026-10-01",
+            "dueDate": "2026-11-18"
+          }
+        ]
+      }
+    ]
+  }
+
+  purchasedOn = fecha de entrega usada como punto de partida
+  dueDate     = fecha en la que se cumple el 80% de la duración
+
+Errores:
+  HTTP 403  code: STORE_ADMIN_REQUIRED
+
+Si se construye pantalla: un botón "Vista previa" (dryRun=true) que liste
+destinatarios y productos, y un botón "Enviar ahora" (dryRun=false) con
+confirmación explícita.
+
+
+================================================================================
+RESUMEN DE TAREAS FRONT
+================================================================================
+
+  [ ] Formulario de producto: campo repurchaseDays (crear y editar)
+  [ ] Formulario de producto: enviar clearRepurchaseDays=true al vaciarlo
+  [ ] Formulario de variante: campo repurchaseDays (crear y editar)
+  [ ] Formulario de variante: enviar clearRepurchaseDays=true al vaciarlo
+  [ ] Precargar ambos campos desde las respuestas del seller
+  [ ] Página pública /email/unsubscribe con confirmación y deshacer
+  [ ] Confirmar la ruta pública del detalle de producto
+  [ ] (Opcional) Pantalla admin de vista previa de recordatorios
