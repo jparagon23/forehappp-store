@@ -52,6 +52,10 @@ public class Product {
     @Column(name = "free_shipping", nullable = false)
     private Boolean freeShipping = false;
 
+    // Days one unit lasts before the buyer needs to repurchase; null = no repurchase reminder
+    @Column(name = "repurchase_days")
+    private Integer repurchaseDays;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

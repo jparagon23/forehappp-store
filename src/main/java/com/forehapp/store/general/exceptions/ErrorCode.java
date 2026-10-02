@@ -179,6 +179,9 @@ public enum ErrorCode {
     COMMISSION_NOT_FOUND,
     COMMISSION_ALREADY_PAID,
 
+    // Email preferences
+    EMAIL_PREFERENCE_TOKEN_INVALID,
+
     // Generic fallbacks
     VALIDATION_ERROR,
     DATA_INTEGRITY_VIOLATION,

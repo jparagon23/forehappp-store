@@ -19,6 +19,7 @@ public class ProductResponse {
     private final String status;
     private final LocalDateTime createdAt;
     private final boolean freeShipping;
+    private final Integer repurchaseDays;
     private final int variantCount;
     private final String thumbnailUrl;
 
@@ -38,6 +39,7 @@ public class ProductResponse {
         this.status = product.getStatus().name();
         this.createdAt = product.getCreatedAt();
         this.freeShipping = Boolean.TRUE.equals(product.getFreeShipping());
+        this.repurchaseDays = product.getRepurchaseDays();
         this.variantCount = product.getVariantCount();
         this.thumbnailUrl = thumbnailUrl;
     }
