@@ -46,8 +46,8 @@ public class InventoryServiceImpl implements IInventoryService {
         if (dto.getQuantity() == 0) {
             throw new BadRequestException(ErrorCode.INVENTORY_QUANTITY_ZERO, "Quantity must not be zero");
         }
-        if (dto.getReason() == MovementReason.SALE) {
-            throw new BadRequestException(ErrorCode.INVENTORY_SALE_INTERNAL_ONLY, "SALE movements are handled internally");
+        if (dto.getReason() == MovementReason.SALE || dto.getReason() == MovementReason.SUPPLIER_SYNC) {
+            throw new BadRequestException(ErrorCode.INVENTORY_SALE_INTERNAL_ONLY, dto.getReason() + " movements are handled internally");
         }
         if (dto.getReason() != MovementReason.ADJUSTMENT && dto.getQuantity() < 0) {
             throw new BadRequestException(ErrorCode.INVENTORY_NEGATIVE_ONLY_ADJUSTMENT, "Only ADJUSTMENT movements can have a negative quantity");

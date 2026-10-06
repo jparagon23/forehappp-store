@@ -111,6 +111,8 @@ public class WebSecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/check-email").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/ambassadors/validate").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/email-preferences/unsubscribe", "/api/v1/email-preferences/resubscribe").permitAll()
+                        // Daily scraping job: authenticated by the X-Sync-Key header in the controller
+                        .requestMatchers("/api/v1/internal/supplier-sync/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session ->

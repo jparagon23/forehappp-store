@@ -932,3 +932,95 @@ CREATE TABLE IF NOT EXISTS store_email_unsubscribes (
     created_at     DATETIME     NOT NULL,
     CONSTRAINT store_uk_eu_email UNIQUE (email)
 );
+
+-- =====================
+-- Supplier sync (daily scrape of a supplier catalog: margins and out-of-stock)
+-- =====================
+
+-- Per store opt-in; PREVIEW only reports, APPLY changes stock and costs
+CREATE TABLE IF NOT EXISTS store_supplier_sync_configs (
+    config_id  BIGINT AUTO_INCREMENT PRIMARY KEY,
+    store_id   BIGINT      NOT NULL,
+    supplier   VARCHAR(30) NOT NULL,
+    enabled    TINYINT(1)  NOT NULL DEFAULT 0,
+    mode       VARCHAR(20) NOT NULL DEFAULT 'PREVIEW',
+    updated_at DATETIME    NOT NULL,
+    CONSTRAINT store_uk_ssc_store_supplier UNIQUE (store_id, supplier),
+    CONSTRAINT store_fk_ssc_store FOREIGN KEY (store_id) REFERENCES stores(store_id)
+);
+
+-- Latest known state of each supplier product, keyed by normalized name
+CREATE TABLE IF NOT EXISTS store_supplier_catalog_items (
+    item_id       BIGINT AUTO_INCREMENT PRIMARY KEY,
+    supplier      VARCHAR(30)  NOT NULL,
+    name_key      VARCHAR(255) NOT NULL,
+    name          VARCHAR(255) NOT NULL,
+    brand         VARCHAR(150),
+    category      VARCHAR(150),
+    price         DECIMAL(14,2),
+    out_of_stock  TINYINT(1)   NOT NULL DEFAULT 0,
+    first_seen_at DATETIME     NOT NULL,
+    last_seen_at  DATETIME     NOT NULL,
+    CONSTRAINT store_uk_sci_supplier_name UNIQUE (supplier, name_key)
+);
+
+-- Variant <-> supplier product pairs, plus the sync state of the variant
+CREATE TABLE IF NOT EXISTS store_supplier_links (
+    link_id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+    store_id             BIGINT      NOT NULL,
+    variant_id           BIGINT      NOT NULL,
+    supplier             VARCHAR(30) NOT NULL,
+    supplier_item_id     BIGINT,
+    status               VARCHAR(20) NOT NULL,
+    score                DECIMAL(5,4),
+    disabled_by_sync     TINYINT(1)  NOT NULL DEFAULT 0,
+    stock_before_sync    INT,
+    confirmed_by_user_id BIGINT,
+    confirmed_at         DATETIME,
+    created_at           DATETIME    NOT NULL,
+    updated_at           DATETIME    NOT NULL,
+    CONSTRAINT store_uk_sl_variant_item UNIQUE (variant_id, supplier_item_id),
+    CONSTRAINT store_fk_sl_store   FOREIGN KEY (store_id)         REFERENCES stores(store_id),
+    CONSTRAINT store_fk_sl_variant FOREIGN KEY (variant_id)       REFERENCES store_product_variants(variant_id) ON DELETE CASCADE,
+    CONSTRAINT store_fk_sl_item    FOREIGN KEY (supplier_item_id) REFERENCES store_supplier_catalog_items(item_id),
+    INDEX idx_sl_store_status (store_id, supplier, status)
+);
+
+CREATE TABLE IF NOT EXISTS store_supplier_sync_runs (
+    run_id                BIGINT AUTO_INCREMENT PRIMARY KEY,
+    store_id              BIGINT      NOT NULL,
+    supplier              VARCHAR(30) NOT NULL,
+    mode                  VARCHAR(20) NOT NULL,
+    status                VARCHAR(20) NOT NULL,
+    abort_reason          VARCHAR(500),
+    supplier_items        INT NOT NULL DEFAULT 0,
+    supplier_out_of_stock INT NOT NULL DEFAULT 0,
+    confirmed_links       INT NOT NULL DEFAULT 0,
+    disabled_count        INT NOT NULL DEFAULT 0,
+    reenabled_count       INT NOT NULL DEFAULT 0,
+    cost_updates          INT NOT NULL DEFAULT 0,
+    broken_links          INT NOT NULL DEFAULT 0,
+    margin_alerts         INT NOT NULL DEFAULT 0,
+    orders_at_risk        INT NOT NULL DEFAULT 0,
+    started_at            DATETIME NOT NULL,
+    finished_at           DATETIME,
+    CONSTRAINT store_fk_ssr_store FOREIGN KEY (store_id) REFERENCES stores(store_id),
+    INDEX idx_ssr_store_started (store_id, supplier, started_at)
+);
+
+CREATE TABLE IF NOT EXISTS store_supplier_sync_events (
+    event_id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+    run_id             BIGINT      NOT NULL,
+    type               VARCHAR(20) NOT NULL,
+    variant_id         BIGINT,
+    product_id         BIGINT,
+    product_title      VARCHAR(255),
+    variant_label      VARCHAR(255),
+    supplier_item_name VARCHAR(255),
+    old_value          VARCHAR(100),
+    new_value          VARCHAR(100),
+    detail             VARCHAR(255),
+    unconfirmed        TINYINT(1)  NOT NULL DEFAULT 0,
+    CONSTRAINT store_fk_sse_run FOREIGN KEY (run_id) REFERENCES store_supplier_sync_runs(run_id) ON DELETE CASCADE,
+    INDEX idx_sse_run (run_id)
+);

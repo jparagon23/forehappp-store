@@ -1,0 +1,231 @@
+================================================================================
+  SINCRONIZACIÓN CON PROVEEDOR (PROFITNESS) — INTEGRACIÓN FRONTEND
+  Forehapp Store · Back implementado: 2026-10-06
+================================================================================
+
+CONTEXTO
+--------
+Un job diario (GitHub Actions) scrapea el catálogo mayorista de Profitness y lo
+envía al back. Para cada tienda que tenga la sincronización activada, el back:
+
+  - Apaga (stock a 0) las variantes cuyo producto de Profitness está agotado.
+  - Les devuelve el stock cuando Profitness lo vuelve a tener.
+  - Actualiza el costo de la variante con el precio de distribuidor.
+  - Reporta márgenes menores al 5 %, parejas rotas y pedidos abiertos afectados.
+  - Envía un correo diario con el resumen.
+
+Solo actúa sobre variantes con PAREJA CONFIRMADA por el seller. Las parejas
+sugeridas por el script solo generan alertas de margen.
+
+El front necesita UNA sección nueva en el panel del SELLER (no en el admin):
+
+  /seller/supplier-sync
+
+con tres partes:
+  1. Configuración  — activar / modo vista previa o aplicar
+  2. Parejas        — revisar sugerencias, confirmar, corregir, descartar
+  3. Historial      — resultado de las últimas sincronizaciones
+
+Permisos: OWNER y MANAGER de la tienda. STAFF recibe 403 (STORE_ACCESS_DENIED).
+
+Todas las rutas usan el supplier en la URL: hoy solo "profitness".
+Base: /api/v1/stores/{storeId}/supplier-sync/profitness
+
+
+================================================================================
+1. CONFIGURACIÓN
+================================================================================
+
+GET  /api/v1/stores/{storeId}/supplier-sync/profitness/config
+PUT  /api/v1/stores/{storeId}/supplier-sync/profitness/config
+
+Response (GET y PUT):
+  { "supplier": "PROFITNESS", "enabled": false, "mode": "PREVIEW" }
+
+Body del PUT:
+  { "enabled": true, "mode": "PREVIEW" }      mode: PREVIEW | APPLY
+
+  - Si la tienda nunca la configuró, GET devuelve enabled=false, mode=PREVIEW.
+  - PREVIEW: calcula y reporta lo que haría, sin tocar stock ni costos.
+  - APPLY:   aplica los cambios.
+
+UI sugerida:
+  - Switch "Sincronizar con Profitness".
+  - Selector de modo con explicación. Al pasar a APPLY pedir confirmación:
+    "A partir de la próxima sincronización se apagarán automáticamente las
+     variantes agotadas en Profitness y se actualizarán sus costos."
+
+
+================================================================================
+2. PAREJAS (variante de ForehApp ↔ producto de Profitness)
+================================================================================
+
+------------------------------------------------------------------------
+2.1 LISTAR
+    GET /api/v1/stores/{storeId}/supplier-sync/profitness/links?status=...
+------------------------------------------------------------------------
+status (pestañas de la pantalla):
+  SUGGESTED     Sugeridas por el script, pendientes de revisar   ← pestaña principal
+  CONFIRMED     Confirmadas (son las que sincronizan)
+  UNLINKED      Variantes sin pareja (por defecto si no se envía status)
+  NOT_SUPPLIED  Marcadas como "no se compra a Profitness"
+  REJECTED      Descartadas
+
+Response: lista de
+  {
+    "linkId": 12,                      ← null en UNLINKED
+    "status": "SUGGESTED",             ← null en UNLINKED
+    "score": 0.9100,                   ← similitud del script (0–1); null si la hizo el seller
+    "disabledBySync": false,           ← true = la sync la tiene en stock 0 ahora
+    "variant": {
+      "variantId": 55, "productId": 20,
+      "productTitle": "Whey Gold Standard 2lb",
+      "brand": "Optimum Nutrition",
+      "sku": "WGS-2LB-CHOC",
+      "attributes": "Sabor: Chocolate",  ← puede ser null
+      "active": true, "stock": 12, "price": 189000.00
+    },
+    "supplierItem": {                  ← null en UNLINKED y NOT_SUPPLIED
+      "id": 301, "name": "Whey Gold Standard 2Lb Double Rich Chocolate",
+      "brand": "Optimum", "category": "Proteína",
+      "price": 168000.00, "outOfStock": false,
+      "lastSeenAt": "2026-10-06T07:00:12"
+    },
+    "marginPercent": 11.11             ← (precio venta − precio proveedor) / precio venta × 100; null sin pareja
+  }
+
+UI sugerida para SUGGESTED:
+  - Tabla: producto / variante | producto Profitness | precio venta |
+    precio proveedor | margen | score | acciones.
+  - Resaltar en rojo margen < 5 % y marcar si supplierItem.outOfStock.
+  - Checkbox por fila + "Confirmar seleccionadas".
+  - Filtro rápido "score ≥ 0.85" para confirmar en bloque las más seguras.
+  - Acciones por fila: Confirmar · Cambiar producto · Descartar · No se compra a Profitness.
+
+------------------------------------------------------------------------
+2.2 CONFIRMAR (una o varias)
+    POST /api/v1/stores/{storeId}/supplier-sync/profitness/links/confirm
+------------------------------------------------------------------------
+  { "linkIds": [12, 13, 14] }          máx. 500 por request
+Response: las parejas confirmadas (mismo formato de 2.1).
+Se pueden confirmar parejas SUGGESTED o REJECTED. Una ya confirmada se ignora.
+
+------------------------------------------------------------------------
+2.3 DESCARTAR
+    POST /api/v1/stores/{storeId}/supplier-sync/profitness/links/{linkId}/reject
+------------------------------------------------------------------------
+Response 204. La pareja no se volverá a sugerir.
+Si era CONFIRMED y la sync tenía la variante en 0, le devuelve el stock.
+
+------------------------------------------------------------------------
+2.4 EMPAREJAR A MANO / CORREGIR
+    PUT /api/v1/stores/{storeId}/supplier-sync/profitness/variants/{variantId}/link
+------------------------------------------------------------------------
+  { "supplierItemId": 301 }
+Response: la pareja confirmada (formato 2.1).
+Reemplaza cualquier pareja anterior de la variante (queda CONFIRMED).
+
+Para elegir el producto de Profitness, usar el buscador:
+
+    GET /api/v1/stores/{storeId}/supplier-sync/profitness/items?q=whey gold
+
+Response: hasta 30 productos (formato supplierItem de 2.1). Busca sin
+importar mayúsculas, tildes ni signos. Usar con debounce (~300 ms).
+
+------------------------------------------------------------------------
+2.5 "NO SE COMPRA A PROFITNESS"
+    PUT /api/v1/stores/{storeId}/supplier-sync/profitness/variants/{variantId}/not-supplied
+------------------------------------------------------------------------
+Response 204. La variante sale de "sin pareja" y nunca se sincroniza.
+
+------------------------------------------------------------------------
+2.6 QUITAR PAREJA
+    DELETE /api/v1/stores/{storeId}/supplier-sync/profitness/variants/{variantId}/link
+------------------------------------------------------------------------
+Response 204. La variante vuelve a "sin pareja". Si la sync la tenía en 0,
+le devuelve el stock.
+
+Errores de esta sección:
+  404 SUPPLIER_LINK_NOT_FOUND       la pareja no existe o es de otra tienda
+  404 SUPPLIER_ITEM_NOT_FOUND       el producto de Profitness no existe
+  404 PRODUCT_NOT_FOUND             la variante no es de esta tienda
+  400 SUPPLIER_LINK_INVALID_STATUS  acción no válida para el estado actual
+                                    o filtro status desconocido
+  404 SUPPLIER_UNKNOWN              supplier en la URL no reconocido
+
+
+================================================================================
+3. HISTORIAL DE SINCRONIZACIONES
+================================================================================
+
+GET /api/v1/stores/{storeId}/supplier-sync/profitness/runs?limit=10     (máx. 50)
+
+Response: lista (más reciente primero) de
+  {
+    "id": 7, "storeId": 1, "supplier": "PROFITNESS",
+    "mode": "APPLY",
+    "status": "APPLIED",               ← PREVIEW | APPLIED | ABORTED
+    "abortReason": null,               ← texto si ABORTED (freno de seguridad)
+    "supplierItems": 541, "supplierOutOfStock": 281, "confirmedLinks": 380,
+    "disabled": 3, "reenabled": 1, "costUpdates": 12,
+    "brokenLinks": 0, "marginAlerts": 1, "ordersAtRisk": 0,
+    "startedAt": "2026-10-07T07:00:14", "finishedAt": "2026-10-07T07:00:15"
+  }
+
+GET /api/v1/stores/{storeId}/supplier-sync/profitness/runs/{runId}/events
+
+Response: lista de
+  {
+    "id": 91, "type": "DISABLED",
+    "variantId": 55, "productId": 20,
+    "productTitle": "Whey Gold Standard 2lb", "variantLabel": "WGS-2LB-CHOC",
+    "supplierItemName": "Whey Gold Standard 2Lb Double Rich Chocolate",
+    "oldValue": "12", "newValue": "0",
+    "detail": "Out of stock at supplier",
+    "unconfirmed": false               ← true = viene de una pareja sin confirmar
+  }
+
+type y cómo mostrar oldValue → newValue:
+  DISABLED       Apagada (agotada en Profitness)    stock anterior → 0
+  REENABLED      Reactivada                          0 → stock restaurado
+  RELEASED       Repuesta a mano por el seller       — → stock actual
+  COST_UPDATED   Costo actualizado                   costo anterior → nuevo
+  MARGIN_ALERT   Margen bajo                         "venta / proveedor" → "4.31%"
+  BROKEN_LINK    Pareja rota (ya no está en Profitness): pedir corregirla
+  ORDER_AT_RISK  Pedido abierto afectado             oldValue = número de orden, newValue = cantidad
+
+En modo PREVIEW los eventos describen lo que SE HARÍA; mostrar un aviso.
+En ABORTED mostrar abortReason destacado: no se aplicó nada.
+
+UI sugerida: tarjeta con la última sincronización (estado + contadores) y
+tabla expandible con los eventos agrupados por type.
+
+
+================================================================================
+4. CAMBIOS EN PANTALLAS EXISTENTES
+================================================================================
+
+4.1 Historial de movimientos de inventario (edición de producto)
+    Nuevo motivo de movimiento: SUPPLIER_SYNC
+    - Agregarlo a MovementReason en seller-product.model.ts
+    - Etiqueta sugerida: "Proveedor" (movReasonLabel / movReasonClass)
+    - Agregarlo como filtro en el modal de movimientos
+    - El ajuste manual de inventario NO acepta SUPPLIER_SYNC (lo usa solo la sync)
+
+4.2 Historial de costos
+    Los cambios hechos por la sync llegan con notes = "Supplier sync (PROFITNESS)".
+    No requiere cambios; opcionalmente mostrar un ícono de proveedor.
+
+
+================================================================================
+RESUMEN DE TAREAS FRONT
+================================================================================
+
+  [ ] Ruta /seller/supplier-sync + entrada en el menú del seller
+  [ ] Servicio con los 11 endpoints de este documento
+  [ ] Configuración: switch activar + modo PREVIEW/APPLY con confirmación
+  [ ] Parejas: pestañas SUGGESTED / CONFIRMED / UNLINKED / NOT_SUPPLIED / REJECTED
+  [ ] Confirmación en bloque (checkbox + filtro por score)
+  [ ] Modal "Cambiar producto" con buscador de productos de Profitness
+  [ ] Historial: última sincronización + eventos por tipo
+  [ ] MovementReason SUPPLIER_SYNC en el modal de movimientos
