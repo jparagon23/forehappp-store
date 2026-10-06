@@ -84,6 +84,10 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
             throw new ConflictException(ErrorCode.ORDER_GROUP_INVALID_STATUS,
                     "Group must be in PENDING status to start preparing");
         }
+        if (group.getOrder().getStatus() == OrderStatus.PENDING) {
+            throw new ConflictException(ErrorCode.ORDER_GROUP_INVALID_STATUS,
+                    "The order payment is still pending; confirm the payment before preparing it");
+        }
 
         group.setStatus(OrderSellerGroupStatus.PREPARING);
         group.setPreparedAt(LocalDateTime.now());

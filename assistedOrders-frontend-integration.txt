@@ -178,6 +178,15 @@ cliente le llega el correo "Pago confirmado".
 Mostrar el botón cuando:
   orderPaymentStatus === 'PENDING' && (paymentMethod === 'CASH' || paymentMethod === 'TRANSFER')
 
+Visibilidad: GET /stores/{storeId}/order-groups ahora también trae los pedidos
+en efectivo o transferencia que esperan pago (antes se ocultaban todos los
+grupos PENDING). Los MercadoPago pendientes siguen ocultos (suelen ser pagos
+abandonados).
+
+"Preparar pedido" (PATCH /{groupId}/prepare) responde 409
+ORDER_GROUP_INVALID_STATUS mientras el pago siga pendiente: en esos pedidos
+mostrar "Confirmar pago" en lugar de "Preparar pedido".
+
 Errores:
   409 PAYMENT_ORDER_NOT_PENDING    ya estaba confirmado
   400 PAYMENT_METHOD_MISMATCH      no es CASH ni TRANSFER
