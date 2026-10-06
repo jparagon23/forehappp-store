@@ -81,6 +81,18 @@ public class Order {
     @Column(name = "referral_code", length = 50)
     private String referralCode;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private OrderChannel channel = OrderChannel.ONLINE;
+
+    /** User (seller) who registered an ASSISTED order; null for orders placed by the buyer. */
+    @Column(name = "created_by_user_id")
+    private Long createdByUserId;
+
+    /** When the seller recorded the customer's authorization to process their data (ASSISTED orders). */
+    @Column(name = "data_consent_at")
+    private LocalDateTime dataConsentAt;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

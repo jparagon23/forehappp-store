@@ -12,4 +12,6 @@ public interface IOrderModuleService {
     void deliverGroup(Long storeId, Long groupId, Long userId);
     void cancelGroup(Long storeId, Long groupId, String reason, Long userId);
     void removeShippingCost(Long storeId, Long groupId, String reason, Long userId);
+    /** Confirms a PENDING CASH or TRANSFER payment of an order made only of this store's products. */
+    void confirmPayment(Long storeId, Long groupId, Long userId);
 }

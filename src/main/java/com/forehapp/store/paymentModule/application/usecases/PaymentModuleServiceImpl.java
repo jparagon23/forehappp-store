@@ -148,7 +148,12 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
     @Transactional
     public void confirmCashPayment(Long userId, Long orderId) {
         resolveAdmin(userId);
+        confirmManualPayment(orderId, true);
+    }
 
+    @Override
+    @Transactional
+    public void confirmManualPayment(Long orderId, boolean notifyBuyer) {
         Order order = orderDao.findBasicById(orderId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.PAYMENT_ORDER_NOT_FOUND, "Order not found"));
 
@@ -173,10 +178,11 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
 
         order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
         orderDao.save(order);
-        log.info("[Admin] Cash payment confirmed for orderId={}", orderId);
+        log.info("[Payment] Manual payment confirmed for orderId={}", orderId);
 
         transitionGroupsToPreparing(orderId);
 
+        if (!notifyBuyer) return;
         String buyerEmail = order.getBuyerEmail();
         String buyerName  = order.resolveContactName();
         eventPublisher.publishEvent(new OrderPaidEvent(

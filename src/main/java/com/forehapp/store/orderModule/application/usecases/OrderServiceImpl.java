@@ -17,6 +17,7 @@ import com.forehapp.store.orderModule.domain.model.OrderItem;
 import com.forehapp.store.orderModule.domain.model.OrderSellerGroup;
 import com.forehapp.store.orderModule.domain.model.OrderSellerGroupStatus;
 import com.forehapp.store.orderModule.domain.ports.in.IOrderService;
+import com.forehapp.store.orderModule.domain.ports.in.IGuestOrderLinkService;
 import com.forehapp.store.orderModule.domain.ports.out.IOrderDao;
 import com.forehapp.store.orderModule.infrastructure.web.dto.CreateOrderRequestDto;
 import com.forehapp.store.ambassadorModule.domain.model.Ambassador;
@@ -83,6 +84,7 @@ public class OrderServiceImpl implements IOrderService {
     private final ICommissionDao commissionDao;
     private final IDonationFoundationDao donationFoundationDao;
     private final IDonationRecordDao donationRecordDao;
+    private final IGuestOrderLinkService guestOrderLinkService;
 
     @Value("${app.inventory.low-stock-threshold:5}")
     private int lowStockThreshold;
@@ -105,7 +107,8 @@ public class OrderServiceImpl implements IOrderService {
                             IAmbassadorDao ambassadorDao,
                             ICommissionDao commissionDao,
                             IDonationFoundationDao donationFoundationDao,
-                            IDonationRecordDao donationRecordDao) {
+                            IDonationRecordDao donationRecordDao,
+                            IGuestOrderLinkService guestOrderLinkService) {
         this.cartDao = cartDao;
         this.orderDao = orderDao;
         this.storeProfileDao = storeProfileDao;
@@ -122,6 +125,7 @@ public class OrderServiceImpl implements IOrderService {
         this.commissionDao = commissionDao;
         this.donationFoundationDao = donationFoundationDao;
         this.donationRecordDao = donationRecordDao;
+        this.guestOrderLinkService = guestOrderLinkService;
     }
 
     @Override
@@ -208,9 +212,11 @@ public class OrderServiceImpl implements IOrderService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public List<OrderSummaryDto> getMyOrders(Long userId) {
         StoreProfile buyer = resolveProfile(userId);
+        // Picks up guest orders placed with this account's email (e.g. bought without logging in)
+        guestOrderLinkService.linkGuestOrders(buyer);
         return orderDao.findAllByBuyerIdOrderByCreatedAtDesc(buyer.getId()).stream()
                 .map(orderMapper::toSummary)
                 .toList();

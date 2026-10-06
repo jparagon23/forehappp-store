@@ -9,6 +9,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.util.HtmlUtils;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.math.BigDecimal;
 import java.text.NumberFormat;
 import java.time.format.DateTimeFormatter;
@@ -23,8 +27,12 @@ public class OrderEmailListener {
 
     private final EmailSender emailSender;
 
-    public OrderEmailListener(EmailSender emailSender) {
+    private final String frontendUrl;
+
+    public OrderEmailListener(EmailSender emailSender,
+                              @Value("${app.frontend.url}") String frontendUrl) {
         this.emailSender = emailSender;
+        this.frontendUrl = frontendUrl.endsWith("/") ? frontendUrl.substring(0, frontendUrl.length() - 1) : frontendUrl;
     }
 
     @Async
@@ -219,7 +227,10 @@ public class OrderEmailListener {
             }
         }
 
-        String paymentInstructions = buildPaymentInstructions(event.getPaymentMethod());
+        // Orders born paid (assisted "already paid") show a receipt instead of payment instructions
+        String paymentInstructions = (event.isPaymentConfirmed() ? PAID_BLOCK : buildPaymentInstructions(event.getPaymentMethod()))
+                + buildAssistedBlock(event)
+                + buildCreateAccountBlock(event);
 
         return """
                 <!DOCTYPE html>
@@ -311,6 +322,46 @@ public class OrderEmailListener {
                 formatAmount(event.getTotal()),
                 paymentInstructions
         );
+    }
+
+    private static final String PAID_BLOCK = """
+            <div style="background:#e8f5e9;border-left:4px solid #388e3c;padding:16px;border-radius:4px;">
+              <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#333;">Pago recibido</p>
+              <p style="margin:0;font-size:13px;color:#555;">
+                Tu pago ya fue registrado. El vendedor está preparando tu pedido.
+              </p>
+            </div>
+            """;
+
+    /** Order registered by a seller for the buyer: say so, and give the data-processing notice. */
+    private String buildAssistedBlock(OrderCreatedEvent event) {
+        if (event.getRegisteredByStore() == null) return "";
+        return """
+                <div style="margin-top:16px;background:#f3f4f8;border-radius:6px;padding:14px 16px;">
+                  <p style="margin:0 0 6px;font-size:13px;color:#333;">
+                    Este pedido lo registró <strong>%s</strong> en Forehapp Store a tu nombre.
+                  </p>
+                  <p style="margin:0;font-size:12px;color:#777;line-height:1.5;">
+                    Usamos tus datos de contacto y envío solo para gestionar tus pedidos, de acuerdo con
+                    la autorización que le diste al vendedor. Si no reconoces este pedido, responde a este
+                    correo o contacta al vendedor.
+                  </p>
+                </div>
+                """.formatted(HtmlUtils.htmlEscape(event.getRegisteredByStore()));
+    }
+
+    /** Guest order: invite to create an account, where all orders made with this email will show up. */
+    private String buildCreateAccountBlock(OrderCreatedEvent event) {
+        if (!event.isGuestBuyer() || event.getBuyerEmail() == null) return "";
+        String url = frontendUrl + "/register?email=" + URLEncoder.encode(event.getBuyerEmail(), StandardCharsets.UTF_8);
+        return """
+                <div style="margin-top:16px;text-align:center;">
+                  <p style="margin:0 0 10px;font-size:13px;color:#555;">
+                    Crea tu cuenta con este correo para ver el estado de este y tus próximos pedidos.
+                  </p>
+                  <a href="%s" style="display:inline-block;background:#1a1a2e;color:#ffffff;text-decoration:none;font-size:13px;font-weight:600;padding:10px 20px;border-radius:6px;">Crear mi cuenta</a>
+                </div>
+                """.formatted(HtmlUtils.htmlEscape(url));
     }
 
     private String buildPaymentInstructions(String paymentMethod) {

@@ -1,6 +1,6 @@
 package com.forehapp.store.orderModule.infrastructure.web;
 
-import com.forehapp.store.authModule.application.dto.LoginResponseDto;
+import com.forehapp.store.authModule.application.dto.RegisterResponseDto;
 import com.forehapp.store.cartModule.application.dto.ShippingEstimateResponse;
 import com.forehapp.store.orderModule.application.usecases.GuestCreateAccountServiceImpl;
 import com.forehapp.store.orderModule.domain.ports.in.IGuestCheckoutService;
@@ -38,8 +38,9 @@ public class GuestCheckoutController {
         return ResponseEntity.ok(guestCheckoutService.estimateShipping(dto));
     }
 
+    // Sends a verification code; orders are linked once it is verified at POST /auth/verify-code
     @PostMapping("/guest/create-account")
-    public ResponseEntity<LoginResponseDto> createAccount(@Valid @RequestBody GuestCreateAccountRequestDto dto) {
+    public ResponseEntity<RegisterResponseDto> createAccount(@Valid @RequestBody GuestCreateAccountRequestDto dto) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(guestCreateAccountService.createAccount(dto));
     }

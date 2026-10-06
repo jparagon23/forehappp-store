@@ -1024,3 +1024,25 @@ CREATE TABLE IF NOT EXISTS store_supplier_sync_events (
     CONSTRAINT store_fk_sse_run FOREIGN KEY (run_id) REFERENCES store_supplier_sync_runs(run_id) ON DELETE CASCADE,
     INDEX idx_sse_run (run_id)
 );
+
+-- =====================
+-- Migration: store_orders — assisted orders (registered by a seller for a customer)
+-- =====================
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_orders ADD COLUMN channel VARCHAR(20) NOT NULL DEFAULT ''ONLINE''',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_orders' AND COLUMN_NAME = 'channel');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_orders ADD COLUMN created_by_user_id BIGINT',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_orders' AND COLUMN_NAME = 'created_by_user_id');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_orders ADD COLUMN data_consent_at DATETIME',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_orders' AND COLUMN_NAME = 'data_consent_at');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;

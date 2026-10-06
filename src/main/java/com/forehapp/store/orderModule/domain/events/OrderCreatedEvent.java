@@ -17,6 +17,8 @@ public class OrderCreatedEvent {
     private final String paymentMethod;
     private final List<SellerGroupData> sellerGroups;
     private final boolean paymentConfirmed;
+    private boolean guestBuyer;
+    private String registeredByStore;
 
     public OrderCreatedEvent(Long orderId,
                              String buyerName,
@@ -67,6 +69,18 @@ public class OrderCreatedEvent {
     public String getPaymentMethod()     { return paymentMethod; }
     public List<SellerGroupData> getSellerGroups() { return sellerGroups; }
     public boolean isPaymentConfirmed()  { return paymentConfirmed; }
+    public boolean isGuestBuyer()        { return guestBuyer; }
+    public String getRegisteredByStore() { return registeredByStore; }
+
+    /**
+     * guestBuyer: the order has no account behind it (the buyer email invites to create one).
+     * registeredByStore: name of the store that registered an ASSISTED order for the buyer; null otherwise.
+     */
+    public OrderCreatedEvent withBuyerContext(boolean guestBuyer, String registeredByStore) {
+        this.guestBuyer = guestBuyer;
+        this.registeredByStore = registeredByStore;
+        return this;
+    }
 
     public record SellerGroupData(
             List<String> memberEmails,

@@ -19,6 +19,8 @@ import com.forehapp.store.orderModule.infrastructure.web.dto.SellerOrderGroupDto
 import com.forehapp.store.orderModule.infrastructure.web.dto.VariantAttributeDto;
 import com.forehapp.store.paymentModule.domain.model.PaymentMethod;
 import com.forehapp.store.paymentModule.domain.model.PaymentStatus;
+import com.forehapp.store.paymentModule.domain.ports.in.IPaymentModuleService;
+import com.forehapp.store.storeModule.domain.model.StoreMemberRole;
 import com.forehapp.store.paymentModule.infrastructure.persistence.IPaymentRepository;
 import com.forehapp.store.productModule.domain.model.Product;
 import com.forehapp.store.storeModule.domain.ports.out.IStoreMembershipDao;
@@ -39,17 +41,20 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
     private final IPaymentRepository paymentRepository;
     private final IStoreMembershipDao membershipDao;
     private final ApplicationEventPublisher eventPublisher;
+    private final IPaymentModuleService paymentModuleService;
 
     public OrderModuleServiceImpl(IOrderGroupDao orderGroupDao,
                                   IOrderDao orderDao,
                                   IPaymentRepository paymentRepository,
                                   IStoreMembershipDao membershipDao,
-                                  ApplicationEventPublisher eventPublisher) {
+                                  ApplicationEventPublisher eventPublisher,
+                                  IPaymentModuleService paymentModuleService) {
         this.orderGroupDao = orderGroupDao;
         this.orderDao = orderDao;
         this.paymentRepository = paymentRepository;
         this.membershipDao = membershipDao;
         this.eventPublisher = eventPublisher;
+        this.paymentModuleService = paymentModuleService;
     }
 
     @Override
@@ -195,6 +200,26 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
         eventPublisher.publishEvent(buildShippingRemovedEvent(group, waivedAmount, order.getTotal()));
     }
 
+    @Override
+    @Transactional
+    public void confirmPayment(Long storeId, Long groupId, Long userId) {
+        membershipDao.findActiveByStoreIdAndUserId(storeId, userId)
+                .filter(m -> m.getRole() != StoreMemberRole.STAFF)
+                .orElseThrow(() -> new ForbiddenException(ErrorCode.STORE_ACCESS_DENIED,
+                        "Only the store's OWNER or MANAGER can confirm payments"));
+        OrderSellerGroup group = resolveGroup(groupId, storeId);
+
+        // A payment covers the whole order: a seller may only confirm orders that are entirely theirs
+        Long orderId = group.getOrder().getId();
+        boolean otherStores = orderGroupDao.findAllByOrderId(orderId).stream()
+                .anyMatch(g -> !g.getStore().getId().equals(storeId));
+        if (otherStores) {
+            throw new ConflictException(ErrorCode.ORDER_PAYMENT_OTHER_STORES,
+                    "The order includes other stores; its payment must be confirmed by an admin");
+        }
+        paymentModuleService.confirmManualPayment(orderId, true);
+    }
+
     // ── helpers ────────────────────────────────────────────────────────────────
 
     private void resolveStoreAccess(Long storeId, Long userId) {
@@ -328,7 +353,8 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
                 items,
                 totalCost,
                 totalMargin,
-                marginPercent
+                marginPercent,
+                group.getOrder().getChannel().name()
         );
     }
 }
