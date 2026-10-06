@@ -34,5 +34,6 @@ public record SellerOrderGroupDto(
         List<OrderItemDto> items,
         BigDecimal totalCost,
         BigDecimal totalMargin,
-        BigDecimal marginPercent
+        BigDecimal marginPercent,
+        String channel
 ) {}

@@ -84,4 +84,13 @@ public class OrderAdminController {
         orderModuleService.removeShippingCost(storeId, groupId, dto.reason(), Long.parseLong(userId));
         return ResponseEntity.noContent().build();
     }
+
+    @PatchMapping("/{groupId}/confirm-payment")
+    public ResponseEntity<Void> confirmPayment(
+            @PathVariable Long storeId,
+            @PathVariable Long groupId,
+            @AuthenticationPrincipal String userId) {
+        orderModuleService.confirmPayment(storeId, groupId, Long.parseLong(userId));
+        return ResponseEntity.noContent().build();
+    }
 }

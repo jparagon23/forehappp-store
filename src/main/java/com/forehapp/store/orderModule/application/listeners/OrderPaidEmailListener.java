@@ -64,7 +64,7 @@ public class OrderPaidEmailListener {
 
                           <!-- Checkmark -->
                           <div style="text-align:center;margin-bottom:24px;">
-                            <div style="display:inline-block;width:64px;height:64px;background:#e8f5e9;border-radius:50%;line-height:64px;font-size:32px;">✓</div>
+                            <div style="display:inline-block;width:64px;height:64px;background:#e8f5e9;border-radius:50%%;line-height:64px;font-size:32px;">✓</div>
                           </div>
 
                           <h2 style="margin:0 0 8px;font-size:20px;color:#2e7d32;text-align:center;">¡Pago recibido!</h2>

@@ -8,6 +8,7 @@ import com.forehapp.store.general.exceptions.ErrorCode;
 import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.locationModule.domain.model.City;
 import com.forehapp.store.locationModule.domain.ports.out.ICityDao;
+import com.forehapp.store.orderModule.application.dto.PlaceOrderCommand;
 import com.forehapp.store.orderModule.application.mappers.OrderMapper;
 import com.forehapp.store.orderModule.domain.events.LowStockEvent;
 import com.forehapp.store.orderModule.domain.events.OrderCreatedEvent;
@@ -22,6 +23,7 @@ import com.forehapp.store.orderModule.infrastructure.web.dto.GuestOrderItemDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.GuestShippingEstimateRequestDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.OrderResponse;
 import com.forehapp.store.paymentModule.domain.model.PaymentMethod;
+import com.forehapp.store.paymentModule.domain.ports.in.IPaymentModuleService;
 import com.forehapp.store.paymentModule.domain.ports.in.IPaymentService;
 import com.forehapp.store.productModule.domain.model.Product;
 import com.forehapp.store.productModule.domain.model.ProductStatus;
@@ -73,6 +75,7 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
     private final ICommissionDao commissionDao;
     private final IDonationFoundationDao donationFoundationDao;
     private final IDonationRecordDao donationRecordDao;
+    private final IPaymentModuleService paymentModuleService;
 
     @Value("${app.inventory.low-stock-threshold:5}")
     private int lowStockThreshold;
@@ -93,7 +96,8 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
                                     IAmbassadorDao ambassadorDao,
                                     ICommissionDao commissionDao,
                                     IDonationFoundationDao donationFoundationDao,
-                                    IDonationRecordDao donationRecordDao) {
+                                    IDonationRecordDao donationRecordDao,
+                                    IPaymentModuleService paymentModuleService) {
         this.orderDao = orderDao;
         this.membershipDao = membershipDao;
         this.productVariantDao = productVariantDao;
@@ -108,12 +112,21 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
         this.commissionDao = commissionDao;
         this.donationFoundationDao = donationFoundationDao;
         this.donationRecordDao = donationRecordDao;
+        this.paymentModuleService = paymentModuleService;
+    }
+
+    // Annotated as well: the internal call to place() does not go through the Spring proxy
+    @Override
+    @Transactional
+    @CacheEvict(value = {"public-products", "discovery-sections"}, allEntries = true)
+    public OrderResponse placeOrder(GuestCreateOrderRequestDto dto) {
+        return place(PlaceOrderCommand.fromGuest(dto));
     }
 
     @Override
     @Transactional
     @CacheEvict(value = {"public-products", "discovery-sections"}, allEntries = true)
-    public OrderResponse placeOrder(GuestCreateOrderRequestDto dto) {
+    public OrderResponse place(PlaceOrderCommand dto) {
         City city = cityDao.findById(dto.shippingCityId())
                 .filter(c -> Boolean.TRUE.equals(c.getActive()))
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ORDER_ADDRESS_NOT_FOUND, "City not found"));
@@ -130,7 +143,7 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
         Order savedOrder = orderDao.save(order);
 
         if (dto.couponCode() != null) {
-            savedOrder = applyGuestCoupon(dto.email(), dto.couponCode(), dto.couponStoreId(), savedOrder, dto.referralCode());
+            savedOrder = applyGuestCoupon(savedOrder.getBuyerEmail(), dto.couponCode(), dto.couponStoreId(), savedOrder, dto.referralCode());
         }
 
         if (dto.referralCode() != null && !dto.referralCode().isBlank()) {
@@ -159,7 +172,13 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
             }
         };
 
-        eventPublisher.publishEvent(buildOrderCreatedEvent(savedOrder));
+        if (dto.alreadyPaid()) {
+            // The confirmation email already says it is paid, so no separate "payment confirmed" email
+            paymentModuleService.confirmManualPayment(savedOrder.getId(), false);
+        }
+
+        eventPublisher.publishEvent(buildOrderCreatedEvent(savedOrder, dto.alreadyPaid())
+                .withBuyerContext(savedOrder.getBuyer() == null, dto.registeredByStore()));
 
         return orderMapper.toResponse(savedOrder, checkoutUrl);
     }
@@ -211,13 +230,21 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
         return new ShippingEstimateResponse(groups, itemsTotal, shippingTotal, grandTotal, mpSurcharge, grandTotal.add(mpSurcharge));
     }
 
-    private Order buildGuestOrder(GuestCreateOrderRequestDto dto, City city,
+    private Order buildGuestOrder(PlaceOrderCommand dto, City city,
                                    Map<Long, List<GuestOrderItemDto>> itemsByStore) {
         Order order = new Order();
-        order.setGuestName(dto.name());
-        order.setGuestLastname(dto.lastname());
-        order.setBuyerEmail(dto.email());
+        if (dto.buyer() != null) {
+            order.setBuyer(dto.buyer());
+            order.setBuyerEmail(dto.buyer().getUser().getEmail());
+        } else {
+            order.setGuestName(dto.name());
+            order.setGuestLastname(dto.lastname());
+            order.setBuyerEmail(dto.email().trim().toLowerCase());
+        }
         order.setBuyerPhone(dto.phone());
+        order.setChannel(dto.channel());
+        order.setCreatedByUserId(dto.createdByUserId());
+        order.setDataConsentAt(dto.dataConsentAt());
         order.setShippingAddress(dto.shippingAddress());
         order.setShippingCity(city.getName());
         order.setShippingDepartment(city.getState().getName());
@@ -392,7 +419,7 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
         orderDao.save(order);
     }
 
-    private OrderCreatedEvent buildOrderCreatedEvent(Order order) {
+    private OrderCreatedEvent buildOrderCreatedEvent(Order order, boolean paymentConfirmed) {
         List<OrderCreatedEvent.SellerGroupData> sellerGroups = order.getSellerGroups().stream()
                 .map(group -> {
                     Store store = group.getStore();
@@ -423,7 +450,8 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
                 order.getCreatedAt(),
                 order.getTotal(),
                 order.getPaymentMethod(),
-                sellerGroups
+                sellerGroups,
+                paymentConfirmed
         );
     }
 

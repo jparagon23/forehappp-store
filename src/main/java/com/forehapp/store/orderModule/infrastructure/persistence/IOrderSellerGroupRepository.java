@@ -37,7 +37,9 @@ public interface IOrderSellerGroupRepository extends JpaRepository<OrderSellerGr
             JOIN FETCH p.brand
             LEFT JOIN FETCH p.line
             WHERE g.store.id = :storeId
-              AND g.status <> com.forehapp.store.orderModule.domain.model.OrderSellerGroupStatus.PENDING
+              AND (g.status <> com.forehapp.store.orderModule.domain.model.OrderSellerGroupStatus.PENDING
+                   OR (o.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PENDING
+                       AND o.paymentMethod IN ('CASH', 'TRANSFER')))
             ORDER BY o.createdAt DESC
             """)
     List<OrderSellerGroup> findAllByStoreIdWithDetails(@Param("storeId") Long storeId);

@@ -1,0 +1,209 @@
+================================================================================
+  PEDIDOS ASISTIDOS + VINCULACIÓN DE CUENTA — INTEGRACIÓN FRONTEND
+  Forehapp Store · Back implementado: 2026-10-06
+================================================================================
+
+CONTEXTO
+--------
+Clientes conocidos piden por WhatsApp en vez de usar la app. El seller ahora
+registra esos pedidos desde su panel con el correo del cliente:
+
+  - Si el correo ya tiene cuenta activa → el pedido queda en esa cuenta.
+  - Si no → queda como pedido de invitado (no se crea usuario).
+
+El cliente recibe el correo de confirmación con:
+  - aviso "Este pedido lo registró <tienda> a tu nombre" + aviso de datos,
+  - botón "Crear mi cuenta" → {FRONTEND_URL}/register?email=<correo> (si es invitado).
+
+Cuando el cliente se registra y VERIFICA su correo (código, Google) todos los
+pedidos hechos con ese correo pasan a su cuenta automáticamente.
+
+Impacto front:
+  1. "Crear cuenta" después de comprar como invitado  → CAMBIO OBLIGATORIO (breaking)
+  2. Registro: precargar el correo desde ?email=        → recomendado
+  3. Panel seller: pantalla "Nuevo pedido"              → nueva
+  4. Panel seller: pedidos asistidos + confirmar pago   → cambios menores
+
+
+================================================================================
+1. "CREAR CUENTA" DESPUÉS DE COMPRAR COMO INVITADO — CAMBIO OBLIGATORIO
+================================================================================
+
+!!! Desplegar junto con el back. Con el back nuevo y el front viejo, este
+!!! paso deja de funcionar (el front espera tokens que ya no llegan).
+
+Antes: POST /checkout/guest/create-account devolvía tokens y dejaba la sesión
+iniciada sin verificar el correo. Cualquiera que conociera el correo de un
+comprador invitado podía quedarse con sus pedidos y direcciones.
+
+Ahora:
+    POST /api/v1/checkout/guest/create-account      (público, sin cambios en el body)
+    { "email": "cliente@mail.com", "password": "******" }
+
+Response 201 (igual que POST /auth/register):
+    { "userId": 675, "message": "Código de verificación enviado a cliente@mail.com" }
+
+El front debe:
+  - Redirigir a /verify-code?userId=<userId> (la pantalla que ya usa el registro).
+  - Ahí, POST /auth/verify-code { userId, code } devuelve los tokens como siempre.
+  - Al verificar se vinculan todos sus pedidos de invitado, su teléfono y su
+    dirección del último pedido.
+
+En guest-checkout.component.ts → createAccount():
+  next: res => this.router.navigate(['/verify-code'], { queryParams: { userId: res.userId } })
+  (y en guest-checkout.service.ts el tipo de respuesta pasa a { userId, message })
+
+Errores: los mismos de /auth/register
+  400 AUTH_EMAIL_ALREADY_REGISTERED  → "Ya tienes cuenta con este correo, inicia sesión"
+
+
+================================================================================
+2. REGISTRO: PRECARGAR EL CORREO
+================================================================================
+
+El correo de confirmación de los pedidos de invitado enlaza a:
+    {FRONTEND_URL}/register?email=cliente%40mail.com
+
+Leer el query param "email" y precargar el campo (editable).
+
+Vinculación automática (no requiere nada del front):
+  - verify-code (registro con correo)
+  - registro con Google / login con Google
+  - GET /orders ("Mis pedidos"): trae también pedidos de invitado hechos con el
+    correo de una cuenta ya activa
+
+
+================================================================================
+3. PANEL SELLER: "NUEVO PEDIDO"
+================================================================================
+
+Ruta sugerida: /seller/orders/new  (botón "Nuevo pedido" en Pedidos)
+Permisos: OWNER y MANAGER de la tienda. STAFF recibe 403 STORE_ACCESS_DENIED.
+
+------------------------------------------------------------------------
+3.1 BUSCAR SI EL CLIENTE YA TIENE CUENTA
+    GET /api/v1/stores/{storeId}/assisted-orders/customer?email=cliente@mail.com
+------------------------------------------------------------------------
+Response:
+  { "registered": true,  "displayName": "Juan P." }   → "El pedido quedará en su cuenta"
+  { "registered": false, "displayName": null }        → "Quedará como invitado; podrá crear su cuenta"
+
+displayName viene recortado a propósito (no expone datos del cliente).
+Llamar al salir del campo correo (blur) o con debounce.
+
+------------------------------------------------------------------------
+3.2 PRODUCTOS Y ENVÍO (endpoints existentes)
+------------------------------------------------------------------------
+  Productos de la tienda: GET /api/v1/stores/{storeId}/products
+                          GET /api/v1/stores/{storeId}/products/{id} (variantes + stock)
+  Ciudades:               los mismos endpoints de /locations del checkout
+  Costo de envío:         POST /api/v1/checkout/guest/estimate
+                          { "cityId": 17, "items": [{ "variantId": 55, "quantity": 2 }] }
+                          → igual que el checkout de invitado (incluye recargo MP)
+
+Solo se pueden agregar variantes de la propia tienda (ver error 3.4).
+
+------------------------------------------------------------------------
+3.3 CREAR EL PEDIDO
+    POST /api/v1/stores/{storeId}/assisted-orders
+------------------------------------------------------------------------
+  {
+    "email": "cliente@mail.com",
+    "name": "Juan",
+    "lastname": "Pérez",
+    "phone": "3001234567",
+    "shippingAddress": "Calle 1 # 2-3",
+    "shippingCityId": 17,
+    "shippingComplement": "Apto 301",        (opcional)
+    "shippingReference": "Portería",         (opcional)
+    "items": [{ "variantId": 55, "quantity": 2 }],
+    "paymentMethod": "TRANSFER",             CASH_ON_DELIVERY | TRANSFER | CASH | MERCADO_PAGO
+    "alreadyPaid": false,                    true solo con CASH o TRANSFER
+    "dataConsent": true                      obligatorio (casilla, ver abajo)
+  }
+
+Response 201: OrderResponse (mismo formato del checkout)
+  {
+    "orderId": 120,
+    "paymentStatus": "PENDING" | "PAYMENT_CONFIRMED",
+    "paymentMethod": "TRANSFER",
+    ...,
+    "checkoutUrl": "https://www.mercadopago.com.co/..."   ← solo MERCADO_PAGO
+  }
+
+Métodos de pago en la UI:
+  Contraentrega   → CASH_ON_DELIVERY  (solo Cali, igual que el checkout)
+  Transferencia   → TRANSFER          (queda pendiente; "Confirmar pago" luego)
+  Efectivo        → CASH
+  Link de MP      → MERCADO_PAGO      → mostrar checkoutUrl con botón "Copiar link"
+                                        para enviarlo por WhatsApp
+  "Ya pagó"       → checkbox alreadyPaid (con TRANSFER o CASH): nace pagado
+
+UI obligatoria:
+  - Confirmar el correo antes de enviar (mostrarlo grande o pedirlo dos veces):
+    si está mal escrito, la confirmación con dirección y teléfono le llega a
+    otra persona.
+  - Casilla "El cliente autorizó el uso de sus datos para gestionar este
+    pedido" → dataConsent. Sin marcar no se puede enviar.
+
+------------------------------------------------------------------------
+3.4 ERRORES
+------------------------------------------------------------------------
+  400 ASSISTED_ORDER_CONSENT_REQUIRED      falta la autorización de datos
+  400 ASSISTED_ORDER_ALREADY_PAID_METHOD   "ya pagó" con un método que no es CASH/TRANSFER
+  400 ASSISTED_ORDER_VARIANT_NOT_IN_STORE  variante de otra tienda
+  409 ORDER_INSUFFICIENT_STOCK             sin stock suficiente
+  400 ORDER_ADDRESS_STORE_MISMATCH         contraentrega fuera de Cali
+  403 STORE_ACCESS_DENIED                  STAFF o no es miembro de la tienda
+
+
+================================================================================
+4. PANEL SELLER: PEDIDOS
+================================================================================
+
+------------------------------------------------------------------------
+4.1 ORIGEN DEL PEDIDO
+------------------------------------------------------------------------
+SellerOrderGroupDto trae un campo nuevo:
+  "channel": "ONLINE" | "ASSISTED"
+Mostrar una etiqueta "Asistido" cuando sea ASSISTED.
+
+------------------------------------------------------------------------
+4.2 CONFIRMAR PAGO (efectivo / transferencia)
+    PATCH /api/v1/stores/{storeId}/order-groups/{groupId}/confirm-payment
+------------------------------------------------------------------------
+Response 204. El pedido pasa a PAYMENT_CONFIRMED, el grupo a PREPARING y al
+cliente le llega el correo "Pago confirmado".
+
+Mostrar el botón cuando:
+  orderPaymentStatus === 'PENDING' && (paymentMethod === 'CASH' || paymentMethod === 'TRANSFER')
+
+Visibilidad: GET /stores/{storeId}/order-groups ahora también trae los pedidos
+en efectivo o transferencia que esperan pago (antes se ocultaban todos los
+grupos PENDING). Los MercadoPago pendientes siguen ocultos (suelen ser pagos
+abandonados).
+
+"Preparar pedido" (PATCH /{groupId}/prepare) responde 409
+ORDER_GROUP_INVALID_STATUS mientras el pago siga pendiente: en esos pedidos
+mostrar "Confirmar pago" en lugar de "Preparar pedido".
+
+Errores:
+  409 PAYMENT_ORDER_NOT_PENDING    ya estaba confirmado
+  400 PAYMENT_METHOD_MISMATCH      no es CASH ni TRANSFER
+  409 ORDER_PAYMENT_OTHER_STORES   el pedido tiene productos de otras tiendas:
+                                   lo confirma el admin
+  403 STORE_ACCESS_DENIED          STAFF
+
+
+================================================================================
+RESUMEN DE TAREAS FRONT
+================================================================================
+
+  [ ] (OBLIGATORIO, mismo deploy que el back) "Crear cuenta" post-compra →
+      redirigir a /verify-code?userId=…
+  [ ] Registro: precargar ?email=
+  [ ] Pantalla "Nuevo pedido" (buscador de productos, cliente, dirección,
+      envío, pago, "ya pagó", autorización de datos, confirmación del correo)
+  [ ] Copiar link de MercadoPago tras crear el pedido
+  [ ] Etiqueta "Asistido" en pedidos del seller
+  [ ] Botón "Confirmar pago" en pedidos CASH/TRANSFER pendientes
