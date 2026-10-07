@@ -7,4 +7,6 @@ import java.util.List;
 
 public interface IAmbassadorCommissionJpaRepository extends JpaRepository<AmbassadorCommission, Long> {
     List<AmbassadorCommission> findByAmbassadorIdOrderByCreatedAtDesc(Long ambassadorId);
+
+    List<AmbassadorCommission> findByOrderId(Long orderId);
 }

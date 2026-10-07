@@ -74,6 +74,10 @@ public class OrderSellerGroup {
     @Column(name = "shipping_removed_by_user_id")
     private Long shippingRemovedByUserId;
 
+    // Last time the seller changed the products of this group
+    @Column(name = "items_edited_at")
+    private LocalDateTime itemsEditedAt;
+
     @BatchSize(size = 30)
     @OneToMany(mappedBy = "sellerGroup", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderItem> items = new ArrayList<>();

@@ -360,7 +360,9 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
                 totalMargin,
                 marginPercent,
                 group.getOrder().getChannel().name(),
-                items.stream().mapToInt(i -> i.dropshipQuantity() == null ? 0 : i.dropshipQuantity()).sum()
+                items.stream().mapToInt(i -> i.dropshipQuantity() == null ? 0 : i.dropshipQuantity()).sum(),
+                group.getOrder().getBalanceDue(),
+                group.getItemsEditedAt()
         );
     }
 }
