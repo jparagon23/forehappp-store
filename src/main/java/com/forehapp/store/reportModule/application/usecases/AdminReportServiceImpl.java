@@ -40,9 +40,9 @@ public class AdminReportServiceImpl implements IAdminReportService {
         LocalDateTime toDt = to.atTime(LocalTime.MAX);
 
         return new BusinessSummaryResponse(
-                reportDao.countOrdersByStatus(OrderStatus.PAID, fromDt, toDt),
-                reportDao.sumRevenueByStatus(OrderStatus.PAID, fromDt, toDt),
-                reportDao.avgTicketByStatus(OrderStatus.PAID, fromDt, toDt),
+                reportDao.countSoldOrders(fromDt, toDt),
+                reportDao.sumSoldRevenue(fromDt, toDt),
+                reportDao.avgSoldTicket(fromDt, toDt),
                 reportDao.countOrdersByStatus(OrderStatus.CANCELLED, fromDt, toDt),
                 reportDao.countApprovedReturns(fromDt, toDt),
                 reportDao.sumRefunded(fromDt, toDt)
