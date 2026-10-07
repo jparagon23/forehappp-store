@@ -49,6 +49,32 @@ public class MercadoPagoService {
     }
 
     public String createPreference(Order order) {
+        Preference preference = newPreference(order);
+
+        Payment payment = new Payment();
+        payment.setOrder(order);
+        payment.setMethod(PaymentMethod.MERCADO_PAGO.name());
+        payment.setStatus(PaymentStatus.PENDING.name());
+        payment.setAmount(order.getTotal());
+        payment.setReference(preference.getId());
+        paymentRepository.save(payment);
+
+        return preference.getInitPoint();
+    }
+
+    /**
+     * New checkout link for an unpaid order whose items changed. The order keeps a single payment record:
+     * it is pointed at the new preference. The old link stays valid at Mercado Pago (it cannot be revoked here).
+     */
+    public String refreshPreference(Order order, Payment pendingPayment) {
+        Preference preference = newPreference(order);
+        pendingPayment.setAmount(order.getTotal());
+        pendingPayment.setReference(preference.getId());
+        paymentRepository.save(pendingPayment);
+        return preference.getInitPoint();
+    }
+
+    private Preference newPreference(Order order) {
         List<PreferenceItemRequest> items = order.getSellerGroups().stream()
                 .flatMap(group -> group.getItems().stream())
                 .map(item -> PreferenceItemRequest.builder()
@@ -75,19 +101,7 @@ public class MercadoPagoService {
         }
 
         try {
-            PreferenceClient client = new PreferenceClient();
-            Preference preference = client.create(builder.build());
-
-            Payment payment = new Payment();
-            payment.setOrder(order);
-            payment.setMethod(PaymentMethod.MERCADO_PAGO.name());
-            payment.setStatus(PaymentStatus.PENDING.name());
-            payment.setAmount(order.getTotal());
-            payment.setReference(preference.getId());
-            paymentRepository.save(payment);
-
-            return preference.getInitPoint();
-
+            return new PreferenceClient().create(builder.build());
         } catch (MPApiException e) {
             log.error("[MP] API error creating preference. status={} response={}",
                     e.getStatusCode(), e.getApiResponse() != null ? e.getApiResponse().getContent() : "null");

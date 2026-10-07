@@ -1,7 +1,11 @@
 package com.forehapp.store.orderModule.infrastructure.web;
 
+import com.forehapp.store.orderModule.domain.ports.in.IOrderItemsEditService;
 import com.forehapp.store.orderModule.domain.ports.in.IOrderModuleService;
 import com.forehapp.store.orderModule.infrastructure.web.dto.CancelGroupRequestDto;
+import com.forehapp.store.orderModule.infrastructure.web.dto.EditOrderItemsRequestDto;
+import com.forehapp.store.orderModule.infrastructure.web.dto.EditOrderItemsResponseDto;
+import com.forehapp.store.orderModule.infrastructure.web.dto.OrderItemChangeDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.RemoveShippingCostRequestDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.SellerOrderGroupDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.ShipGroupRequestDto;
@@ -17,9 +21,11 @@ import java.util.List;
 public class OrderAdminController {
 
     private final IOrderModuleService orderModuleService;
+    private final IOrderItemsEditService itemsEditService;
 
-    public OrderAdminController(IOrderModuleService orderModuleService) {
+    public OrderAdminController(IOrderModuleService orderModuleService, IOrderItemsEditService itemsEditService) {
         this.orderModuleService = orderModuleService;
+        this.itemsEditService = itemsEditService;
     }
 
     @GetMapping
@@ -82,6 +88,33 @@ public class OrderAdminController {
             @Valid @RequestBody RemoveShippingCostRequestDto dto,
             @AuthenticationPrincipal String userId) {
         orderModuleService.removeShippingCost(storeId, groupId, dto.reason(), Long.parseLong(userId));
+        return ResponseEntity.noContent().build();
+    }
+
+    /** Replace, re-quantify, re-price, remove or add products before the group ships; emails the buyer. */
+    @PutMapping("/{groupId}/items")
+    public ResponseEntity<EditOrderItemsResponseDto> editItems(
+            @PathVariable Long storeId,
+            @PathVariable Long groupId,
+            @Valid @RequestBody EditOrderItemsRequestDto dto,
+            @AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(itemsEditService.editItems(storeId, groupId, dto, Long.parseLong(userId)));
+    }
+
+    @GetMapping("/{groupId}/item-changes")
+    public ResponseEntity<List<OrderItemChangeDto>> itemChanges(
+            @PathVariable Long storeId,
+            @PathVariable Long groupId,
+            @AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(itemsEditService.getChanges(storeId, groupId, Long.parseLong(userId)));
+    }
+
+    @PatchMapping("/{groupId}/settle-balance")
+    public ResponseEntity<Void> settleBalance(
+            @PathVariable Long storeId,
+            @PathVariable Long groupId,
+            @AuthenticationPrincipal String userId) {
+        itemsEditService.settleBalance(storeId, groupId, Long.parseLong(userId));
         return ResponseEntity.noContent().build();
     }
 

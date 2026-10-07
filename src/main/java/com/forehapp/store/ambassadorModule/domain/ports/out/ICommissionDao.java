@@ -9,4 +9,5 @@ public interface ICommissionDao {
     Optional<AmbassadorCommission> findById(Long id);
     List<AmbassadorCommission> findByAmbassadorId(Long ambassadorId);
     AmbassadorCommission save(AmbassadorCommission commission);
+    List<AmbassadorCommission> findByOrderId(Long orderId);
 }
