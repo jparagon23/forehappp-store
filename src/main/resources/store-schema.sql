@@ -1173,3 +1173,40 @@ SET @s = (SELECT IF(COUNT(*) = 0,
   'SELECT 1')
   FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_order_seller_groups' AND COLUMN_NAME = 'items_edited_at');
 PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- =====================
+-- Web traffic (anonymous, first-party). A session ends after 30 minutes without activity.
+-- visitor_id / session_id are random ids made by the browser; no personal data or IP is stored.
+-- =====================
+
+CREATE TABLE IF NOT EXISTS store_web_sessions (
+    session_id       VARCHAR(36)  PRIMARY KEY,
+    visitor_id       VARCHAR(36)  NOT NULL,
+    started_at       DATETIME     NOT NULL,
+    last_seen_at     DATETIME     NOT NULL,
+    page_views       INT          NOT NULL DEFAULT 0,
+    landing_path     VARCHAR(255),
+    source           VARCHAR(30)  NOT NULL,
+    referrer_host    VARCHAR(255),
+    utm_source       VARCHAR(100),
+    utm_medium       VARCHAR(100),
+    utm_campaign     VARCHAR(100),
+    device           VARCHAR(10)  NOT NULL,
+    viewed_product   TINYINT(1)   NOT NULL DEFAULT 0,
+    added_to_cart    TINYINT(1)   NOT NULL DEFAULT 0,
+    reached_checkout TINYINT(1)   NOT NULL DEFAULT 0,
+    purchased        TINYINT(1)   NOT NULL DEFAULT 0,
+    order_id         BIGINT,
+    INDEX idx_ws_started (started_at),
+    INDEX idx_ws_last_seen (last_seen_at),
+    INDEX idx_ws_visitor (visitor_id)
+);
+
+CREATE TABLE IF NOT EXISTS store_web_page_views (
+    view_id    BIGINT AUTO_INCREMENT PRIMARY KEY,
+    session_id VARCHAR(36)  NOT NULL,
+    path       VARCHAR(255) NOT NULL,
+    created_at DATETIME     NOT NULL,
+    INDEX idx_wpv_created (created_at),
+    INDEX idx_wpv_session (session_id)
+);
