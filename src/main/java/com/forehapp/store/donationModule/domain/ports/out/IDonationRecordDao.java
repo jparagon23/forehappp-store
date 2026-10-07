@@ -8,6 +8,7 @@ import java.util.Optional;
 
 public interface IDonationRecordDao {
     DonationRecord save(DonationRecord record);
+    java.util.List<DonationRecord> findByOrderId(Long orderId);
     Optional<DonationRecord> findById(Long id);
     Page<DonationRecord> findAll(Pageable pageable);
     Page<DonationRecord> findByFoundationId(Long foundationId, Pageable pageable);

@@ -23,6 +23,11 @@ public class DonationRecordRepositoryImpl implements IDonationRecordDao {
     }
 
     @Override
+    public java.util.List<DonationRecord> findByOrderId(Long orderId) {
+        return jpaRepository.findByOrderId(orderId);
+    }
+
+    @Override
     public Optional<DonationRecord> findById(Long id) {
         return jpaRepository.findById(id);
     }

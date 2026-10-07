@@ -30,4 +30,9 @@ public class CommissionRepositoryImpl implements ICommissionDao {
     public AmbassadorCommission save(AmbassadorCommission commission) {
         return jpaRepository.save(commission);
     }
+
+    @Override
+    public List<AmbassadorCommission> findByOrderId(Long orderId) {
+        return jpaRepository.findByOrderId(orderId);
+    }
 }

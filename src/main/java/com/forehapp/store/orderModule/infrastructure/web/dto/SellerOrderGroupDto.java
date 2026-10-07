@@ -37,5 +37,9 @@ public record SellerOrderGroupDto(
         BigDecimal marginPercent,
         String channel,
         // Units of this group to order from the supplier; 0 = all shipped from own stock
-        int dropshipUnits
+        int dropshipUnits,
+        // Left by editing a paid order: positive = buyer owes it, negative = store owes it back; null = none
+        BigDecimal balanceDue,
+        // Last time the seller changed the products (null = never)
+        LocalDateTime itemsEditedAt
 ) {}

@@ -78,6 +78,11 @@ public class Order {
     @Column(name = "mercado_pago_surcharge", precision = 14, scale = 2)
     private BigDecimal mercadoPagoSurcharge;
 
+    // Difference between the total and what was already paid, after the seller edited a paid order:
+    // positive = the buyer owes it, negative = the store owes it back. Settled by hand, then reset to null
+    @Column(name = "balance_due", precision = 14, scale = 2)
+    private BigDecimal balanceDue;
+
     @Column(name = "referral_code", length = 50)
     private String referralCode;
 

@@ -1134,3 +1134,42 @@ SET @s = IF(@dropship_new,
        AND (v.stock > 0 OR (v.dropship = 1 AND v.supplier_available = 1)))',
   'SELECT 1');
 PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- =====================
+-- Migration: seller edits the products of an order
+-- =====================
+
+CREATE TABLE IF NOT EXISTS store_order_item_changes (
+    change_id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+    edit_id            VARCHAR(36)  NOT NULL,
+    order_id           BIGINT       NOT NULL,
+    group_id           BIGINT       NOT NULL,
+    change_type        VARCHAR(20)  NOT NULL,
+    old_variant_id     BIGINT,
+    old_label          VARCHAR(400),
+    old_quantity       INT,
+    old_unit_price     DECIMAL(14,2),
+    new_variant_id     BIGINT,
+    new_label          VARCHAR(400),
+    new_quantity       INT,
+    new_unit_price     DECIMAL(14,2),
+    reason             VARCHAR(500) NOT NULL,
+    order_total_before DECIMAL(14,2) NOT NULL,
+    order_total_after  DECIMAL(14,2) NOT NULL,
+    changed_by_user_id BIGINT       NOT NULL,
+    changed_at         DATETIME     NOT NULL,
+    INDEX idx_oic_group (group_id),
+    CONSTRAINT store_fk_oic_order FOREIGN KEY (order_id) REFERENCES store_orders(order_id) ON DELETE CASCADE
+);
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_orders ADD COLUMN balance_due DECIMAL(14,2)',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_orders' AND COLUMN_NAME = 'balance_due');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_order_seller_groups ADD COLUMN items_edited_at DATETIME',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_order_seller_groups' AND COLUMN_NAME = 'items_edited_at');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;

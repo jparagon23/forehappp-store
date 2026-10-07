@@ -7,4 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface IDonationRecordJpaRepository extends JpaRepository<DonationRecord, Long> {
     Page<DonationRecord> findByFoundationIdOrderByCreatedAtDesc(Long foundationId, Pageable pageable);
+
+    java.util.List<DonationRecord> findByOrderId(Long orderId);
 }
