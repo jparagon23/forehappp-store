@@ -96,14 +96,9 @@ public class OrderMapper {
         );
     }
 
+    // Buyer-facing: cost and margin stay null (the seller views build their own items with them)
     private OrderItemDto toItemDto(OrderItem item) {
         BigDecimal subtotal = item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity()));
-        BigDecimal totalCost = item.getUnitCost() != null
-                ? item.getUnitCost().multiply(BigDecimal.valueOf(item.getQuantity()))
-                : null;
-        BigDecimal unitMargin = item.getUnitCost() != null
-                ? item.getUnitPrice().subtract(item.getUnitCost())
-                : null;
         List<VariantAttributeDto> attributes = item.getVariant().getAttributeValues().stream()
                 .map(av -> new VariantAttributeDto(
                         av.getAttribute().getDescription(),
@@ -122,9 +117,9 @@ public class OrderMapper {
                 item.getQuantity(),
                 item.getUnitPrice(),
                 subtotal,
-                item.getUnitCost(),
-                totalCost,
-                unitMargin
+                null,
+                null,
+                null
         );
     }
 }
