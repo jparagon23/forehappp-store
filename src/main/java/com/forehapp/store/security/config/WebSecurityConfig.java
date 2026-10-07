@@ -108,6 +108,8 @@ public class WebSecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/locations/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/checkout/guest", "/api/v1/checkout/guest/estimate", "/api/v1/checkout/guest/create-account").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/coupons/validate/guest").permitAll()
+                        // Anonymous storefront traffic (no personal data)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/track").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/check-email").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/ambassadors/validate").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/email-preferences/unsubscribe", "/api/v1/email-preferences/resubscribe").permitAll()
