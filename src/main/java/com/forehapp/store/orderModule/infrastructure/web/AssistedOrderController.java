@@ -1,9 +1,11 @@
 package com.forehapp.store.orderModule.infrastructure.web;
 
 import com.forehapp.store.orderModule.domain.ports.in.IAssistedOrderService;
+import com.forehapp.store.orderModule.infrastructure.web.dto.AssistedCouponValidateDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.AssistedCustomerResponse;
 import com.forehapp.store.orderModule.infrastructure.web.dto.AssistedOrderRequestDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.OrderResponse;
+import com.forehapp.store.promotionModule.application.dto.CouponValidationResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -27,6 +29,13 @@ public class AssistedOrderController {
                                                     @AuthenticationPrincipal String userId) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(assistedOrderService.placeOrder(storeId, dto, Long.parseLong(userId)));
+    }
+
+    @PostMapping("/coupon/validate")
+    public ResponseEntity<CouponValidationResponse> validateCoupon(@PathVariable Long storeId,
+                                                                   @Valid @RequestBody AssistedCouponValidateDto dto,
+                                                                   @AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(assistedOrderService.validateCoupon(storeId, dto, Long.parseLong(userId)));
     }
 
     @GetMapping("/customer")

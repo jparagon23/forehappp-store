@@ -1046,3 +1046,21 @@ SET @s = (SELECT IF(COUNT(*) = 0,
   'SELECT 1')
   FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_orders' AND COLUMN_NAME = 'data_consent_at');
 PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- =====================
+-- Migration: store_coupon_redemptions — guest redemptions
+-- Tables created before guest checkout lack guest_email and require a profile; guest coupon
+-- redemptions (web guest checkout and assisted orders) fail there. No-op once applied.
+-- =====================
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_coupon_redemptions ADD COLUMN guest_email VARCHAR(255)',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_coupon_redemptions' AND COLUMN_NAME = 'guest_email');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(
+  (SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_coupon_redemptions' AND COLUMN_NAME = 'store_profile_id') = 'NO',
+  'ALTER TABLE store_coupon_redemptions MODIFY COLUMN store_profile_id BIGINT NULL',
+  'SELECT 1'));
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;

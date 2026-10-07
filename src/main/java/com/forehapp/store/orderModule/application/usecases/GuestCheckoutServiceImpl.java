@@ -376,9 +376,13 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
             applicableAmount = savedOrder.getTotal();
         }
 
-        CouponValidationResponse couponResult = promotionService.redeemCouponAsGuest(email,
-                new RedeemCouponRequestDto(couponCode, couponStoreId, applicableAmount,
-                        savedOrder.getId(), applicableShipping));
+        RedeemCouponRequestDto redeem = new RedeemCouponRequestDto(couponCode, couponStoreId, applicableAmount,
+                savedOrder.getId(), applicableShipping);
+        // An order attached to an account (assisted order for a registered customer) counts against the
+        // account's per-user limit and can use coupons assigned to it; guest orders count by email
+        CouponValidationResponse couponResult = savedOrder.getBuyer() != null
+                ? promotionService.redeemCoupon(savedOrder.getBuyer().getUser().getId(), redeem)
+                : promotionService.redeemCouponAsGuest(email, redeem);
 
         if ("FREE_SHIPPING".equals(couponResult.discountType()) && targetGroup != null) {
             targetGroup.setShippingCoveredByCoupon(couponResult.discountAmount());
