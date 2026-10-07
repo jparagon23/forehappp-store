@@ -1,9 +1,11 @@
 package com.forehapp.store.reportModule.infrastructure.web;
 
+import com.forehapp.store.reportModule.application.dto.AdminDashboardResponse;
 import com.forehapp.store.reportModule.application.dto.BusinessSummaryResponse;
 import com.forehapp.store.reportModule.application.dto.RevenuePointResponse;
 import com.forehapp.store.reportModule.application.dto.SellerSalesResponse;
 import com.forehapp.store.reportModule.application.dto.TopProductResponse;
+import com.forehapp.store.reportModule.application.usecases.AdminDashboardService;
 import com.forehapp.store.reportModule.domain.ports.in.IAdminReportService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -21,9 +23,19 @@ import java.util.List;
 public class ReportController {
 
     private final IAdminReportService adminReportService;
+    private final AdminDashboardService dashboardService;
 
-    public ReportController(IAdminReportService adminReportService) {
+    public ReportController(IAdminReportService adminReportService, AdminDashboardService dashboardService) {
         this.adminReportService = adminReportService;
+        this.dashboardService = dashboardService;
+    }
+
+    /** Admin home: last {days} days (default 30) vs the previous {days}, plus pending work and alerts. */
+    @GetMapping("/dashboard")
+    public ResponseEntity<AdminDashboardResponse> getDashboard(
+            @AuthenticationPrincipal String userId,
+            @RequestParam(defaultValue = "30") int days) {
+        return ResponseEntity.ok(dashboardService.getDashboard(Long.parseLong(userId), days));
     }
 
     @GetMapping("/summary")

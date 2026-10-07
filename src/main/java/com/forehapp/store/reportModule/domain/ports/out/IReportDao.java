@@ -14,6 +14,10 @@ import java.util.List;
 public interface IReportDao {
 
     // --- Admin: summary scalars ---
+    /** Sales: not cancelled and paid, or cash on delivery. */
+    Long countSoldOrders(LocalDateTime from, LocalDateTime to);
+    BigDecimal sumSoldRevenue(LocalDateTime from, LocalDateTime to);
+    BigDecimal avgSoldTicket(LocalDateTime from, LocalDateTime to);
     Long countOrdersByStatus(OrderStatus status, LocalDateTime from, LocalDateTime to);
     BigDecimal sumRevenueByStatus(OrderStatus status, LocalDateTime from, LocalDateTime to);
     BigDecimal avgTicketByStatus(OrderStatus status, LocalDateTime from, LocalDateTime to);

@@ -14,6 +14,16 @@ import java.util.List;
 public interface IReportRepository extends JpaRepository<Order, Long> {
 
     // ── Admin: summary ────────────────────────────────────────────────────────
+    // A sale = not cancelled and paid (Mercado Pago or confirmed transfer/cash) or cash on delivery
+
+    @Query("SELECT COUNT(o) FROM Order o WHERE (o.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PAID OR o.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PAYMENT_CONFIRMED OR (o.paymentMethod = 'CASH_ON_DELIVERY' AND o.status <> com.forehapp.store.orderModule.domain.model.OrderStatus.CANCELLED)) AND o.createdAt BETWEEN :from AND :to")
+    Long countSoldOrders(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    @Query("SELECT COALESCE(SUM(o.total), 0) FROM Order o WHERE (o.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PAID OR o.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PAYMENT_CONFIRMED OR (o.paymentMethod = 'CASH_ON_DELIVERY' AND o.status <> com.forehapp.store.orderModule.domain.model.OrderStatus.CANCELLED)) AND o.createdAt BETWEEN :from AND :to")
+    BigDecimal sumSoldRevenue(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    @Query("SELECT COALESCE(AVG(o.total), 0) FROM Order o WHERE (o.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PAID OR o.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PAYMENT_CONFIRMED OR (o.paymentMethod = 'CASH_ON_DELIVERY' AND o.status <> com.forehapp.store.orderModule.domain.model.OrderStatus.CANCELLED)) AND o.createdAt BETWEEN :from AND :to")
+    BigDecimal avgSoldTicket(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
     @Query("SELECT COUNT(o) FROM Order o WHERE o.status = :status AND o.createdAt BETWEEN :from AND :to")
     Long countOrdersByStatus(@Param("status") OrderStatus status,
@@ -50,7 +60,7 @@ public interface IReportRepository extends JpaRepository<Order, Long> {
                    COUNT(*)                             AS orderCount,
                    SUM(total)                           AS revenue
             FROM store_orders
-            WHERE status = 'PAID' AND created_at BETWEEN :from AND :to
+            WHERE (status IN ('PAID', 'PAYMENT_CONFIRMED') OR (payment_method = 'CASH_ON_DELIVERY' AND status <> 'CANCELLED')) AND created_at BETWEEN :from AND :to
             GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')
             ORDER BY period
             """, nativeQuery = true)
@@ -62,7 +72,7 @@ public interface IReportRepository extends JpaRepository<Order, Long> {
                    COUNT(*)                          AS orderCount,
                    SUM(total)                        AS revenue
             FROM store_orders
-            WHERE status = 'PAID' AND created_at BETWEEN :from AND :to
+            WHERE (status IN ('PAID', 'PAYMENT_CONFIRMED') OR (payment_method = 'CASH_ON_DELIVERY' AND status <> 'CANCELLED')) AND created_at BETWEEN :from AND :to
             GROUP BY DATE_FORMAT(created_at, '%Y-%u')
             ORDER BY period
             """, nativeQuery = true)
@@ -74,7 +84,7 @@ public interface IReportRepository extends JpaRepository<Order, Long> {
                    COUNT(*)                          AS orderCount,
                    SUM(total)                        AS revenue
             FROM store_orders
-            WHERE status = 'PAID' AND created_at BETWEEN :from AND :to
+            WHERE (status IN ('PAID', 'PAYMENT_CONFIRMED') OR (payment_method = 'CASH_ON_DELIVERY' AND status <> 'CANCELLED')) AND created_at BETWEEN :from AND :to
             GROUP BY DATE_FORMAT(created_at, '%Y-%m')
             ORDER BY period
             """, nativeQuery = true)
@@ -94,7 +104,7 @@ public interface IReportRepository extends JpaRepository<Order, Long> {
             INNER JOIN store_orders              o   ON osg.order_id  = o.order_id
             INNER JOIN store_product_variants    pv  ON oi.variant_id = pv.variant_id
             INNER JOIN store_products            p   ON pv.product_id = p.product_id
-            WHERE o.status = 'PAID' AND o.created_at BETWEEN :from AND :to
+            WHERE (o.status IN ('PAID', 'PAYMENT_CONFIRMED') OR (o.payment_method = 'CASH_ON_DELIVERY' AND o.status <> 'CANCELLED')) AND o.created_at BETWEEN :from AND :to
             GROUP BY p.product_id, p.title, pv.sku
             ORDER BY unitsSold DESC
             LIMIT :limit
@@ -113,7 +123,7 @@ public interface IReportRepository extends JpaRepository<Order, Long> {
             FROM store_order_seller_groups osg
             INNER JOIN store_orders o ON osg.order_id = o.order_id
             INNER JOIN stores       s ON osg.store_id = s.store_id
-            WHERE o.status = 'PAID' AND o.created_at BETWEEN :from AND :to
+            WHERE (o.status IN ('PAID', 'PAYMENT_CONFIRMED') OR (o.payment_method = 'CASH_ON_DELIVERY' AND o.status <> 'CANCELLED')) AND o.created_at BETWEEN :from AND :to
             GROUP BY s.store_id, s.name
             ORDER BY totalRevenue DESC
             """, nativeQuery = true)
@@ -124,7 +134,7 @@ public interface IReportRepository extends JpaRepository<Order, Long> {
 
     @Query("SELECT COUNT(DISTINCT g.order) FROM com.forehapp.store.orderModule.domain.model.OrderSellerGroup g " +
            "WHERE g.store.id = :storeId " +
-           "AND g.order.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PAID " +
+           "AND (g.order.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PAID OR g.order.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PAYMENT_CONFIRMED OR (g.order.paymentMethod = 'CASH_ON_DELIVERY' AND g.order.status <> com.forehapp.store.orderModule.domain.model.OrderStatus.CANCELLED)) " +
            "AND g.order.createdAt BETWEEN :from AND :to")
     Long countSellerOrders(@Param("storeId") Long storeId,
                             @Param("from") LocalDateTime from,
@@ -132,7 +142,7 @@ public interface IReportRepository extends JpaRepository<Order, Long> {
 
     @Query("SELECT COALESCE(SUM(g.subtotal), 0) FROM com.forehapp.store.orderModule.domain.model.OrderSellerGroup g " +
            "WHERE g.store.id = :storeId " +
-           "AND g.order.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PAID " +
+           "AND (g.order.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PAID OR g.order.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PAYMENT_CONFIRMED OR (g.order.paymentMethod = 'CASH_ON_DELIVERY' AND g.order.status <> com.forehapp.store.orderModule.domain.model.OrderStatus.CANCELLED)) " +
            "AND g.order.createdAt BETWEEN :from AND :to")
     BigDecimal sumSellerRevenue(@Param("storeId") Long storeId,
                                  @Param("from") LocalDateTime from,
@@ -140,7 +150,7 @@ public interface IReportRepository extends JpaRepository<Order, Long> {
 
     @Query("SELECT COALESCE(AVG(g.subtotal), 0) FROM com.forehapp.store.orderModule.domain.model.OrderSellerGroup g " +
            "WHERE g.store.id = :storeId " +
-           "AND g.order.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PAID " +
+           "AND (g.order.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PAID OR g.order.status = com.forehapp.store.orderModule.domain.model.OrderStatus.PAYMENT_CONFIRMED OR (g.order.paymentMethod = 'CASH_ON_DELIVERY' AND g.order.status <> com.forehapp.store.orderModule.domain.model.OrderStatus.CANCELLED)) " +
            "AND g.order.createdAt BETWEEN :from AND :to")
     BigDecimal avgSellerTicket(@Param("storeId") Long storeId,
                                 @Param("from") LocalDateTime from,
@@ -208,7 +218,7 @@ public interface IReportRepository extends JpaRepository<Order, Long> {
             INNER JOIN store_orders              o   ON osg.order_id  = o.order_id
             INNER JOIN store_product_variants    pv  ON oi.variant_id = pv.variant_id
             INNER JOIN store_products            p   ON pv.product_id = p.product_id
-            WHERE o.status = 'PAID' AND osg.store_id = :storeId AND o.created_at BETWEEN :from AND :to
+            WHERE (o.status IN ('PAID', 'PAYMENT_CONFIRMED') OR (o.payment_method = 'CASH_ON_DELIVERY' AND o.status <> 'CANCELLED')) AND osg.store_id = :storeId AND o.created_at BETWEEN :from AND :to
             GROUP BY p.product_id, p.title, pv.sku
             ORDER BY unitsSold DESC
             LIMIT :limit

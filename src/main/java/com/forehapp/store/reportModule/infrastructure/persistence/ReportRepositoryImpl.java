@@ -23,6 +23,21 @@ public class ReportRepositoryImpl implements IReportDao {
     }
 
     @Override
+    public Long countSoldOrders(LocalDateTime from, LocalDateTime to) {
+        return repository.countSoldOrders(from, to);
+    }
+
+    @Override
+    public BigDecimal sumSoldRevenue(LocalDateTime from, LocalDateTime to) {
+        return repository.sumSoldRevenue(from, to);
+    }
+
+    @Override
+    public BigDecimal avgSoldTicket(LocalDateTime from, LocalDateTime to) {
+        return repository.avgSoldTicket(from, to);
+    }
+
+    @Override
     public Long countOrdersByStatus(OrderStatus status, LocalDateTime from, LocalDateTime to) {
         return repository.countOrdersByStatus(status, from, to);
     }
