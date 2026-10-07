@@ -6,13 +6,11 @@ import java.util.List;
 /** What a run decided to do. Actions are only executed in APPLY mode and when abortReason is null. */
 public record SyncPlan(List<Action> actions, List<EventDraft> events, String abortReason) {
 
-    public enum ActionType { DISABLE, REENABLE, RELEASE, UPDATE_COST }
+    /** MARK_*: set whether the supplier has the variant; the own stock is never touched. */
+    public enum ActionType { MARK_UNAVAILABLE, MARK_AVAILABLE, UPDATE_COST }
 
-    /**
-     * stock: for DISABLE the stock to remember, for REENABLE the stock to restore.
-     * cost: for UPDATE_COST the new cost.
-     */
-    public record Action(ActionType type, Long linkId, Long variantId, Long productId, Integer stock, BigDecimal cost) {}
+    /** cost: for UPDATE_COST the new cost. */
+    public record Action(ActionType type, Long linkId, Long variantId, Long productId, BigDecimal cost) {}
 
     public record EventDraft(
             SyncEventType type,

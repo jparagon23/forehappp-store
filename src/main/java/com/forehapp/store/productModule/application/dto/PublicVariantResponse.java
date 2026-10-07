@@ -6,14 +6,17 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * Variant as shown to buyers. Never add cost, margin or other seller-only data here.
+ * Variant as shown to buyers. Never add cost, margin or other seller-only data here: the buyer must not
+ * tell own stock from dropshipping either.
+ * maxQuantity: most units that can be ordered now; null = no limit.
  */
 public record PublicVariantResponse(
         Long id,
         String sku,
         BigDecimal price,
         BigDecimal compareAtPrice,
-        Integer stock,
+        boolean available,
+        Integer maxQuantity,
         Boolean active,
         List<ProductVariantResponse.AttributeValueInfo> attributes
 ) {
@@ -23,7 +26,8 @@ public record PublicVariantResponse(
                 variant.getSku(),
                 variant.getPrice(),
                 variant.getCompareAtPrice(),
-                variant.getStock(),
+                variant.isSellable(),
+                variant.isSellable() ? variant.maxQuantity() : Integer.valueOf(0),
                 variant.getActive(),
                 variant.getAttributeValues().stream()
                         .map(av -> new ProductVariantResponse.AttributeValueInfo(

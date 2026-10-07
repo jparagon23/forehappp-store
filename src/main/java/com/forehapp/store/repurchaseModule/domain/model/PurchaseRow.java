@@ -17,7 +17,8 @@ public record PurchaseRow(
         Long variantId,
         Integer variantRepurchaseDays,
         Boolean variantActive,
-        Integer variantStock,
+        // Own stock or available from the supplier (dropship)
+        Boolean variantInStock,
         BigDecimal variantPrice,
         Long productId,
         String productTitle,

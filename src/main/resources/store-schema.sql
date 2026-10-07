@@ -1064,3 +1064,73 @@ SET @s = (SELECT IF(
   'ALTER TABLE store_coupon_redemptions MODIFY COLUMN store_profile_id BIGINT NULL',
   'SELECT 1'));
 PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- =====================
+-- Migration: own stock vs dropshipping
+-- stock is now only what the store holds; dropship variants also sell what the supplier has
+-- (supplier_available, kept by the supplier sync for paired variants). dropship_quantity records
+-- the units of an order item to order from the supplier.
+-- The data steps run once, in the same startup that adds the dropship column: variants with a
+-- confirmed Profitness pair become dropship with no own stock (their stock was a placeholder to make
+-- them sellable) and the supplier's last known availability; product statuses are then recomputed.
+-- =====================
+
+SET @dropship_new = (SELECT COUNT(*) = 0 FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_product_variants' AND COLUMN_NAME = 'dropship');
+
+SET @s = IF(@dropship_new,
+  'ALTER TABLE store_product_variants ADD COLUMN dropship TINYINT(1) NOT NULL DEFAULT 0',
+  'SELECT 1');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_product_variants ADD COLUMN supplier_available TINYINT(1) NOT NULL DEFAULT 1',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_product_variants' AND COLUMN_NAME = 'supplier_available');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_order_items ADD COLUMN dropship_quantity INT NOT NULL DEFAULT 0',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_order_items' AND COLUMN_NAME = 'dropship_quantity');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- Placeholder stock removed with an inventory movement, so the change shows in the variant history
+SET @s = IF(@dropship_new,
+  'INSERT INTO store_inventory_movements (variant_id, quantity, reason, created_at)
+   SELECT v.variant_id, -v.stock, ''ADJUSTMENT'', NOW()
+   FROM store_product_variants v
+   WHERE v.stock > 0 AND EXISTS (SELECT 1 FROM store_supplier_links l
+     WHERE l.variant_id = v.variant_id AND l.supplier = ''PROFITNESS'' AND l.status = ''CONFIRMED'')',
+  'SELECT 1');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = IF(@dropship_new,
+  'UPDATE store_product_variants v
+   JOIN store_supplier_links l ON l.variant_id = v.variant_id AND l.supplier = ''PROFITNESS'' AND l.status = ''CONFIRMED''
+   JOIN store_supplier_catalog_items i ON i.item_id = l.supplier_item_id
+   SET v.dropship = 1, v.stock = 0, v.supplier_available = IF(i.out_of_stock = 1, 0, 1)',
+  'SELECT 1');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- The sync no longer holds variants at stock 0
+SET @s = IF(@dropship_new,
+  'UPDATE store_supplier_links SET disabled_by_sync = 0, stock_before_sync = NULL WHERE disabled_by_sync = 1',
+  'SELECT 1');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = IF(@dropship_new,
+  'UPDATE store_products p SET p.status = ''OUT_OF_STOCK''
+   WHERE p.status = ''ACTIVE'' AND NOT EXISTS (SELECT 1 FROM store_product_variants v
+     WHERE v.product_id = p.product_id AND v.active = 1
+       AND (v.stock > 0 OR (v.dropship = 1 AND v.supplier_available = 1)))',
+  'SELECT 1');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+SET @s = IF(@dropship_new,
+  'UPDATE store_products p SET p.status = ''ACTIVE''
+   WHERE p.status = ''OUT_OF_STOCK'' AND EXISTS (SELECT 1 FROM store_product_variants v
+     WHERE v.product_id = p.product_id AND v.active = 1
+       AND (v.stock > 0 OR (v.dropship = 1 AND v.supplier_available = 1)))',
+  'SELECT 1');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;

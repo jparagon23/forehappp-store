@@ -35,5 +35,7 @@ public record SellerOrderGroupDto(
         BigDecimal totalCost,
         BigDecimal totalMargin,
         BigDecimal marginPercent,
-        String channel
+        String channel,
+        // Units of this group to order from the supplier; 0 = all shipped from own stock
+        int dropshipUnits
 ) {}

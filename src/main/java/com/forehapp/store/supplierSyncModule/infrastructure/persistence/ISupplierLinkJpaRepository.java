@@ -20,8 +20,8 @@ public interface ISupplierLinkJpaRepository extends JpaRepository<SupplierLink, 
     List<SupplierLink> findByVariantIdInAndSupplier(Collection<Long> variantIds, SupplierCode supplier);
 
     @Query("SELECT new com.forehapp.store.supplierSyncModule.domain.model.LinkSnapshot(" +
-           "l.id, v.id, p.id, p.title, v.sku, v.active, v.stock, v.price, v.cost, " +
-           "l.status, l.supplierItemId, l.disabledBySync, l.stockBeforeSync) " +
+           "l.id, v.id, p.id, p.title, v.sku, v.active, v.stock, v.dropship, v.supplierAvailable, v.price, v.cost, " +
+           "l.status, l.supplierItemId) " +
            "FROM SupplierLink l, ProductVariant v JOIN v.product p " +
            "WHERE v.id = l.variantId AND l.storeId = :storeId AND l.supplier = :supplier " +
            "AND p.store.id = :storeId AND l.status IN :statuses")
@@ -38,7 +38,7 @@ public interface ISupplierLinkJpaRepository extends JpaRepository<SupplierLink, 
 
     // Variants with no CONFIRMED, SUGGESTED or NOT_SUPPLIED pair (rejected-only variants count as unpaired)
     @Query("SELECT new com.forehapp.store.supplierSyncModule.domain.model.VariantRow(" +
-           "v.id, p.id, p.store.id, p.title, b.description, v.sku, v.active, v.stock, v.price) " +
+           "v.id, p.id, p.store.id, p.title, b.description, v.sku, v.active, v.stock, v.dropship, v.supplierAvailable, v.price) " +
            "FROM ProductVariant v JOIN v.product p JOIN p.brand b " +
            "WHERE p.store.id IN :storeIds " +
            "AND NOT EXISTS (SELECT 1 FROM SupplierLink l WHERE l.variantId = v.id AND l.supplier = :supplier " +
@@ -49,7 +49,7 @@ public interface ISupplierLinkJpaRepository extends JpaRepository<SupplierLink, 
                                              @Param("statuses") Collection<SupplierLinkStatus> statuses);
 
     @Query("SELECT new com.forehapp.store.supplierSyncModule.domain.model.VariantRow(" +
-           "v.id, p.id, p.store.id, p.title, b.description, v.sku, v.active, v.stock, v.price) " +
+           "v.id, p.id, p.store.id, p.title, b.description, v.sku, v.active, v.stock, v.dropship, v.supplierAvailable, v.price) " +
            "FROM ProductVariant v JOIN v.product p JOIN p.brand b WHERE v.id IN :variantIds")
     List<VariantRow> findVariantRows(@Param("variantIds") Collection<Long> variantIds);
 
@@ -57,9 +57,10 @@ public interface ISupplierLinkJpaRepository extends JpaRepository<SupplierLink, 
            "JOIN v.attributeValues av JOIN av.attribute a WHERE v.id IN :variantIds")
     List<Object[]> findVariantAttributes(@Param("variantIds") Collection<Long> variantIds);
 
-    @Query("SELECT new com.forehapp.store.supplierSyncModule.domain.model.OrderAtRisk(o.id, i.variant.id, i.quantity) " +
+    // Only units still to be ordered from the supplier are at risk; own stock was already set aside
+    @Query("SELECT new com.forehapp.store.supplierSyncModule.domain.model.OrderAtRisk(o.id, i.variant.id, i.dropshipQuantity) " +
            "FROM OrderItem i JOIN i.sellerGroup g JOIN g.order o " +
-           "WHERE i.variant.id IN :variantIds " +
+           "WHERE i.variant.id IN :variantIds AND i.dropshipQuantity > 0 " +
            "AND o.status <> com.forehapp.store.orderModule.domain.model.OrderStatus.CANCELLED " +
            "AND g.status IN (com.forehapp.store.orderModule.domain.model.OrderSellerGroupStatus.PENDING, " +
            "                 com.forehapp.store.orderModule.domain.model.OrderSellerGroupStatus.PREPARING) " +

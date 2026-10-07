@@ -21,17 +21,15 @@ public class SupplierSyncPlanner {
     private final BigDecimal minMargin;
     private final double maxDisableRatio;
     private final int minDisableGuard;
-    private final int defaultRestock;
 
-    public SupplierSyncPlanner(BigDecimal minMargin, double maxDisableRatio, int minDisableGuard, int defaultRestock) {
+    public SupplierSyncPlanner(BigDecimal minMargin, double maxDisableRatio, int minDisableGuard) {
         this.minMargin = minMargin;
         this.maxDisableRatio = maxDisableRatio;
         this.minDisableGuard = minDisableGuard;
-        this.defaultRestock = defaultRestock;
     }
 
     /**
-     * @param links         CONFIRMED links (drive stock and cost) and SUGGESTED links (margin alerts only)
+     * @param links         CONFIRMED links (drive supplier availability and cost) and SUGGESTED links (margin alerts only)
      * @param items         supplier products by id
      * @param guardDisables when true, too many disables in one run aborts it (off for a store's first applied run,
      *                      where disabling a large share of the catalog is expected)
@@ -55,14 +53,14 @@ public class SupplierSyncPlanner {
             }
 
             if (isConfirmed) {
-                planStock(link, item, actions, events);
+                planAvailability(link, item, actions, events);
                 planCost(link, item, actions, events);
             }
             planMarginAlert(link, item, !isConfirmed, events);
         }
 
         String abortReason = null;
-        long disables = actions.stream().filter(a -> a.type() == ActionType.DISABLE).count();
+        long disables = events.stream().filter(e -> e.type() == SyncEventType.DISABLED).count();
         long limit = Math.max(minDisableGuard, (long) Math.ceil(confirmed * maxDisableRatio));
         if (guardDisables && disables > limit) {
             abortReason = "Run would disable " + disables + " of " + confirmed
@@ -71,34 +69,22 @@ public class SupplierSyncPlanner {
         return new SyncPlan(actions, events, abortReason);
     }
 
-    private void planStock(LinkSnapshot link, ItemSnapshot item, List<Action> actions, List<EventDraft> events) {
-        int stock = link.variantStock() == null ? 0 : link.variantStock();
-        boolean disabledBySync = Boolean.TRUE.equals(link.disabledBySync());
+    /**
+     * Mirrors the supplier's availability on the variant. The own stock is never touched: it keeps selling
+     * while the supplier is out. Only active dropship variants change what can be sold, so only they are reported.
+     */
+    private void planAvailability(LinkSnapshot link, ItemSnapshot item, List<Action> actions, List<EventDraft> events) {
+        boolean available = !item.outOfStock();
+        if (available == !Boolean.FALSE.equals(link.variantSupplierAvailable())) return;
 
-        if (item.outOfStock()) {
-            // A variant the seller hid is left alone; one restocked by hand while the supplier is
-            // still out of stock is disabled again (dropshipping: nothing to ship)
-            if (stock > 0 && Boolean.TRUE.equals(link.variantActive())) {
-                actions.add(new Action(ActionType.DISABLE, link.linkId(), link.variantId(), link.productId(), stock, null));
-                events.add(event(SyncEventType.DISABLED, link, item, String.valueOf(stock), "0",
-                        "Out of stock at supplier", false));
-            }
-            return;
-        }
+        actions.add(new Action(available ? ActionType.MARK_AVAILABLE : ActionType.MARK_UNAVAILABLE,
+                link.linkId(), link.variantId(), link.productId(), null));
 
-        if (!disabledBySync) return;
-
-        if (stock == 0) {
-            int restore = link.stockBeforeSync() != null && link.stockBeforeSync() > 0
-                    ? link.stockBeforeSync()
-                    : defaultRestock;
-            actions.add(new Action(ActionType.REENABLE, link.linkId(), link.variantId(), link.productId(), restore, null));
-            events.add(event(SyncEventType.REENABLED, link, item, "0", String.valueOf(restore),
-                    "Available again at supplier", false));
-        } else {
-            actions.add(new Action(ActionType.RELEASE, link.linkId(), link.variantId(), link.productId(), null, null));
-            events.add(event(SyncEventType.RELEASED, link, item, null, String.valueOf(stock),
-                    "Restocked by hand; sync stops tracking it", false));
+        if (Boolean.TRUE.equals(link.variantDropship()) && Boolean.TRUE.equals(link.variantActive())) {
+            String ownStock = String.valueOf(link.variantStock() == null ? 0 : link.variantStock());
+            events.add(available
+                    ? event(SyncEventType.REENABLED, link, item, null, ownStock, "Available again at supplier", false)
+                    : event(SyncEventType.DISABLED, link, item, null, ownStock, "Out of stock at supplier", false));
         }
     }
 
@@ -106,7 +92,7 @@ public class SupplierSyncPlanner {
         if (item.price() == null) return;
         if (link.variantCost() != null && link.variantCost().compareTo(item.price()) == 0) return;
 
-        actions.add(new Action(ActionType.UPDATE_COST, link.linkId(), link.variantId(), link.productId(), null, item.price()));
+        actions.add(new Action(ActionType.UPDATE_COST, link.linkId(), link.variantId(), link.productId(), item.price()));
         events.add(event(SyncEventType.COST_UPDATED, link, item,
                 link.variantCost() == null ? null : link.variantCost().toPlainString(),
                 item.price().toPlainString(), null, false));

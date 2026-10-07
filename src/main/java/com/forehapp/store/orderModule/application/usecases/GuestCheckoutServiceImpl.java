@@ -296,7 +296,7 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
                     .orElseThrow(() -> new NotFoundException(ErrorCode.ORDER_VARIANT_NOT_FOUND,
                             "Variant not found: " + item.variantId()));
 
-            if (variant.getStock() < item.quantity()) {
+            if (!variant.canFulfill(item.quantity())) {
                 throw new ConflictException(ErrorCode.ORDER_INSUFFICIENT_STOCK,
                         "Insufficient stock for: " + variant.getProduct().getTitle());
             }
@@ -317,13 +317,14 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
 
             subtotal = subtotal.add(variant.getPrice().multiply(BigDecimal.valueOf(item.quantity())));
 
-            int newStock = variant.getStock() - item.quantity();
-            variant.setStock(newStock);
+            orderItem.setDropshipQuantity(variant.consume(item.quantity()));
             productVariantDao.save(variant);
+            int newStock = variant.getStock();
 
             affectedProductIds.add(variant.getProduct().getId());
 
-            if (newStock <= lowStockThreshold) {
+            // Own stock running low only matters when the supplier does not cover it
+            if (!Boolean.TRUE.equals(variant.getDropship()) && newStock <= lowStockThreshold) {
                 notifyLowStock(store, variant, newStock);
             }
         }
@@ -526,12 +527,8 @@ public class GuestCheckoutServiceImpl implements IGuestCheckoutService {
     private void markOutOfStockIfNeeded(Long productId) {
         Product product = productDao.findById(productId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ORDER_VARIANT_NOT_FOUND, "Product not found"));
-        if (product.getStatus() == ProductStatus.ACTIVE) {
-            boolean allOutOfStock = product.getVariants().stream().allMatch(v -> v.getStock() <= 0);
-            if (allOutOfStock) {
-                product.setStatus(ProductStatus.OUT_OF_STOCK);
-                productDao.save(product);
-            }
+        if (product.getStatus() == ProductStatus.ACTIVE && product.refreshStockStatus()) {
+            productDao.save(product);
         }
     }
 }

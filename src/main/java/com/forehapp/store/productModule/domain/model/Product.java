@@ -78,4 +78,25 @@ public class Product {
     public void prePersist() {
         createdAt = LocalDateTime.now();
     }
+
+    public boolean hasSellableVariant() {
+        return variants.stream().anyMatch(ProductVariant::isSellable);
+    }
+
+    /**
+     * ACTIVE with nothing to sell becomes OUT_OF_STOCK and back again; DRAFT and INACTIVE are left alone.
+     * @return true when the status changed
+     */
+    public boolean refreshStockStatus() {
+        boolean sellable = hasSellableVariant();
+        if (!sellable && status == ProductStatus.ACTIVE) {
+            status = ProductStatus.OUT_OF_STOCK;
+            return true;
+        }
+        if (sellable && status == ProductStatus.OUT_OF_STOCK) {
+            status = ProductStatus.ACTIVE;
+            return true;
+        }
+        return false;
+    }
 }

@@ -313,7 +313,8 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
                             subtotal,
                             i.getUnitCost(),
                             totalCostItem,
-                            unitMargin);
+                            unitMargin,
+                            i.getDropshipQuantity());
                 })
                 .toList();
 
@@ -358,7 +359,8 @@ public class OrderModuleServiceImpl implements IOrderModuleService {
                 totalCost,
                 totalMargin,
                 marginPercent,
-                group.getOrder().getChannel().name()
+                group.getOrder().getChannel().name(),
+                items.stream().mapToInt(i -> i.dropshipQuantity() == null ? 0 : i.dropshipQuantity()).sum()
         );
     }
 }

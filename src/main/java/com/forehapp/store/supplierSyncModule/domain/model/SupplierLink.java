@@ -42,11 +42,13 @@ public class SupplierLink {
     @Column(precision = 5, scale = 4)
     private BigDecimal score;
 
-    /** True while the sync holds this variant at stock 0 because the supplier is out of stock. */
+    // Unused since the sync stopped changing stock (it sets ProductVariant.supplierAvailable instead);
+    // the columns stay so old rows keep loading
+    /** True while the sync held this variant at stock 0 because the supplier was out of stock. */
     @Column(name = "disabled_by_sync", nullable = false)
     private Boolean disabledBySync = false;
 
-    /** Stock the variant had when the sync disabled it, restored when the supplier has it again. */
+    /** Stock the variant had when the sync disabled it. */
     @Column(name = "stock_before_sync")
     private Integer stockBeforeSync;
 

@@ -182,6 +182,8 @@ public class ProductServiceImpl implements IProductService {
         variant.setCompareAtPrice(dto.getCompareAtPrice());
         variant.setCost(dto.getCost());
         variant.setStock(dto.getStock());
+        variant.setDropship(Boolean.TRUE.equals(dto.getDropship()));
+        variant.setSupplierAvailable(!Boolean.FALSE.equals(dto.getSupplierAvailable()));
         variant.setRepurchaseDays(dto.getRepurchaseDays());
         variant.setAttributeValues(attrValues);
 
@@ -203,6 +205,9 @@ public class ProductServiceImpl implements IProductService {
             costHistoryDao.save(history);
         }
 
+        product.getVariants().add(saved);
+        if (product.refreshStockStatus()) productDao.save(product);
+
         return new ProductVariantResponse(saved);
     }
 
@@ -211,7 +216,7 @@ public class ProductServiceImpl implements IProductService {
     @CacheEvict(value = {"public-products", "discovery-sections", "seller-products", "seller-product-detail"}, allEntries = true)
     public ProductVariantResponse updateVariant(Long productId, Long variantId, UpdateVariantDto dto, Long storeId, Long userId) {
         resolveStoreAccess(storeId, userId);
-        resolveStoreProduct(productId, storeId);
+        Product product = resolveStoreProduct(productId, storeId);
 
         ProductVariant variant = variantDao.findByIdAndProductId(variantId, productId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Variant not found"));
@@ -243,6 +248,13 @@ public class ProductServiceImpl implements IProductService {
             variant.setRepurchaseDays(dto.getRepurchaseDays());
         }
 
+        if (dto.getDropship() != null) {
+            variant.setDropship(dto.getDropship());
+        }
+        if (dto.getSupplierAvailable() != null) {
+            variant.setSupplierAvailable(dto.getSupplierAvailable());
+        }
+
         ProductVariant saved = variantDao.save(variant);
 
         if (costChanged && saved.getCost() != null) {
@@ -252,6 +264,8 @@ public class ProductServiceImpl implements IProductService {
             history.setNotes(dto.getCostNotes());
             costHistoryDao.save(history);
         }
+
+        if (product.refreshStockStatus()) productDao.save(product);
 
         return new ProductVariantResponse(saved);
     }
@@ -275,10 +289,9 @@ public class ProductServiceImpl implements IProductService {
         if (!productImageDao.existsByProductId(productId)) {
             throw new BadRequestException(ErrorCode.PRODUCT_NO_IMAGES, "Product must have at least one image before publishing");
         }
-        boolean hasStock = product.getVariants().stream()
-                .anyMatch(v -> Boolean.TRUE.equals(v.getActive()) && v.getStock() > 0);
-        if (!hasStock) {
-            throw new BadRequestException(ErrorCode.PRODUCT_NO_STOCK_IN_VARIANTS, "Product must have at least one active variant with stock before publishing");
+        if (!product.hasSellableVariant()) {
+            throw new BadRequestException(ErrorCode.PRODUCT_NO_STOCK_IN_VARIANTS,
+                    "Product must have at least one active variant with stock or available from the supplier before publishing");
         }
 
         product.setStatus(ProductStatus.ACTIVE);
@@ -358,12 +371,7 @@ public class ProductServiceImpl implements IProductService {
         movementDao.deleteByVariantId(variantId);
 
         product.getVariants().removeIf(v -> v.getId().equals(variantId));
-
-        boolean hasStock = product.getVariants().stream()
-                .anyMatch(v -> Boolean.TRUE.equals(v.getActive()) && v.getStock() > 0);
-        if (!hasStock && product.getStatus() == ProductStatus.ACTIVE) {
-            product.setStatus(ProductStatus.OUT_OF_STOCK);
-        }
+        product.refreshStockStatus();
 
         productDao.save(product);
     }
@@ -421,13 +429,7 @@ public class ProductServiceImpl implements IProductService {
         variant.setActive(false);
         ProductVariant saved = variantDao.save(variant);
 
-        boolean hasStock = product.getVariants().stream()
-                .filter(v -> !v.getId().equals(variantId))
-                .anyMatch(v -> Boolean.TRUE.equals(v.getActive()) && v.getStock() > 0);
-        if (!hasStock && product.getStatus() == ProductStatus.ACTIVE) {
-            product.setStatus(ProductStatus.OUT_OF_STOCK);
-            productDao.save(product);
-        }
+        if (product.refreshStockStatus()) productDao.save(product);
 
         return new ProductVariantResponse(saved);
     }
@@ -437,7 +439,7 @@ public class ProductServiceImpl implements IProductService {
     @CacheEvict(value = {"public-products", "discovery-sections", "seller-products", "seller-product-detail"}, allEntries = true)
     public ProductVariantResponse activateVariant(Long productId, Long variantId, Long storeId, Long userId) {
         resolveStoreAccess(storeId, userId);
-        resolveStoreProduct(productId, storeId);
+        Product product = resolveStoreProduct(productId, storeId);
         ProductVariant variant = variantDao.findByIdAndProductId(variantId, productId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, "Variant not found"));
 
@@ -446,7 +448,9 @@ public class ProductServiceImpl implements IProductService {
         }
 
         variant.setActive(true);
-        return new ProductVariantResponse(variantDao.save(variant));
+        ProductVariant saved = variantDao.save(variant);
+        if (product.refreshStockStatus()) productDao.save(product);
+        return new ProductVariantResponse(saved);
     }
 
     @Override

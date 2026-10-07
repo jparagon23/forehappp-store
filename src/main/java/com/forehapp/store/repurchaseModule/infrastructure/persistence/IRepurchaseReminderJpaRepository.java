@@ -17,7 +17,9 @@ public interface IRepurchaseReminderJpaRepository extends JpaRepository<Repurcha
     // variants has a duration, so a later purchase of any variant is seen as a repurchase.
     @Query("SELECT new com.forehapp.store.repurchaseModule.domain.model.PurchaseRow(" +
            "i.id, o.id, o.createdAt, o.buyerEmail, o.guestName, u.name, i.quantity, " +
-           "v.id, v.repurchaseDays, v.active, v.stock, v.price, " +
+           "v.id, v.repurchaseDays, v.active, " +
+           "CASE WHEN v.stock > 0 OR (v.dropship = true AND v.supplierAvailable = true) THEN true ELSE false END, " +
+           "v.price, " +
            "p.id, p.title, p.repurchaseDays, p.status, g.deliveredAt, g.shippedAt) " +
            "FROM OrderItem i " +
            "JOIN i.sellerGroup g " +

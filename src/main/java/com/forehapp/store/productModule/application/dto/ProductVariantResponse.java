@@ -18,6 +18,9 @@ public class ProductVariantResponse {
     private final BigDecimal margin;
     private final BigDecimal marginPercent;
     private final Integer stock;
+    private final Boolean dropship;
+    private final Boolean supplierAvailable;
+    private final boolean sellable;
     private final Boolean active;
     private final Integer repurchaseDays;
     private final List<AttributeValueInfo> attributes;
@@ -29,6 +32,9 @@ public class ProductVariantResponse {
         this.compareAtPrice = variant.getCompareAtPrice();
         this.cost = variant.getCost();
         this.stock = variant.getStock();
+        this.dropship = variant.getDropship();
+        this.supplierAvailable = variant.getSupplierAvailable();
+        this.sellable = variant.isSellable();
         this.active = variant.getActive();
         this.repurchaseDays = variant.getRepurchaseDays();
         this.attributes = variant.getAttributeValues().stream()

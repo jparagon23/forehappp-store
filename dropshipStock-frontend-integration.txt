@@ -1,0 +1,107 @@
+================================================================================
+STOCK PROPIO vs DROPSHIPPING — integración frontend
+================================================================================
+
+Idea: cada variante tiene
+  - stock               unidades que la tienda tiene de verdad (puede ser 0)
+  - dropship            si es true, lo que falte lo despacha el proveedor
+  - supplierAvailable   si el proveedor lo tiene ahora (solo cuenta con dropship).
+                        En variantes con pareja de Profitness lo actualiza la
+                        sincronización diaria; en las demás lo maneja el seller.
+
+Se puede vender si: activa y (stock > 0  o  (dropship y supplierAvailable)).
+Al vender se usa primero el stock propio; el resto queda como "pedir al proveedor".
+El comprador NUNCA ve la diferencia: solo "Disponible" / "Agotado".
+
+
+================================================================================
+1. PÚBLICO: DETALLE DE PRODUCTO   GET /api/v1/products/public/{id}
+================================================================================
+Cada variante (ya NO trae stock, costo ni margen):
+  {
+    "id": 13, "sku": "...", "price": 11.99, "compareAtPrice": null,
+    "available": true,          ← se puede comprar ahora
+    "maxQuantity": null,        ← tope de unidades; null = sin tope; 0 si no disponible
+    "active": true,
+    "attributes": [...]
+  }
+
+Cambios en la página de producto:
+  - "Agotado" de una opción: available === false (antes stock === 0).
+  - Botón "+" : tope = maxQuantity (si es null, sin tope; usar un máximo de UI, ej. 99).
+  - Quitar el texto "N disponibles". Mostrar solo "Disponible" o "Sin stock".
+  - SEO availability: InStock si alguna variante tiene available.
+  - Compatibilidad durante el despliegue: available ?? (stock > 0),
+    maxQuantity === undefined ? stock : maxQuantity.
+
+
+================================================================================
+2. SELLER: VARIANTES
+================================================================================
+GET /api/v1/stores/{storeId}/products/{id} → cada variante ahora trae además:
+    "dropship": true, "supplierAvailable": true, "sellable": true
+
+Crear  POST  /api/v1/stores/{storeId}/products/{id}/variants
+  { ..., "stock": 0, "dropship": true, "supplierAvailable": true }
+  (ambos opcionales; por defecto dropship=false, supplierAvailable=true)
+
+Editar PATCH /api/v1/stores/{storeId}/products/{id}/variants/{variantId}
+  { "dropship": false }  o  { "supplierAvailable": false }   (null = sin cambio)
+
+UI sugerida — un control de 3 opciones por variante:
+  ( ) Solo stock propio              → dropship=false
+  ( ) Dropship – proveedor tiene     → dropship=true,  supplierAvailable=true
+  ( ) Dropship – proveedor agotado   → dropship=true,  supplierAvailable=false
+Si la variante tiene pareja CONFIRMADA de Profitness, la parte "tiene/agotado"
+se muestra bloqueada con la nota "La actualiza Profitness cada día".
+Con dropship ya no hace falta poner stock inventado: el campo stock es solo lo
+que hay en bodega. Publicar exige al menos una variante "sellable".
+
+Pedido asistido: usar "sellable" (no stock > 0) para habilitar "Agregar" y no
+limitar la cantidad por stock cuando dropship && supplierAvailable.
+
+
+================================================================================
+3. SELLER: PEDIDOS   GET /api/v1/stores/{storeId}/order-groups
+================================================================================
+Grupo:  "dropshipUnits": 2                ← total a pedir al proveedor (0 = todo de bodega)
+Ítem :  "dropshipQuantity": 2             ← por producto
+Mostrar en el grupo un aviso: "Pedir al proveedor: 2 uds." y por ítem
+"2 de 3 por pedir al proveedor". En respuestas al comprador viene null.
+
+
+================================================================================
+4. SINCRONIZACIÓN PROFITNESS (pantalla Proveedor)
+================================================================================
+La sync ya NO cambia el stock: solo marca supplierAvailable.
+  - Confirmar una pareja (o vincular a mano) vuelve la variante dropship con la
+    disponibilidad actual del proveedor. El seller puede pasarla luego a
+    "Solo stock propio".
+  - Quitar/rechazar la pareja deja la variante como está (la disponibilidad pasa
+    a manejarse a mano).
+  - GET .../links: variant trae "dropship" y "supplierAvailable".
+    "disabledBySync" ahora significa: dropship y el proveedor está agotado
+    (solo se vende el stock propio). Texto sugerido: "Agotado en Profitness".
+  - Eventos de una corrida:
+      DISABLED   → "Agotado en el proveedor"; newValue = stock propio que sigue vendiéndose
+      REENABLED  → "Disponible de nuevo en el proveedor"; newValue = stock propio
+      ORDER_AT_RISK → newValue = unidades por pedir a ese proveedor (antes: cantidad del ítem)
+      RELEASED   → ya no se genera (solo aparece en corridas viejas)
+
+
+================================================================================
+5. INVENTARIO Y REPORTES
+================================================================================
+  - Ajustes de inventario: igual que antes, solo mueven el stock propio.
+  - Stock bajo (reporte del seller y correo de alerta): solo variantes sin dropship.
+
+
+================================================================================
+CHECKLIST FRONT
+================================================================================
+  [ ] Página de producto: available / maxQuantity, sin "N disponibles"
+  [ ] Formularios de variante (crear y editar): control de 3 opciones
+  [ ] Listado de variantes del seller: etiqueta "Dropship" / "Agotado en proveedor"
+  [ ] Pedido asistido: sellable en vez de stock > 0
+  [ ] Pedidos del seller: "Pedir al proveedor: N"
+  [ ] Pantalla Proveedor: textos de eventos y estado (sección 4)

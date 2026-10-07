@@ -86,6 +86,8 @@ public class InventoryServiceImpl implements IInventoryService {
         movement.setReason(dto.getReason());
         movementDao.save(movement);
         movementDao.incrementStock(variantId, dto.getQuantity());
+        // The bulk update skips the loaded entity; keep it in step so the status check sees the new stock
+        variant.setStock(resultingStock);
 
         syncProductStockStatus(product);
     }
@@ -129,14 +131,7 @@ public class InventoryServiceImpl implements IInventoryService {
     }
 
     private void syncProductStockStatus(Product product) {
-        boolean allEmpty = product.getVariants().stream()
-                .allMatch(v -> v.getStock() == 0);
-
-        if (allEmpty && product.getStatus() == ProductStatus.ACTIVE) {
-            product.setStatus(ProductStatus.OUT_OF_STOCK);
-            productDao.save(product);
-        } else if (!allEmpty && product.getStatus() == ProductStatus.OUT_OF_STOCK) {
-            product.setStatus(ProductStatus.ACTIVE);
+        if (product.refreshStockStatus()) {
             productDao.save(product);
         }
     }

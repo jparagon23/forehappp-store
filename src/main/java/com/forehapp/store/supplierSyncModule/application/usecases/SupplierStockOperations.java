@@ -1,12 +1,8 @@
 package com.forehapp.store.supplierSyncModule.application.usecases;
 
-import com.forehapp.store.productModule.domain.model.InventoryMovement;
-import com.forehapp.store.productModule.domain.model.MovementReason;
 import com.forehapp.store.productModule.domain.model.Product;
-import com.forehapp.store.productModule.domain.model.ProductStatus;
 import com.forehapp.store.productModule.domain.model.ProductVariant;
 import com.forehapp.store.productModule.domain.model.VariantCostHistory;
-import com.forehapp.store.productModule.domain.ports.out.IInventoryMovementDao;
 import com.forehapp.store.productModule.domain.ports.out.IProductDao;
 import com.forehapp.store.productModule.domain.ports.out.IProductVariantDao;
 import com.forehapp.store.productModule.domain.ports.out.IVariantCostHistoryDao;
@@ -18,7 +14,7 @@ import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 
-/** Stock and cost changes made by the supplier sync. Callers provide the transaction. */
+/** Availability and cost changes made by the supplier sync. Callers provide the transaction. */
 @Component
 public class SupplierStockOperations {
 
@@ -27,44 +23,40 @@ public class SupplierStockOperations {
             "seller-products", "seller-product-detail", "wishlist");
 
     private final IProductVariantDao variantDao;
-    private final IInventoryMovementDao movementDao;
     private final IProductDao productDao;
     private final IVariantCostHistoryDao costHistoryDao;
     private final CacheManager cacheManager;
 
     public SupplierStockOperations(IProductVariantDao variantDao,
-                                   IInventoryMovementDao movementDao,
                                    IProductDao productDao,
                                    IVariantCostHistoryDao costHistoryDao,
                                    CacheManager cacheManager) {
         this.variantDao = variantDao;
-        this.movementDao = movementDao;
         this.productDao = productDao;
         this.costHistoryDao = costHistoryDao;
         this.cacheManager = cacheManager;
     }
 
-    /** Sets the variant stock to 0 and returns the stock it had (0 when there was nothing to remove). */
-    public int zeroStock(Long variantId) {
+    /** Records whether the supplier has the variant now. Returns true when it changed. */
+    public boolean setSupplierAvailable(Long variantId, boolean available) {
         ProductVariant variant = variantDao.findByIdForUpdate(variantId).orElse(null);
-        if (variant == null || variant.getStock() <= 0) return 0;
+        if (variant == null || Boolean.valueOf(available).equals(variant.getSupplierAvailable())) return false;
 
-        int previous = variant.getStock();
-        recordMovement(variant, -previous);
-        variant.setStock(0);
-        variantDao.save(variant);
-        return previous;
-    }
-
-    /** Restores stock on a variant still at 0; a variant someone already restocked is left as is. */
-    public boolean restoreStock(Long variantId, int quantity) {
-        ProductVariant variant = variantDao.findByIdForUpdate(variantId).orElse(null);
-        if (variant == null || variant.getStock() != 0 || quantity <= 0) return false;
-
-        recordMovement(variant, quantity);
-        variant.setStock(quantity);
+        variant.setSupplierAvailable(available);
         variantDao.save(variant);
         return true;
+    }
+
+    /** A confirmed pair means the supplier ships the variant: it becomes dropship with the supplier's availability. */
+    public void markSupplied(Long variantId, boolean available) {
+        ProductVariant variant = variantDao.findByIdForUpdate(variantId).orElse(null);
+        if (variant == null) return;
+
+        variant.setDropship(true);
+        variant.setSupplierAvailable(available);
+        variantDao.save(variant);
+        syncProductStatus(List.of(variant.getProduct().getId()));
+        evictCatalogCaches();
     }
 
     public void updateCost(Long variantId, BigDecimal cost, String note) {
@@ -81,18 +73,11 @@ public class SupplierStockOperations {
         costHistoryDao.save(history);
     }
 
-    /** Same rule as manual inventory adjustments: all variants at 0 → OUT_OF_STOCK, back to ACTIVE when one has stock. */
+    /** Same rule as everywhere else: nothing sellable → OUT_OF_STOCK, back to ACTIVE when something is. */
     public void syncProductStatus(Collection<Long> productIds) {
         for (Long productId : productIds) {
             Product product = productDao.findById(productId).orElse(null);
-            if (product == null) continue;
-
-            boolean allEmpty = product.getVariants().stream().allMatch(v -> v.getStock() == 0);
-            if (allEmpty && product.getStatus() == ProductStatus.ACTIVE) {
-                product.setStatus(ProductStatus.OUT_OF_STOCK);
-                productDao.save(product);
-            } else if (!allEmpty && product.getStatus() == ProductStatus.OUT_OF_STOCK) {
-                product.setStatus(ProductStatus.ACTIVE);
+            if (product != null && product.refreshStockStatus()) {
                 productDao.save(product);
             }
         }
@@ -105,11 +90,4 @@ public class SupplierStockOperations {
         }
     }
 
-    private void recordMovement(ProductVariant variant, int quantity) {
-        InventoryMovement movement = new InventoryMovement();
-        movement.setVariant(variant);
-        movement.setQuantity(quantity);
-        movement.setReason(MovementReason.SUPPLIER_SYNC);
-        movementDao.save(movement);
-    }
 }

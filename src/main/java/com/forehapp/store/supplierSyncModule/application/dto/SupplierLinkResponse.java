@@ -5,6 +5,7 @@ import java.math.BigDecimal;
 /**
  * One row of the seller pairing screen. linkId and status are null for variants without any pair yet.
  * marginPercent compares the variant price with the supplier price.
+ * disabledBySync: dropship variant the supplier is out of (only its own stock sells).
  */
 public record SupplierLinkResponse(
         Long linkId,
@@ -24,6 +25,8 @@ public record SupplierLinkResponse(
             String attributes,
             boolean active,
             int stock,
+            boolean dropship,
+            boolean supplierAvailable,
             BigDecimal price
     ) {}
 }

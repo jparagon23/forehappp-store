@@ -107,7 +107,7 @@ public class ReminderSelector {
         }
 
         Optional<PurchaseRow> buyable = orderRows.stream()
-                .filter(r -> Boolean.TRUE.equals(r.variantActive()) && r.variantStock() != null && r.variantStock() > 0)
+                .filter(r -> Boolean.TRUE.equals(r.variantActive()) && Boolean.TRUE.equals(r.variantInStock()))
                 .findFirst();
         if (buyable.isEmpty()) return Optional.empty();
 

@@ -96,7 +96,7 @@ public class OrderMapper {
         );
     }
 
-    // Buyer-facing: cost and margin stay null (the seller views build their own items with them)
+    // Buyer-facing: cost, margin and dropship units stay null (the seller views build their own items with them)
     private OrderItemDto toItemDto(OrderItem item) {
         BigDecimal subtotal = item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity()));
         List<VariantAttributeDto> attributes = item.getVariant().getAttributeValues().stream()
@@ -117,6 +117,7 @@ public class OrderMapper {
                 item.getQuantity(),
                 item.getUnitPrice(),
                 subtotal,
+                null,
                 null,
                 null,
                 null

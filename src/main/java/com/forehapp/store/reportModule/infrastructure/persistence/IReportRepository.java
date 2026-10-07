@@ -188,6 +188,7 @@ public interface IReportRepository extends JpaRepository<Order, Long> {
             FROM store_product_variants pv
             INNER JOIN store_products p ON pv.product_id = p.product_id
             WHERE p.store_id = :storeId
+              AND pv.dropship = FALSE
               AND pv.stock <= :threshold
             ORDER BY pv.stock ASC
             """, nativeQuery = true)
