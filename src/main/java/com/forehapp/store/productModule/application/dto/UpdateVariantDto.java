@@ -33,4 +33,10 @@ public class UpdateVariantDto {
     private Integer repurchaseDays;
 
     private boolean clearRepurchaseDays = false;
+
+    // null = unchanged
+    private Boolean dropship;
+
+    // null = unchanged; the supplier sync overwrites it for linked variants
+    private Boolean supplierAvailable;
 }

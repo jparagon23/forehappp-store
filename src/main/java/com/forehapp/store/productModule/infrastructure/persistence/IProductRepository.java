@@ -41,7 +41,7 @@ public interface IProductRepository extends JpaRepository<Product, Long>, JpaSpe
                       SELECT 1 FROM store_product_variants pv
                       WHERE pv.product_id = p.product_id
                         AND pv.active = TRUE
-                        AND pv.stock > 0
+                        AND (pv.stock > 0 OR (pv.dropship = TRUE AND pv.supplier_available = TRUE))
                   )
             ) ranked
             ORDER BY ranked.cat_rank, CRC32(CONCAT(ranked.category_id, :seed))
@@ -67,7 +67,7 @@ public interface IProductRepository extends JpaRepository<Product, Long>, JpaSpe
                       SELECT 1 FROM store_product_variants pv
                       WHERE pv.product_id = p.product_id
                         AND pv.active = TRUE
-                        AND pv.stock > 0
+                        AND (pv.stock > 0 OR (pv.dropship = TRUE AND pv.supplier_available = TRUE))
                   )
             ) ranked
             JOIN store_categories c ON c.category_id = ranked.category_id

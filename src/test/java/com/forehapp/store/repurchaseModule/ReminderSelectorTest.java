@@ -221,7 +221,7 @@ class ReminderSelectorTest {
 
         PurchaseRow build() {
             return new PurchaseRow(itemId, orderId, orderedAt, email, null, "Ana", quantity,
-                    variantId, variantDays, true, stock, new BigDecimal("25000"),
+                    variantId, variantDays, true, stock != null && stock > 0, new BigDecimal("25000"),
                     productId, "Tennis balls", productDays, status, deliveredAt, shippedAt);
         }
     }

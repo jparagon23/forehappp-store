@@ -35,6 +35,12 @@ public class CreateVariantDto {
     @Min(value = 0, message = "Stock cannot be negative")
     private Integer stock;
 
+    // Units beyond own stock are shipped by the supplier
+    private Boolean dropship = false;
+
+    // Supplier has it right now (dropship only); the supplier sync keeps it for linked variants
+    private Boolean supplierAvailable = true;
+
     @Min(value = 1, message = "Repurchase days must be at least 1")
     @Max(value = 365, message = "Repurchase days cannot exceed 365")
     private Integer repurchaseDays;

@@ -12,5 +12,7 @@ public record VariantRow(
         String sku,
         Boolean active,
         Integer stock,
+        Boolean dropship,
+        Boolean supplierAvailable,
         BigDecimal price
 ) {}

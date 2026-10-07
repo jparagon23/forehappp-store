@@ -236,7 +236,7 @@ public class OrderServiceImpl implements IOrderService {
     private void preValidateStock(List<CartItem> items) {
         for (CartItem item : items) {
             ProductVariant variant = item.getVariant();
-            if (variant.getStock() < item.getQuantity()) {
+            if (!variant.canFulfill(item.getQuantity())) {
                 throw new ConflictException(ErrorCode.ORDER_INSUFFICIENT_STOCK,
                         "Insufficient stock for: " + variant.getProduct().getTitle() + " (SKU: " + variant.getSku() + ")");
             }
@@ -281,7 +281,7 @@ public class OrderServiceImpl implements IOrderService {
             ProductVariant variant = productVariantDao.findByIdForUpdate(cartItem.getVariant().getId())
                     .orElseThrow(() -> new NotFoundException(ErrorCode.ORDER_VARIANT_NOT_FOUND, "Variant not found"));
 
-            if (variant.getStock() < cartItem.getQuantity()) {
+            if (!variant.canFulfill(cartItem.getQuantity())) {
                 throw new ConflictException(ErrorCode.ORDER_INSUFFICIENT_STOCK,
                         "Insufficient stock for: " + variant.getProduct().getTitle());
             }
@@ -296,13 +296,14 @@ public class OrderServiceImpl implements IOrderService {
 
             subtotal = subtotal.add(variant.getPrice().multiply(BigDecimal.valueOf(cartItem.getQuantity())));
 
-            int newStock = variant.getStock() - cartItem.getQuantity();
-            variant.setStock(newStock);
+            orderItem.setDropshipQuantity(variant.consume(cartItem.getQuantity()));
             productVariantDao.save(variant);
+            int newStock = variant.getStock();
 
             affectedProductIds.add(variant.getProduct().getId());
 
-            if (newStock <= lowStockThreshold) {
+            // Own stock running low only matters when the supplier does not cover it
+            if (!Boolean.TRUE.equals(variant.getDropship()) && newStock <= lowStockThreshold) {
                 membershipDao.findActiveByStoreId(store.getId()).stream()
                         .filter(m -> m.getRole() == StoreMemberRole.OWNER)
                         .findFirst()
@@ -319,12 +320,8 @@ public class OrderServiceImpl implements IOrderService {
         for (Long productId : affectedProductIds) {
             Product product = productDao.findById(productId)
                     .orElseThrow(() -> new NotFoundException(ErrorCode.ORDER_VARIANT_NOT_FOUND, "Product not found"));
-            if (product.getStatus() == ProductStatus.ACTIVE) {
-                boolean allOutOfStock = product.getVariants().stream().allMatch(v -> v.getStock() <= 0);
-                if (allOutOfStock) {
-                    product.setStatus(ProductStatus.OUT_OF_STOCK);
-                    productDao.save(product);
-                }
+            if (product.getStatus() == ProductStatus.ACTIVE && product.refreshStockStatus()) {
+                productDao.save(product);
             }
         }
 

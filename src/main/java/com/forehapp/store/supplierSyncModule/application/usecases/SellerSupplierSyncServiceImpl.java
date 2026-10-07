@@ -6,7 +6,6 @@ import com.forehapp.store.general.exceptions.ForbiddenException;
 import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.storeModule.domain.model.StoreMemberRole;
 import com.forehapp.store.storeModule.domain.ports.out.IStoreMembershipDao;
-import com.forehapp.store.supplierSyncModule.application.SupplierSyncSettings;
 import com.forehapp.store.supplierSyncModule.application.dto.SupplierItemResponse;
 import com.forehapp.store.supplierSyncModule.application.dto.SupplierLinkResponse;
 import com.forehapp.store.supplierSyncModule.application.dto.SyncConfigDto;
@@ -28,7 +27,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -45,16 +43,13 @@ public class SellerSupplierSyncServiceImpl implements ISellerSupplierSyncService
     private final ISupplierSyncDao dao;
     private final IStoreMembershipDao membershipDao;
     private final SupplierStockOperations stockOperations;
-    private final SupplierSyncSettings settings;
 
     public SellerSupplierSyncServiceImpl(ISupplierSyncDao dao,
                                          IStoreMembershipDao membershipDao,
-                                         SupplierStockOperations stockOperations,
-                                         SupplierSyncSettings settings) {
+                                         SupplierStockOperations stockOperations) {
         this.dao = dao;
         this.membershipDao = membershipDao;
         this.stockOperations = stockOperations;
-        this.settings = settings;
     }
 
     // ── Config ────────────────────────────────────────────────────
@@ -131,10 +126,7 @@ public class SellerSupplierSyncServiceImpl implements ISellerSupplierSyncService
         if (link.getStatus() != SupplierLinkStatus.SUGGESTED && link.getStatus() != SupplierLinkStatus.CONFIRMED) {
             throw new BadRequestException(ErrorCode.SUPPLIER_LINK_INVALID_STATUS, "Only suggested or confirmed pairs can be rejected");
         }
-        releaseStock(List.of(link));
         link.setStatus(SupplierLinkStatus.REJECTED);
-        link.setDisabledBySync(false);
-        link.setStockBeforeSync(null);
         dao.saveLink(link);
     }
 
@@ -209,8 +201,8 @@ public class SellerSupplierSyncServiceImpl implements ISellerSupplierSyncService
 
     /**
      * Makes (variant, item) the variant's only active pair. Rejected pairs are kept so they are not
-     * suggested again; a previous confirmed pair hands over its sync state, since the variant stock
-     * it set to 0 is still in place.
+     * suggested again. A new pair turns the variant into dropship with the supplier's current availability
+     * (the seller can switch dropship off afterwards; re-confirming the same pair leaves it as is).
      */
     private SupplierLink confirmPair(Long storeId, SupplierCode supplier, Long variantId, Long itemId,
                                      BigDecimal score, Long userId) {
@@ -220,14 +212,7 @@ public class SellerSupplierSyncServiceImpl implements ISellerSupplierSyncService
                 .findFirst()
                 .orElseGet(SupplierLink::new);
 
-        SupplierLink previousConfirmed = links.stream()
-                .filter(l -> l != target && l.getStatus() == SupplierLinkStatus.CONFIRMED)
-                .findFirst()
-                .orElse(null);
-        if (previousConfirmed != null && Boolean.TRUE.equals(previousConfirmed.getDisabledBySync())) {
-            target.setDisabledBySync(true);
-            target.setStockBeforeSync(previousConfirmed.getStockBeforeSync());
-        }
+        boolean newPair = target.getStatus() != SupplierLinkStatus.CONFIRMED;
 
         dao.deleteLinks(links.stream()
                 .filter(l -> l != target && l.getStatus() != SupplierLinkStatus.REJECTED)
@@ -241,35 +226,24 @@ public class SellerSupplierSyncServiceImpl implements ISellerSupplierSyncService
         if (target.getScore() == null) target.setScore(score);
         target.setConfirmedByUserId(userId);
         target.setConfirmedAt(LocalDateTime.now());
-        return dao.saveLink(target);
+        SupplierLink saved = dao.saveLink(target);
+
+        if (newPair) {
+            boolean available = dao.findItem(itemId).map(i -> !Boolean.TRUE.equals(i.getOutOfStock())).orElse(true);
+            stockOperations.markSupplied(variantId, available);
+        }
+        return saved;
     }
 
-    /** Deletes the variant's confirmed, suggested and not-supplied pairs, giving back stock the sync had removed. */
+    /**
+     * Deletes the variant's confirmed, suggested and not-supplied pairs. The variant keeps its dropship
+     * flag and last known availability, which the seller now manages by hand.
+     */
     private void removeActiveLinks(SupplierCode supplier, Long variantId) {
         List<SupplierLink> active = dao.findLinksForVariant(variantId, supplier).stream()
                 .filter(l -> l.getStatus() != SupplierLinkStatus.REJECTED)
                 .toList();
-        releaseStock(active);
         dao.deleteLinks(active);
-    }
-
-    private void releaseStock(Collection<SupplierLink> links) {
-        List<SupplierLink> held = links.stream()
-                .filter(l -> l.getStatus() == SupplierLinkStatus.CONFIRMED && Boolean.TRUE.equals(l.getDisabledBySync()))
-                .toList();
-        if (held.isEmpty()) return;
-
-        for (SupplierLink link : held) {
-            int restore = link.getStockBeforeSync() != null && link.getStockBeforeSync() > 0
-                    ? link.getStockBeforeSync()
-                    : settings.getDefaultRestock();
-            stockOperations.restoreStock(link.getVariantId(), restore);
-        }
-        Set<Long> productIds = dao.findVariantRows(held.stream().map(SupplierLink::getVariantId).toList()).stream()
-                .map(VariantRow::productId)
-                .collect(Collectors.toSet());
-        stockOperations.syncProductStatus(productIds);
-        stockOperations.evictCatalogCaches();
     }
 
     private List<SupplierLinkResponse> toResponses(List<SupplierLink> links) {
@@ -295,7 +269,8 @@ public class SellerSupplierSyncServiceImpl implements ISellerSupplierSyncService
         SupplierLinkResponse.Variant variant = new SupplierLinkResponse.Variant(
                 v.variantId(), v.productId(), v.productTitle(), v.brand(), v.sku(),
                 attributeLabel.isEmpty() ? null : attributeLabel,
-                Boolean.TRUE.equals(v.active()), v.stock() == null ? 0 : v.stock(), v.price());
+                Boolean.TRUE.equals(v.active()), v.stock() == null ? 0 : v.stock(),
+                Boolean.TRUE.equals(v.dropship()), !Boolean.FALSE.equals(v.supplierAvailable()), v.price());
 
         BigDecimal margin = null;
         if (item != null && item.getPrice() != null && v.price() != null && v.price().signum() > 0) {
@@ -308,7 +283,7 @@ public class SellerSupplierSyncServiceImpl implements ISellerSupplierSyncService
                 link == null ? null : link.getId(),
                 link == null ? null : link.getStatus().name(),
                 link == null ? null : link.getScore(),
-                link != null && Boolean.TRUE.equals(link.getDisabledBySync()),
+                Boolean.TRUE.equals(v.dropship()) && Boolean.FALSE.equals(v.supplierAvailable()),
                 variant,
                 item == null ? null : SupplierItemResponse.from(item),
                 margin);

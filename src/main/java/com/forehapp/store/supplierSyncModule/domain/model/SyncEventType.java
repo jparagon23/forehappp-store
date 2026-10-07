@@ -1,16 +1,16 @@
 package com.forehapp.store.supplierSyncModule.domain.model;
 
 public enum SyncEventType {
-    /** Supplier is out of stock: variant stock set to 0. */
+    /** Supplier ran out of a dropship variant: only its own stock can be sold now. newValue = own stock. */
     DISABLED,
-    /** Supplier has it again: stock restored on a variant the sync had disabled. */
+    /** Supplier has a dropship variant again: it can be sold without own stock. newValue = own stock. */
     REENABLED,
-    /** Seller restocked a sync-disabled variant by hand: the sync stops tracking it. */
+    /** No longer produced (from when the sync changed stock); kept to read old runs. */
     RELEASED,
     COST_UPDATED,
     /** Confirmed pair whose supplier product no longer appears in the catalog. */
     BROKEN_LINK,
     MARGIN_ALERT,
-    /** Open order containing a variant that was just disabled. */
+    /** Open order with units to order from a supplier that just ran out. newValue = those units. */
     ORDER_AT_RISK
 }

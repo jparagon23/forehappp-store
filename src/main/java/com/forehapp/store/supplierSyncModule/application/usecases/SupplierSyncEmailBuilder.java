@@ -69,17 +69,18 @@ public class SupplierSyncEmailBuilder {
         html.append(section(events, SyncEventType.MARGIN_ALERT, "Margen menor al mínimo",
                 "Precio venta / precio proveedor", "Margen", "#c62828"));
         html.append(section(events, SyncEventType.DISABLED,
-                preview ? "Se apagarían (agotados en el proveedor)" : "Apagados (agotados en el proveedor)",
-                "Stock anterior", "Stock", "#c62828"));
+                (preview ? "Se marcarían agotados en el proveedor" : "Agotados en el proveedor")
+                        + " (se sigue vendiendo solo el stock propio)",
+                null, "Stock propio", "#c62828"));
         html.append(section(events, SyncEventType.REENABLED,
-                preview ? "Se reactivarían" : "Reactivados", "Stock anterior", "Stock", "#2e7d32"));
-        html.append(section(events, SyncEventType.ORDER_AT_RISK, "Pedidos abiertos con productos agotados",
-                "Pedido", "Cantidad", "#e65100"));
+                preview ? "Volverían a estar disponibles en el proveedor" : "Disponibles de nuevo en el proveedor",
+                null, "Stock propio", "#2e7d32"));
+        html.append(section(events, SyncEventType.ORDER_AT_RISK, "Pedidos abiertos con unidades por pedir a un proveedor agotado",
+                "Pedido", "Unidades por pedir", "#e65100"));
         html.append(section(events, SyncEventType.BROKEN_LINK, "Parejas rotas (no aparecen en el catálogo del proveedor)",
                 null, null, "#e65100"));
         html.append(section(events, SyncEventType.COST_UPDATED,
                 preview ? "Costos que se actualizarían" : "Costos actualizados", "Costo anterior", "Costo nuevo", "#1565c0"));
-        html.append(section(events, SyncEventType.RELEASED, "Repuestos a mano por el seller", null, "Stock", "#555555"));
         html.append("<hr style=\"border:none;border-top:1px solid #eee;margin:24px 0;\">");
         return html.toString();
     }
@@ -91,7 +92,7 @@ public class SupplierSyncEmailBuilder {
             text = "Detenida por seguridad: no se aplicó ningún cambio. " + esc(run.getAbortReason());
             color = "#c62828";
         } else if (run.getStatus() == SyncRunStatus.PREVIEW) {
-            text = "Modo vista previa: esto es lo que haría la sincronización. No se cambió stock ni costos.";
+            text = "Modo vista previa: esto es lo que haría la sincronización. No se cambió disponibilidad ni costos.";
             color = "#e65100";
         } else {
             text = "Cambios aplicados.";

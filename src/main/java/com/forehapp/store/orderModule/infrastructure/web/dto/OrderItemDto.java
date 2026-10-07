@@ -17,5 +17,7 @@ public record OrderItemDto(
         BigDecimal subtotal,
         BigDecimal unitCost,
         BigDecimal totalCost,
-        BigDecimal unitMargin
+        BigDecimal unitMargin,
+        // Seller only: units to order from the supplier (null in buyer responses)
+        Integer dropshipQuantity
 ) {}

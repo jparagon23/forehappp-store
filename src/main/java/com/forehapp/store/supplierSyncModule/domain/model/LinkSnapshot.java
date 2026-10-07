@@ -11,10 +11,10 @@ public record LinkSnapshot(
         String variantLabel,
         Boolean variantActive,
         Integer variantStock,
+        Boolean variantDropship,
+        Boolean variantSupplierAvailable,
         BigDecimal variantPrice,
         BigDecimal variantCost,
         SupplierLinkStatus status,
-        Long supplierItemId,
-        Boolean disabledBySync,
-        Integer stockBeforeSync
+        Long supplierItemId
 ) {}

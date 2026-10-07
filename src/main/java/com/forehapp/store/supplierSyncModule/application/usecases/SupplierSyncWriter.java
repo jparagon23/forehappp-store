@@ -50,7 +50,7 @@ public class SupplierSyncWriter {
         this.dao = dao;
         this.stockOperations = stockOperations;
         this.planner = new SupplierSyncPlanner(settings.getMinMargin(), settings.getMaxDisableRatio(),
-                settings.getMinDisableGuard(), settings.getDefaultRestock());
+                settings.getMinDisableGuard());
     }
 
     /** Upserts every supplier product by normalized name and stamps it as seen in this run. */
@@ -200,32 +200,16 @@ public class SupplierSyncWriter {
 
         Set<Long> productIds = new HashSet<>();
         for (Action action : actions) {
-            SupplierLink link = dao.findLink(action.linkId()).orElse(null);
-            if (link == null) continue;
-
             switch (action.type()) {
-                case DISABLE -> {
-                    int previous = stockOperations.zeroStock(action.variantId());
-                    if (previous > 0) {
-                        link.setDisabledBySync(true);
-                        link.setStockBeforeSync(previous);
+                case MARK_UNAVAILABLE, MARK_AVAILABLE -> {
+                    boolean available = action.type() == ActionType.MARK_AVAILABLE;
+                    if (stockOperations.setSupplierAvailable(action.variantId(), available)) {
                         productIds.add(action.productId());
                     }
-                }
-                case REENABLE -> {
-                    stockOperations.restoreStock(action.variantId(), action.stock());
-                    link.setDisabledBySync(false);
-                    link.setStockBeforeSync(null);
-                    productIds.add(action.productId());
-                }
-                case RELEASE -> {
-                    link.setDisabledBySync(false);
-                    link.setStockBeforeSync(null);
                 }
                 case UPDATE_COST -> stockOperations.updateCost(action.variantId(), action.cost(),
                         "Supplier sync (" + supplier.name() + ")");
             }
-            dao.saveLink(link);
         }
         stockOperations.syncProductStatus(productIds);
         stockOperations.evictCatalogCaches();
@@ -233,7 +217,7 @@ public class SupplierSyncWriter {
 
     private List<OrderAtRisk> ordersAtRisk(List<Action> actions) {
         Set<Long> disabledVariants = actions.stream()
-                .filter(a -> a.type() == ActionType.DISABLE)
+                .filter(a -> a.type() == ActionType.MARK_UNAVAILABLE)
                 .map(Action::variantId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         return dao.findOpenOrdersWithVariants(disabledVariants);
@@ -249,7 +233,7 @@ public class SupplierSyncWriter {
                     link == null ? null : link.productTitle(),
                     link == null ? null : link.variantLabel(),
                     null, String.valueOf(o.orderId()), String.valueOf(o.quantity()),
-                    "Open order with a product now out of stock at the supplier", false);
+                    "Open order with units to order from a supplier that is now out of stock", false);
         }).toList();
     }
 

@@ -23,60 +23,47 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SupplierSyncPlannerTest {
 
-    // 5% minimum margin, guard at max(5, 25% of confirmed), restock 10 when the previous stock is unknown
-    private final SupplierSyncPlanner planner = new SupplierSyncPlanner(new BigDecimal("0.05"), 0.25, 5, 10);
+    // 5% minimum margin, guard at max(5, 25% of confirmed)
+    private final SupplierSyncPlanner planner = new SupplierSyncPlanner(new BigDecimal("0.05"), 0.25, 5);
 
     @Test
-    void disablesConfirmedVariantWhenSupplierIsOutOfStock() {
-        SyncPlan plan = plan(link(1L).stock(8).build(), item(100L).outOfStock().build());
+    void marksDropshipVariantUnavailableWhenSupplierIsOutOfStock() {
+        SyncPlan plan = plan(link(1L).stock(3).build(), item(100L).outOfStock().build());
 
-        assertEquals(List.of(ActionType.DISABLE), types(plan));
-        assertEquals(8, plan.actions().get(0).stock());
+        assertEquals(List.of(ActionType.MARK_UNAVAILABLE), types(plan));
         assertEquals(1, plan.count(SyncEventType.DISABLED));
+        // Own stock keeps selling and is reported, never changed
+        assertEquals("3", plan.events().get(0).newValue());
     }
 
     @Test
-    void leavesVariantAlreadyAtZeroAlone() {
-        SyncPlan plan = plan(link(1L).stock(0).build(), item(100L).outOfStock().build());
+    void marksAvailableAgainWhenSupplierRestocks() {
+        SyncPlan plan = plan(link(1L).unavailable().build(), item(100L).build());
 
-        assertTrue(types(plan).isEmpty());
+        assertEquals(List.of(ActionType.MARK_AVAILABLE), types(plan));
+        assertEquals(1, plan.count(SyncEventType.REENABLED));
     }
 
     @Test
-    void doesNotTouchStockOfVariantHiddenBySeller() {
-        SyncPlan plan = plan(link(1L).stock(8).inactive().build(), item(100L).outOfStock().build());
-
-        assertTrue(types(plan).isEmpty());
+    void doesNothingWhenAvailabilityAlreadyMatches() {
+        assertTrue(types(plan(link(1L).build(), item(100L).build())).isEmpty());
+        assertTrue(types(plan(link(1L).unavailable().build(), item(100L).outOfStock().build())).isEmpty());
     }
 
     @Test
-    void reenablesWithStockItHadBeforeTheSync() {
-        SyncPlan plan = plan(link(1L).stock(0).disabledBySync(6).build(), item(100L).build());
+    void keepsAvailabilityOfOwnStockOnlyVariantsWithoutReportingIt() {
+        SyncPlan plan = plan(link(1L).ownStockOnly().build(), item(100L).outOfStock().build());
 
-        assertEquals(List.of(ActionType.REENABLE), types(plan));
-        assertEquals(6, plan.actions().get(0).stock());
+        assertEquals(List.of(ActionType.MARK_UNAVAILABLE), types(plan));
+        assertEquals(0, plan.count(SyncEventType.DISABLED));
     }
 
     @Test
-    void reenablesWithDefaultStockWhenPreviousIsUnknown() {
-        SyncPlan plan = plan(link(1L).stock(0).disabledBySync(null).build(), item(100L).build());
+    void doesNotReportVariantHiddenBySeller() {
+        SyncPlan plan = plan(link(1L).inactive().build(), item(100L).outOfStock().build());
 
-        assertEquals(10, plan.actions().get(0).stock());
-    }
-
-    @Test
-    void releasesVariantTheSellerRestockedByHand() {
-        SyncPlan plan = plan(link(1L).stock(4).disabledBySync(6).build(), item(100L).build());
-
-        assertEquals(List.of(ActionType.RELEASE), types(plan));
-        assertEquals(1, plan.count(SyncEventType.RELEASED));
-    }
-
-    @Test
-    void neverReenablesVariantTheSyncDidNotDisable() {
-        SyncPlan plan = plan(link(1L).stock(0).build(), item(100L).build());
-
-        assertTrue(types(plan).isEmpty());
+        assertEquals(List.of(ActionType.MARK_UNAVAILABLE), types(plan));
+        assertEquals(0, plan.count(SyncEventType.DISABLED));
     }
 
     @Test
@@ -100,7 +87,7 @@ class SupplierSyncPlannerTest {
 
     @Test
     void suggestedPairsOnlyProduceMarginAlertsMarkedUnconfirmed() {
-        SyncPlan plan = plan(link(1L).suggested().stock(8).price("65000").build(),
+        SyncPlan plan = plan(link(1L).suggested().price("65000").build(),
                 item(100L).outOfStock().price("64000").build());
 
         assertTrue(types(plan).isEmpty());
@@ -110,7 +97,7 @@ class SupplierSyncPlannerTest {
 
     @Test
     void reportsBrokenLinkAndDoesNothingWhenItemWasNotInTheCatalog() {
-        SyncPlan plan = plan(link(1L).stock(8).build(), item(100L).outOfStock().notSeen().build());
+        SyncPlan plan = plan(link(1L).build(), item(100L).outOfStock().notSeen().build());
 
         assertTrue(types(plan).isEmpty());
         assertEquals(1, plan.count(SyncEventType.BROKEN_LINK));
@@ -132,6 +119,18 @@ class SupplierSyncPlannerTest {
         assertTrue(guarded.aborted());
         assertFalse(unguarded.aborted());
         assertEquals(6, unguarded.count(SyncEventType.DISABLED));
+    }
+
+    @Test
+    void guardIgnoresOwnStockOnlyVariants() {
+        List<LinkSnapshot> links = new ArrayList<>();
+        Map<Long, ItemSnapshot> items = new HashMap<>();
+        for (long i = 1; i <= 20; i++) {
+            links.add(link(i).item(100 + i).ownStockOnly().build());
+            items.put(100 + i, item(100 + i).outOfStock().build());
+        }
+
+        assertFalse(planner.plan(links, items, true).aborted());
     }
 
     @Test
@@ -176,11 +175,11 @@ class SupplierSyncPlannerTest {
         private Long itemId = 100L;
         private SupplierLinkStatus status = SupplierLinkStatus.CONFIRMED;
         private boolean active = true;
-        private int stock = 5;
+        private int stock = 0;
+        private boolean dropship = true;
+        private boolean supplierAvailable = true;
         private BigDecimal price = new BigDecimal("100000");
         private BigDecimal cost = new BigDecimal("50000");
-        private boolean disabledBySync;
-        private Integer stockBefore;
 
         private LinkBuilder(Long id) { this.id = id; }
 
@@ -190,11 +189,12 @@ class SupplierSyncPlannerTest {
         LinkBuilder stock(int value) { stock = value; return this; }
         LinkBuilder price(String value) { price = new BigDecimal(value); return this; }
         LinkBuilder cost(String value) { cost = new BigDecimal(value); return this; }
-        LinkBuilder disabledBySync(Integer before) { disabledBySync = true; stockBefore = before; return this; }
+        LinkBuilder ownStockOnly() { dropship = false; return this; }
+        LinkBuilder unavailable() { supplierAvailable = false; return this; }
 
         LinkSnapshot build() {
             return new LinkSnapshot(id, 1000 + id, 2000 + id, "Product " + id, "SKU-" + id, active, stock,
-                    price, cost, status, itemId, disabledBySync, stockBefore);
+                    dropship, supplierAvailable, price, cost, status, itemId);
         }
     }
 

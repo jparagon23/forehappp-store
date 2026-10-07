@@ -35,4 +35,8 @@ public class OrderItem {
 
     @Column(name = "unit_cost", precision = 14, scale = 2)
     private BigDecimal unitCost;
+
+    // Units not covered by own stock at checkout: the seller orders them from the supplier
+    @Column(name = "dropship_quantity", nullable = false)
+    private Integer dropshipQuantity = 0;
 }
