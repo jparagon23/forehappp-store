@@ -26,7 +26,7 @@ public class PublicProductDetailResponse {
     private final LocalDateTime createdAt;
     private final boolean freeShipping;
     private final List<String> tags;
-    private final List<ProductVariantResponse> variants;
+    private final List<PublicVariantResponse> variants;
     private final List<ProductImageResponse> images;
     private final SellerInfo store;
 
@@ -42,7 +42,7 @@ public class PublicProductDetailResponse {
         this.tags = product.getTags().stream().map(ProductTag::getTag).toList();
         this.variants = product.getVariants().stream()
                 .filter(v -> Boolean.TRUE.equals(v.getActive()))
-                .map(ProductVariantResponse::new)
+                .map(PublicVariantResponse::from)
                 .toList();
         this.images = images;
         this.store = store;
