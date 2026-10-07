@@ -9,12 +9,16 @@ import com.forehapp.store.orderModule.application.dto.PlaceOrderCommand;
 import com.forehapp.store.orderModule.domain.model.OrderChannel;
 import com.forehapp.store.orderModule.domain.ports.in.IAssistedOrderService;
 import com.forehapp.store.orderModule.domain.ports.in.IGuestCheckoutService;
+import com.forehapp.store.orderModule.infrastructure.web.dto.AssistedCouponValidateDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.AssistedCustomerResponse;
 import com.forehapp.store.orderModule.infrastructure.web.dto.AssistedOrderRequestDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.GuestOrderItemDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.OrderResponse;
 import com.forehapp.store.paymentModule.domain.model.PaymentMethod;
 import com.forehapp.store.productModule.domain.model.ProductVariant;
+import com.forehapp.store.promotionModule.application.dto.CouponValidationResponse;
+import com.forehapp.store.promotionModule.application.dto.ValidateCouponRequestDto;
+import com.forehapp.store.promotionModule.domain.ports.in.IPromotionService;
 import com.forehapp.store.productModule.domain.ports.out.IProductVariantDao;
 import com.forehapp.store.storeModule.domain.model.Store;
 import com.forehapp.store.storeModule.domain.model.StoreMemberRole;
@@ -45,19 +49,22 @@ public class AssistedOrderServiceImpl implements IAssistedOrderService {
     private final IProductVariantDao variantDao;
     private final UserRepository userRepository;
     private final IStoreProfileDao storeProfileDao;
+    private final IPromotionService promotionService;
 
     public AssistedOrderServiceImpl(IGuestCheckoutService checkoutService,
                                     IStoreMembershipDao membershipDao,
                                     IStoreDao storeDao,
                                     IProductVariantDao variantDao,
                                     UserRepository userRepository,
-                                    IStoreProfileDao storeProfileDao) {
+                                    IStoreProfileDao storeProfileDao,
+                                    IPromotionService promotionService) {
         this.checkoutService = checkoutService;
         this.membershipDao = membershipDao;
         this.storeDao = storeDao;
         this.variantDao = variantDao;
         this.userRepository = userRepository;
         this.storeProfileDao = storeProfileDao;
+        this.promotionService = promotionService;
     }
 
     @Override
@@ -103,13 +110,32 @@ public class AssistedOrderServiceImpl implements IAssistedOrderService {
         PlaceOrderCommand command = new PlaceOrderCommand(
                 dto.name().trim(), dto.lastname().trim(), dto.email(), dto.phone().trim(),
                 dto.shippingAddress(), dto.shippingCityId(), dto.shippingComplement(), dto.shippingReference(),
-                dto.items(), dto.paymentMethod(), null, null, null,
+                dto.items(), dto.paymentMethod(), normalizeCoupon(dto.couponCode()), storeId, null,
                 buyer, OrderChannel.ASSISTED, userId, LocalDateTime.now(), dto.alreadyPaid(), store.getName());
 
         OrderResponse response = checkoutService.place(command);
         log.info("[AssistedOrder] storeId={} userId={} placed order for {} customer (alreadyPaid={})",
                 storeId, userId, buyer != null ? "registered" : "guest", dto.alreadyPaid());
         return response;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CouponValidationResponse validateCoupon(Long storeId, AssistedCouponValidateDto dto, Long userId) {
+        requireStoreManager(storeId, userId);
+        ValidateCouponRequestDto request = new ValidateCouponRequestDto(
+                normalizeCoupon(dto.code()), storeId, dto.orderAmount(), dto.shippingCost());
+
+        // Same rules the order will be redeemed with: the account's when the email has one, else the guest's
+        Optional<User> account = findActiveUser(dto.email())
+                .filter(u -> storeProfileDao.findByUserId(u.getId()).isPresent());
+        return account.isPresent()
+                ? promotionService.validateCoupon(account.get().getId(), request)
+                : promotionService.validateCouponAsGuest(dto.email().trim().toLowerCase(Locale.ROOT), request);
+    }
+
+    private static String normalizeCoupon(String code) {
+        return code == null || code.isBlank() ? null : code.trim().toUpperCase(Locale.ROOT);
     }
 
     private Optional<User> findActiveUser(String email) {

@@ -14,6 +14,7 @@ import java.util.List;
  * Order a seller registers for a customer who ordered outside the app.
  * alreadyPaid: the customer already paid (CASH or TRANSFER only), so the order is born paid.
  * dataConsent: the seller confirms the customer authorized the use of their personal data.
+ * couponCode: optional; applied to this store's products and shipping (e.g. a free-shipping coupon).
  */
 public record AssistedOrderRequestDto(
         @NotBlank @Email(message = "Valid email is required") String email,
@@ -29,5 +30,6 @@ public record AssistedOrderRequestDto(
         @Valid List<GuestOrderItemDto> items,
         @NotNull(message = "Payment method is required") PaymentMethod paymentMethod,
         boolean alreadyPaid,
-        Boolean dataConsent
+        Boolean dataConsent,
+        String couponCode
 ) {}

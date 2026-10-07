@@ -119,7 +119,8 @@ Solo se pueden agregar variantes de la propia tienda (ver error 3.4).
     "items": [{ "variantId": 55, "quantity": 2 }],
     "paymentMethod": "TRANSFER",             CASH_ON_DELIVERY | TRANSFER | CASH | MERCADO_PAGO
     "alreadyPaid": false,                    true solo con CASH o TRANSFER
-    "dataConsent": true                      obligatorio (casilla, ver abajo)
+    "dataConsent": true,                     obligatorio (casilla, ver abajo)
+    "couponCode": "ENVIOGRATIS"              opcional (ver 3.5)
   }
 
 Response 201: OrderResponse (mismo formato del checkout)
@@ -155,6 +156,35 @@ UI obligatoria:
   409 ORDER_INSUFFICIENT_STOCK             sin stock suficiente
   400 ORDER_ADDRESS_STORE_MISMATCH         contraentrega fuera de Cali
   403 STORE_ACCESS_DENIED                  STAFF o no es miembro de la tienda
+
+
+------------------------------------------------------------------------
+3.5 CUPÓN (opcional)
+    POST /api/v1/stores/{storeId}/assisted-orders/coupon/validate
+------------------------------------------------------------------------
+Vista previa antes de crear el pedido:
+  { "email": "cliente@mail.com", "code": "enviogratis",
+    "orderAmount": 229990, "shippingCost": 12000 }
+      orderAmount  = itemsTotal del estimate (productos)
+      shippingCost = shippingTotal del estimate
+
+Response 200: CouponValidationResponse (el mismo de /coupons/validate)
+  { "code": "ENVIOGRATIS", "discountType": "FREE_SHIPPING", "discountValue": 0,
+    "discountAmount": 12000, "finalAmount": 229990, "isDonation": false, ... }
+
+  - FREE_SHIPPING: discountAmount = costo del envío.
+  - PERCENTAGE / FIXED_AMOUNT: descuento sobre los productos.
+  - DONATION: no descuenta (isDonation=true).
+
+Reglas: las mismas con las que se canjea al crear el pedido. Si el correo
+tiene cuenta, cuentan los usos de esa cuenta (y sirven cupones asignados a
+ella); si no, cuentan los usos de ese correo como invitado.
+
+Luego enviar el código en "couponCode" al crear el pedido. Se vuelve a
+validar en el back; si ya no aplica, el pedido no se crea.
+
+Errores: 404 COUPON_NOT_FOUND · 400 COUPON_INVALID (el mensaje dice la regla:
+ya usado, vencido, monto mínimo, otra tienda, límite de usos, asignado a otro).
 
 
 ================================================================================
@@ -205,5 +235,6 @@ RESUMEN DE TAREAS FRONT
   [ ] Pantalla "Nuevo pedido" (buscador de productos, cliente, dirección,
       envío, pago, "ya pagó", autorización de datos, confirmación del correo)
   [ ] Copiar link de MercadoPago tras crear el pedido
+  [ ] Cupón opcional con vista previa del descuento (3.5)
   [ ] Etiqueta "Asistido" en pedidos del seller
   [ ] Botón "Confirmar pago" en pedidos CASH/TRANSFER pendientes
