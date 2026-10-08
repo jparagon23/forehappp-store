@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
+import org.springframework.web.util.HtmlUtils;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
@@ -62,7 +63,7 @@ public class OrderShippedEmailListener {
     private String buildPreparingEmail(OrderStatusChangedEvent event) {
         return wrapLayout("🔧", "#e3f2fd", "#1565c0",
                 "Tu pedido está siendo preparado",
-                "Hola <strong>%s</strong>, el vendedor ya está alistando tu pedido.".formatted(event.getBuyerName()),
+                "Hola <strong>%s</strong>, el vendedor ya está alistando tu pedido.".formatted(esc(event.getBuyerName())),
                 """
                 <table width="100%%" cellpadding="0" cellspacing="0" style="background:#e8f5e9;border-left:4px solid #2e7d32;border-radius:4px;padding:16px 20px;margin-bottom:24px;">
                   <tr>
@@ -74,13 +75,13 @@ public class OrderShippedEmailListener {
                     <td style="padding-top:6px;font-size:13px;color:#222;">%s, %s</td>
                   </tr>
                 </table>
-                """.formatted(event.getOrderId(), event.getShippingCity(), event.getShippingCountry())
+                """.formatted(event.getOrderId(), esc(event.getShippingCity()), esc(event.getShippingCountry()))
                         + buildItemTable(event),
                 "Pronto recibirás un nuevo aviso cuando tu pedido sea despachado.");
     }
 
     private String buildShippedEmail(OrderStatusChangedEvent event) {
-        boolean hasTracking = event.getTrackingNumber() != null && !event.getTrackingNumber().isBlank();
+        boolean hasTracking = esc(event.getTrackingNumber()) != null && !esc(event.getTrackingNumber()).isBlank();
 
         String trackingRow = hasTracking
                 ? """
@@ -88,7 +89,7 @@ public class OrderShippedEmailListener {
                     <td style="font-size:13px;color:#555;width:130px;">Guía de envío</td>
                     <td style="font-size:16px;color:#1b5e20;font-weight:700;letter-spacing:1px;">%s</td>
                   </tr>
-                  """.formatted(event.getTrackingNumber())
+                  """.formatted(esc(event.getTrackingNumber()))
                 : "";
 
         String footer = hasTracking
@@ -107,11 +108,11 @@ public class OrderShippedEmailListener {
                     <td style="padding-top:6px;font-size:13px;color:#222;">%s, %s</td>
                   </tr>
                 </table>
-                """.formatted(trackingRow, event.getOrderId(), event.getShippingCity(), event.getShippingCountry());
+                """.formatted(trackingRow, event.getOrderId(), esc(event.getShippingCity()), esc(event.getShippingCountry()));
 
         return wrapLayout("📦", "#e3f2fd", "#1565c0",
                 "¡Tu pedido está en camino!",
-                "Hola <strong>%s</strong>, el vendedor ya despachó tu pedido.".formatted(event.getBuyerName()),
+                "Hola <strong>%s</strong>, el vendedor ya despachó tu pedido.".formatted(esc(event.getBuyerName())),
                 infoBox + buildItemTable(event),
                 footer);
     }
@@ -119,7 +120,7 @@ public class OrderShippedEmailListener {
     private String buildDeliveredEmail(OrderStatusChangedEvent event) {
         return wrapLayout("✅", "#e8f5e9", "#2e7d32",
                 "¡Tu pedido fue entregado!",
-                "Hola <strong>%s</strong>, el vendedor confirmó la entrega de tu pedido.".formatted(event.getBuyerName()),
+                "Hola <strong>%s</strong>, el vendedor confirmó la entrega de tu pedido.".formatted(esc(event.getBuyerName())),
                 """
                 <table width="100%%" cellpadding="0" cellspacing="0" style="background:#e8f5e9;border-left:4px solid #2e7d32;border-radius:4px;padding:16px 20px;margin-bottom:24px;">
                   <tr>
@@ -135,7 +136,7 @@ public class OrderShippedEmailListener {
     private String buildCancelledEmail(OrderStatusChangedEvent event) {
         return wrapLayout("❌", "#fce4ec", "#b71c1c",
                 "Tu pedido fue cancelado",
-                "Hola <strong>%s</strong>, lamentamos informarte que el vendedor canceló tu pedido.".formatted(event.getBuyerName()),
+                "Hola <strong>%s</strong>, lamentamos informarte que el vendedor canceló tu pedido.".formatted(esc(event.getBuyerName())),
                 """
                 <table width="100%%" cellpadding="0" cellspacing="0" style="background:#ffebee;border-left:4px solid #c62828;border-radius:4px;padding:16px 20px;margin-bottom:24px;">
                   <tr>
@@ -147,7 +148,7 @@ public class OrderShippedEmailListener {
                     <td style="padding-top:8px;font-size:14px;color:#c62828;font-weight:600;">%s</td>
                   </tr>
                 </table>
-                """.formatted(event.getOrderId(), event.getCancellationReason())
+                """.formatted(event.getOrderId(), esc(event.getCancellationReason()))
                         + buildItemTable(event),
                 "Si tienes dudas, por favor contáctanos a través de la plataforma.");
     }
@@ -163,7 +164,7 @@ public class OrderShippedEmailListener {
                       <td style="padding:6px 0;font-size:13px;color:#888;text-align:center;">%s</td>
                       <td style="padding:6px 0;font-size:13px;color:#222;text-align:center;">%d</td>
                     </tr>
-                    """.formatted(item.productTitle(), item.sku(), item.quantity()));
+                    """.formatted(esc(item.productTitle()), esc(item.sku()), item.quantity()));
         }
         return """
                 <p style="margin:0 0 10px;font-size:13px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Productos</p>
@@ -218,5 +219,10 @@ public class OrderShippedEmailListener {
                 </body>
                 </html>
                 """.formatted(iconBg, icon, titleColor, title, subtitle, body, footer);
+    }
+
+    /** Text typed by buyers or sellers goes into HTML: escape it so it cannot inject markup or links. */
+    private static String esc(Object value) {
+        return value == null ? "" : HtmlUtils.htmlEscape(String.valueOf(value));
     }
 }

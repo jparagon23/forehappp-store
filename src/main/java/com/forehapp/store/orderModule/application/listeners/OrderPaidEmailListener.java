@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
+import org.springframework.web.util.HtmlUtils;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
@@ -111,7 +112,7 @@ public class OrderPaidEmailListener {
                 </html>
                 """.formatted(
                 event.getOrderId(),
-                event.getBuyerName(),
+                esc(event.getBuyerName()),
                 event.getCreatedAt() != null ? event.getCreatedAt().format(DATE_FMT) : "-",
                 formatAmount(event.getTotal())
         );
@@ -119,5 +120,10 @@ public class OrderPaidEmailListener {
 
     private String formatAmount(BigDecimal amount) {
         return CURRENCY_FMT.format(amount);
+    }
+
+    /** Text typed by buyers or sellers goes into HTML: escape it so it cannot inject markup or links. */
+    private static String esc(Object value) {
+        return value == null ? "" : HtmlUtils.htmlEscape(String.valueOf(value));
     }
 }

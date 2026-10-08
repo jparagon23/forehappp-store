@@ -23,6 +23,10 @@ public class ConfirmationToken {
     private LocalDateTime expiresAt;
     private LocalDateTime confirmedAt;
 
+    // Wrong codes entered for this token; it stops working at the limit
+    @Column(nullable = false)
+    private Integer attempts = 0;
+
     @ManyToOne
     @JoinColumn(name = "user_id", nullable = false)
     private User user;

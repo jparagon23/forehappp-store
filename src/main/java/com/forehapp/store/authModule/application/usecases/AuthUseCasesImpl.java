@@ -29,6 +29,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.util.HtmlUtils;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -100,22 +101,20 @@ public class AuthUseCasesImpl implements RegisterUseCase, VerifyCodeUseCase, Res
     @Transactional
     @CacheEvict(value = "admin-user-stats", allEntries = true)
     public LoginResponseDto verifyCode(VerifyCodeRequestDto dto) {
-        ConfirmationToken token = confirmationTokenService.findByCode(dto.getCode())
+        User user = userRepository.findById(dto.getUserId())
                 .orElseThrow(() -> new BadRequestException(ErrorCode.AUTH_CODE_INVALID, "Código inválido"));
-
-        if (token.getConfirmedAt() != null) {
-            throw new BadRequestException(ErrorCode.AUTH_CODE_ALREADY_USED, "El código ya fue utilizado");
-        }
-        if (!token.getUser().getId().equals(dto.getUserId())) {
-            throw new BadRequestException(ErrorCode.AUTH_CODE_INVALID, "Código inválido");
-        }
-        if (token.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new BadRequestException(ErrorCode.AUTH_CODE_EXPIRED, "El código expiró. Solicitá uno nuevo");
+        if (user.getUserStatus() == Constants.ACTIVE_USER_STATUS) {
+            throw new BadRequestException(ErrorCode.AUTH_ACCOUNT_ALREADY_VERIFIED, "La cuenta ya está verificada");
         }
 
-        confirmationTokenService.markAsConfirmed(dto.getCode());
+        switch (confirmationTokenService.verify(user.getId(), dto.getCode())) {
+            case INVALID -> throw new BadRequestException(ErrorCode.AUTH_CODE_INVALID, "Código inválido");
+            case EXPIRED -> throw new BadRequestException(ErrorCode.AUTH_CODE_EXPIRED, "El código expiró. Solicitá uno nuevo");
+            case LOCKED -> throw new BadRequestException(ErrorCode.AUTH_CODE_TOO_MANY_ATTEMPTS,
+                    "Demasiados intentos. Solicitá un código nuevo");
+            case VALID -> { }
+        }
 
-        User user = token.getUser();
         user.setUserStatus(Constants.ACTIVE_USER_STATUS);
         userRepository.save(user);
         logger.info("User {} verified and activated", user.getId());
@@ -232,7 +231,7 @@ public class AuthUseCasesImpl implements RegisterUseCase, VerifyCodeUseCase, Res
 
     private String buildVerificationEmail(String name, String code) {
         return "<div style='font-family:sans-serif;max-width:480px;margin:auto'>"
-                + "<h2>Hola, " + name + "</h2>"
+                + "<h2>Hola, " + HtmlUtils.htmlEscape(name == null ? "" : name) + "</h2>"
                 + "<p>Tu código de verificación es:</p>"
                 + "<div style='font-size:36px;font-weight:bold;letter-spacing:8px;text-align:center;"
                 + "padding:16px;background:#f4f4f4;border-radius:8px'>" + code + "</div>"
