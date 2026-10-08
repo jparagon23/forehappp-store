@@ -4,7 +4,7 @@ import com.forehapp.store.authModule.domain.model.ConfirmationToken;
 import com.forehapp.store.authModule.domain.ports.out.ConfirmationTokenRepository;
 import org.springframework.stereotype.Repository;
 
-import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -22,12 +22,12 @@ public class ConfirmationTokenRepositoryAdapter implements ConfirmationTokenRepo
     }
 
     @Override
-    public Optional<ConfirmationToken> findByToken(String token) {
-        return jpaRepository.findByToken(token);
+    public Optional<ConfirmationToken> findLatestPending(Long userId) {
+        return jpaRepository.findFirstByUser_IdAndConfirmedAtIsNullOrderByIdDesc(userId);
     }
 
     @Override
-    public void setConfirmedAt(String token, LocalDateTime now) {
-        jpaRepository.setConfirmedAt(token, now);
+    public List<ConfirmationToken> findPending(Long userId) {
+        return jpaRepository.findByUser_IdAndConfirmedAtIsNull(userId);
     }
 }

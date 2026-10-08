@@ -86,8 +86,8 @@ public class OrderEmailListener {
                       <td style="padding:10px 8px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;">$%s</td>
                     </tr>
                     """.formatted(
-                    item.productTitle(),
-                    item.sku(),
+                    esc(item.productTitle()),
+                    esc(item.sku()),
                     item.quantity(),
                     formatAmount(item.unitPrice()),
                     formatAmount(item.subtotal())
@@ -196,11 +196,11 @@ public class OrderEmailListener {
                 </body>
                 </html>
                 """.formatted(
-                group.storeName(),
+                esc(group.storeName()),
                 event.getOrderId(),
                 event.getCreatedAt() != null ? event.getCreatedAt().format(DATE_FMT) : "-",
-                event.getBuyerName(),
-                event.getShippingAddress(), event.getShippingCity(), event.getShippingCountry(),
+                esc(event.getBuyerName()),
+                esc(event.getShippingAddress()), esc(event.getShippingCity()), esc(event.getShippingCountry()),
                 rows.toString(),
                 formatAmount(group.subtotal()),
                 formatAmount(group.shippingCost()),
@@ -219,8 +219,8 @@ public class OrderEmailListener {
                           <td style="padding:10px 8px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;">$%s</td>
                         </tr>
                         """.formatted(
-                        item.productTitle(),
-                        item.sku(),
+                        esc(item.productTitle()),
+                        esc(item.sku()),
                         item.quantity(),
                         formatAmount(item.subtotal())
                 ));
@@ -314,10 +314,10 @@ public class OrderEmailListener {
                 </body>
                 </html>
                 """.formatted(
-                event.getBuyerName(),
+                esc(event.getBuyerName()),
                 event.getOrderId(),
                 event.getCreatedAt() != null ? event.getCreatedAt().format(DATE_FMT) : "-",
-                event.getShippingAddress(), event.getShippingCity(),
+                esc(event.getShippingAddress()), esc(event.getShippingCity()),
                 groupRows.toString(),
                 formatAmount(event.getTotal()),
                 paymentInstructions
@@ -398,5 +398,10 @@ public class OrderEmailListener {
 
     private String formatAmount(BigDecimal amount) {
         return CURRENCY_FMT.format(amount);
+    }
+
+    /** Text typed by buyers or sellers goes into HTML: escape it so it cannot inject markup or links. */
+    private static String esc(Object value) {
+        return value == null ? "" : HtmlUtils.htmlEscape(String.valueOf(value));
     }
 }

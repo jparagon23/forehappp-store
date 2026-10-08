@@ -32,3 +32,7 @@ build/
 ### VS Code ###
 .vscode/
 src/main/resources/env.properties
+
+# Local maintenance scripts (may hold credentials)
+scripts/delete-order.ps1
+src/main/resources/delete-order.sql

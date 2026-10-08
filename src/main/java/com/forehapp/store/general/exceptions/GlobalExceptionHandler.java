@@ -154,7 +154,8 @@ public class GlobalExceptionHandler {
         stack = stack.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
 
         String method = request != null ? request.getMethod() : "N/A";
-        String uri    = request != null ? request.getRequestURI() : "N/A";
+        String uri    = request != null ? request.getRequestURI()
+                .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;") : "N/A";
 
         return """
                 <!DOCTYPE html>

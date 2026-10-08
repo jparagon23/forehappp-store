@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
+import org.springframework.web.util.HtmlUtils;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
@@ -42,8 +43,8 @@ public class InventoryAlertListener {
         String badgeColor  = event.isOutOfStock() ? "#e53935" : "#f57c00";
         String badgeText   = event.isOutOfStock() ? "SIN STOCK" : "STOCK BAJO";
         String headline    = event.isOutOfStock()
-                ? "Tu producto <strong>" + event.getProductTitle() + "</strong> se quedó sin stock."
-                : "Tu producto <strong>" + event.getProductTitle() + "</strong> tiene solo <strong>"
+                ? "Tu producto <strong>" + esc(event.getProductTitle()) + "</strong> se quedó sin stock."
+                : "Tu producto <strong>" + esc(event.getProductTitle()) + "</strong> tiene solo <strong>"
                   + event.getCurrentStock() + " unidad(es)</strong> disponible(s).";
         String advice      = event.isOutOfStock()
                 ? "El producto ya no aparecerá disponible para los compradores hasta que actualices el inventario."
@@ -105,14 +106,19 @@ public class InventoryAlertListener {
                 </body>
                 </html>
                 """.formatted(
-                event.getSellerName(),
+                esc(event.getSellerName()),
                 badgeColor, badgeColor, badgeText,
                 headline,
-                event.getProductTitle(),
-                event.getSku(),
+                esc(event.getProductTitle()),
+                esc(event.getSku()),
                 event.isOutOfStock() ? "#e53935" : "#f57c00",
                 event.getCurrentStock(),
                 advice
         );
+    }
+
+    /** Text typed by buyers or sellers goes into HTML: escape it so it cannot inject markup or links. */
+    private static String esc(Object value) {
+        return value == null ? "" : HtmlUtils.htmlEscape(String.valueOf(value));
     }
 }

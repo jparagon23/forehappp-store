@@ -1210,3 +1210,13 @@ CREATE TABLE IF NOT EXISTS store_web_page_views (
     INDEX idx_wpv_created (created_at),
     INDEX idx_wpv_session (session_id)
 );
+
+-- =====================
+-- Migration: verification codes count wrong attempts
+-- =====================
+
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_confirmation_token ADD COLUMN attempts INT NOT NULL DEFAULT 0',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_confirmation_token' AND COLUMN_NAME = 'attempts');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;

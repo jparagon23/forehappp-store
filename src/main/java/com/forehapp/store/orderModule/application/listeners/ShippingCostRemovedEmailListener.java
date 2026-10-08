@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
+import org.springframework.web.util.HtmlUtils;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
@@ -55,7 +56,7 @@ public class ShippingCostRemovedEmailListener {
                     <td style="padding-top:8px;font-size:13px;color:#222;">%s</td>
                   </tr>
                 </table>
-                """.formatted(event.getOrderId(), event.getWaivedAmount(), event.getNewOrderTotal(), event.getReason());
+                """.formatted(event.getOrderId(), event.getWaivedAmount(), event.getNewOrderTotal(), esc(event.getReason()));
 
         return """
                 <!DOCTYPE html>
@@ -92,6 +93,11 @@ public class ShippingCostRemovedEmailListener {
                 </table>
                 </body>
                 </html>
-                """.formatted(event.getBuyerName(), event.getStoreName(), body);
+                """.formatted(esc(event.getBuyerName()), esc(event.getStoreName()), body);
+    }
+
+    /** Text typed by buyers or sellers goes into HTML: escape it so it cannot inject markup or links. */
+    private static String esc(Object value) {
+        return value == null ? "" : HtmlUtils.htmlEscape(String.valueOf(value));
     }
 }
