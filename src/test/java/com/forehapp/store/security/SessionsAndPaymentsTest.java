@@ -94,6 +94,46 @@ class SessionsAndPaymentsTest {
     }
 
     @Test
+    void preRegisteredForehappUserKeepsTheSession() {
+        // Created by a ForehApp organizer, logged in to the store with Google
+        user.setUserStatus(Constants.PRE_REGISTER_STATUS);
+        var tokens = service.open(user);
+        assertTrue(service.refresh(tokens.refreshToken()).isPresent());
+    }
+
+    @Test
+    void accountDeletedInForehappEndsTheSession() {
+        var tokens = service.open(user);
+        user.setUserStatus(5); // ForehApp "delete account"
+        assertTrue(service.refresh(tokens.refreshToken()).isEmpty());
+    }
+
+    @Test
+    void passwordChangeEndsTheSession() {
+        user.setPassword("$2a$10$old");
+        var tokens = service.open(user);
+        var refreshed = service.refresh(tokens.refreshToken()).orElseThrow();
+
+        user.setPassword("$2a$10$new"); // e.g. password recovery in ForehApp
+        assertTrue(service.refresh(refreshed.refreshToken()).isEmpty());
+        assertFalse(service.isActive(sessionOf(refreshed.accessToken())));
+    }
+
+    @Test
+    void sessionWithoutFingerprintGetsOneInsteadOfEnding() {
+        user.setPassword("$2a$10$same");
+        var tokens = service.open(user);
+        AuthSession session = sessions.get(sessionOf(tokens.accessToken()));
+        session.setPasswordFingerprint(null); // opened before the column existed
+
+        var refreshed = service.refresh(tokens.refreshToken());
+        assertTrue(refreshed.isPresent());
+        assertNotNull(session.getPasswordFingerprint());
+        user.setPassword("$2a$10$changed");
+        assertTrue(service.refresh(refreshed.get().refreshToken()).isEmpty());
+    }
+
+    @Test
     void tokensWithoutSessionOrOfTheWrongTypeAreRejected() {
         var tokens = service.open(user);
         // An access token is not a refresh token

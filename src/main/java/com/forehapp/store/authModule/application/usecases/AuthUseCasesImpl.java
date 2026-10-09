@@ -163,6 +163,12 @@ public class AuthUseCasesImpl implements RegisterUseCase, VerifyCodeUseCase, Res
             userRepository.save(user);
             logger.info("User {} activated via Google login", user.getId());
         }
+        // Accounts deleted in ForehApp (or any status the store does not know) cannot log in.
+        // PRE_REGISTER stays as is: ForehApp still has to send that person through its sign-up form.
+        if (!Constants.canHoldStoreSession(user.getUserStatus())) {
+            logger.info("Google login rejected for user {} with status {}", user.getId(), user.getUserStatus());
+            throw new BadRequestException(ErrorCode.AUTH_ACCOUNT_DISABLED, "This account is disabled");
+        }
 
         StoreProfile profile = storeProfileDao.findByUserId(user.getId()).orElseGet(() -> {
             StoreProfile newProfile = new StoreProfile();

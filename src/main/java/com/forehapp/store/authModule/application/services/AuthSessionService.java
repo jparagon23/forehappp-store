@@ -15,15 +15,20 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.HexFormat;
 import java.util.Optional;
 import java.util.UUID;
 
 /**
  * Login sessions. Every login opens one; its tokens carry the session id. Refresh only works while
- * the session is open and the user is still active, and closing it (logout) also stops its access
- * token within {@link #ACTIVE_CACHE_TTL}.
+ * the session is open, the user may still use the store and the password has not changed (users are
+ * shared with ForehApp, which can deactivate accounts and reset passwords). Closing a session (logout)
+ * also stops its access token within {@link #ACTIVE_CACHE_TTL}.
  */
 @Service
 public class AuthSessionService {
@@ -55,6 +60,7 @@ public class AuthSessionService {
         session.setUserId(user.getId());
         session.setCreatedAt(now);
         session.setExpiresAt(now.plusSeconds(JwtUtil.refreshValiditySeconds()));
+        session.setPasswordFingerprint(passwordFingerprint(user));
         sessionRepository.save(session);
         return issue(user, session.getId());
     }
@@ -74,13 +80,20 @@ public class AuthSessionService {
 
         Long userId = Long.valueOf(claims.get("userId", String.class));
         User user = userRepository.findById(userId).orElse(null);
-        if (user == null || !session.getUserId().equals(userId)
-                || user.getUserStatus() == null || user.getUserStatus() != Constants.ACTIVE_USER_STATUS) {
+        if (user == null || !session.getUserId().equals(userId) || !Constants.canHoldStoreSession(user.getUserStatus())) {
             close(session, now);
             log.info("[Auth] Session {} closed on refresh: user {} is not active", sessionId, userId);
             return Optional.empty();
         }
 
+        String fingerprint = passwordFingerprint(user);
+        if (session.getPasswordFingerprint() != null && !session.getPasswordFingerprint().equals(fingerprint)) {
+            close(session, now);
+            log.info("[Auth] Session {} closed on refresh: user {} changed the password", sessionId, userId);
+            return Optional.empty();
+        }
+
+        session.setPasswordFingerprint(fingerprint); // fills sessions opened before it was recorded
         session.setLastRefreshedAt(now);
         session.setExpiresAt(now.plusSeconds(JwtUtil.refreshValiditySeconds()));
         sessionRepository.save(session);
@@ -109,6 +122,17 @@ public class AuthSessionService {
             sessionRepository.save(session);
         }
         activeCache.invalidate(session.getId());
+    }
+
+    /** SHA-256 of the stored (already hashed) password, so the session row never holds the hash itself. */
+    static String passwordFingerprint(User user) {
+        String hash = user.getPassword() == null ? "" : user.getPassword();
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(hash.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private Tokens issue(User user, String sessionId) {
