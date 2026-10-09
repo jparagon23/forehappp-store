@@ -2,6 +2,7 @@ package com.forehapp.store.security.config;
 
 import com.forehapp.store.security.filter.RateLimitFilter;
 import com.forehapp.store.security.jwt.JwtAuthenticationFilter;
+import com.forehapp.store.authModule.application.services.AuthSessionService;
 import com.forehapp.store.security.jwt.JwtAuthorizationFilter;
 import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,13 +37,16 @@ public class WebSecurityConfig {
     private final JwtAuthorizationFilter jwtAuthorizationFilter;
     private final RateLimitFilter rateLimitFilter;
     private final IStoreProfileDao storeProfileDao;
+    private final AuthSessionService authSessionService;
 
     public WebSecurityConfig(JwtAuthorizationFilter jwtAuthorizationFilter,
                              RateLimitFilter rateLimitFilter,
-                             IStoreProfileDao storeProfileDao) {
+                             IStoreProfileDao storeProfileDao,
+                             AuthSessionService authSessionService) {
         this.jwtAuthorizationFilter = jwtAuthorizationFilter;
         this.rateLimitFilter = rateLimitFilter;
         this.storeProfileDao = storeProfileDao;
+        this.authSessionService = authSessionService;
     }
 
     @Bean
@@ -86,7 +90,7 @@ public class WebSecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http, AuthenticationManager authenticationManager)
             throws Exception {
 
-        JwtAuthenticationFilter jwtAuthenticationFilter = new JwtAuthenticationFilter(storeProfileDao);
+        JwtAuthenticationFilter jwtAuthenticationFilter = new JwtAuthenticationFilter(storeProfileDao, authSessionService);
         jwtAuthenticationFilter.setAuthenticationManager(authenticationManager);
         jwtAuthenticationFilter.setFilterProcessesUrl("/api/v1/login");
 

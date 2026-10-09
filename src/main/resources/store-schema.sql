@@ -1220,3 +1220,16 @@ SET @s = (SELECT IF(COUNT(*) = 0,
   'SELECT 1')
   FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_confirmation_token' AND COLUMN_NAME = 'attempts');
 PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
+
+-- Login sessions: tokens carry the session id so a session can be closed (logout) and refresh
+-- stops working for closed sessions and inactive users
+CREATE TABLE IF NOT EXISTS store_auth_sessions (
+    session_id        VARCHAR(36) PRIMARY KEY,
+    user_id           BIGINT      NOT NULL,
+    created_at        DATETIME    NOT NULL,
+    last_refreshed_at DATETIME    NULL,
+    expires_at        DATETIME    NOT NULL,
+    revoked_at        DATETIME    NULL,
+    INDEX idx_auth_sessions_user (user_id),
+    CONSTRAINT store_fk_auth_session_user FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
