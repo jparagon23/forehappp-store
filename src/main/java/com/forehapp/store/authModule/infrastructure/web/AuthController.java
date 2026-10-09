@@ -5,12 +5,12 @@ import com.forehapp.store.authModule.application.dto.LoginResponseDto;
 import com.forehapp.store.authModule.application.dto.RegisterRequestDto;
 import com.forehapp.store.authModule.application.dto.RegisterResponseDto;
 import com.forehapp.store.authModule.application.dto.VerifyCodeRequestDto;
+import com.forehapp.store.authModule.application.services.AuthSessionService;
 import com.forehapp.store.authModule.domain.ports.in.GoogleLoginUseCase;
 import com.forehapp.store.authModule.domain.ports.in.GoogleRegisterUseCase;
 import com.forehapp.store.authModule.domain.ports.in.RegisterUseCase;
 import com.forehapp.store.authModule.domain.ports.in.ResendCodeUseCase;
 import com.forehapp.store.authModule.domain.ports.in.VerifyCodeUseCase;
-import com.forehapp.store.security.jwt.JwtUtil;
 import com.forehapp.store.userModule.domain.ports.out.UserRepository;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
@@ -33,19 +33,22 @@ public class AuthController {
     private final GoogleLoginUseCase googleLoginUseCase;
     private final GoogleRegisterUseCase googleRegisterUseCase;
     private final UserRepository userRepository;
+    private final AuthSessionService authSessionService;
 
     public AuthController(RegisterUseCase registerUseCase,
                           VerifyCodeUseCase verifyCodeUseCase,
                           ResendCodeUseCase resendCodeUseCase,
                           GoogleLoginUseCase googleLoginUseCase,
                           GoogleRegisterUseCase googleRegisterUseCase,
-                          UserRepository userRepository) {
+                          UserRepository userRepository,
+                          AuthSessionService authSessionService) {
         this.registerUseCase = registerUseCase;
         this.verifyCodeUseCase = verifyCodeUseCase;
         this.resendCodeUseCase = resendCodeUseCase;
         this.googleLoginUseCase = googleLoginUseCase;
         this.googleRegisterUseCase = googleRegisterUseCase;
         this.userRepository = userRepository;
+        this.authSessionService = authSessionService;
     }
 
     @PostMapping("/register")
@@ -70,11 +73,19 @@ public class AuthController {
         if (refreshToken == null) {
             return ResponseEntity.badRequest().build();
         }
-        Map<String, String> tokens = JwtUtil.refreshToken(refreshToken);
-        if (tokens == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-        return ResponseEntity.ok(tokens);
+        return authSessionService.refresh(refreshToken)
+                .map(tokens -> ResponseEntity.ok(Map.of(
+                        "access_token", tokens.accessToken(),
+                        "refresh_token", tokens.refreshToken())))
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
+    }
+
+    /** Closes the login the refresh token belongs to; its tokens stop working. */
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(@RequestBody Map<String, String> body) {
+        String refreshToken = body.get("refreshToken");
+        if (refreshToken != null) authSessionService.close(refreshToken);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/google/login")

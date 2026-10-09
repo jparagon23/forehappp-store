@@ -24,12 +24,18 @@ import com.forehapp.store.userModule.domain.model.StoreProfile;
 import com.forehapp.store.userModule.domain.model.StoreRole;
 import com.forehapp.store.userModule.domain.ports.out.IStoreProfileDao;
 
+import com.forehapp.store.mail.EmailSender;
+
 import java.math.BigDecimal;
+import java.util.Arrays;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.util.HtmlUtils;
 
 @Service
 public class PaymentModuleServiceImpl implements IPaymentModuleService {
@@ -42,19 +48,31 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
     private final IStoreProfileDao storeProfileDao;
     private final IStoreMembershipDao membershipDao;
     private final ApplicationEventPublisher eventPublisher;
+    private final EmailSender emailSender;
+    private final List<String> adminEmails;
+    private final String currency;
 
     public PaymentModuleServiceImpl(IPaymentRepository paymentRepository,
                                     IOrderDao orderDao,
                                     IOrderGroupDao orderGroupDao,
                                     IStoreProfileDao storeProfileDao,
                                     IStoreMembershipDao membershipDao,
-                                    ApplicationEventPublisher eventPublisher) {
+                                    ApplicationEventPublisher eventPublisher,
+                                    EmailSender emailSender,
+                                    @Value("${app.alert.admin-emails:}") String adminEmailsCsv,
+                                    @Value("${app.payment.currency}") String currency) {
         this.paymentRepository = paymentRepository;
         this.orderDao = orderDao;
         this.orderGroupDao = orderGroupDao;
         this.storeProfileDao = storeProfileDao;
         this.membershipDao = membershipDao;
         this.eventPublisher = eventPublisher;
+        this.emailSender = emailSender;
+        this.adminEmails = Arrays.stream(adminEmailsCsv.split(","))
+                .map(String::trim)
+                .filter(e -> !e.isEmpty())
+                .toList();
+        this.currency = currency;
     }
 
     @Override
@@ -104,10 +122,12 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
             case "approved" -> {
                 payment.setStatus(PaymentStatus.APPROVED.name());
                 payment.setReference(externalPaymentId);
+                if (mpPayment.getTransactionAmount() != null) payment.setAmount(mpPayment.getTransactionAmount());
                 paymentRepository.save(payment);
 
                 Order order = orderDao.findById(orderId).orElse(null);
                 if (order != null) {
+                    recordAmountDifference(order, mpPayment, externalPaymentId);
                     order.setStatus(OrderStatus.PAID);
                     orderDao.save(order);
                     log.info("[Webhook] Order {} marked as PAID", orderId);
@@ -191,6 +211,42 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────
+
+    /**
+     * The payment is approved, but it may not cover the order: an old link paid after the order changed,
+     * or a different currency. Any difference goes to balanceDue (positive = buyer owes, negative = store
+     * owes back), to be settled by hand like an edited paid order, and the admins get an email.
+     */
+    private void recordAmountDifference(Order order, Payment mpPayment, String externalPaymentId) {
+        BigDecimal expected = MercadoPagoService.chargeAmount(order);
+        boolean sameCurrency = currency.equalsIgnoreCase(String.valueOf(mpPayment.getCurrencyId()));
+        BigDecimal paid = sameCurrency && mpPayment.getTransactionAmount() != null
+                ? mpPayment.getTransactionAmount() : BigDecimal.ZERO;
+        BigDecimal difference = expected.subtract(paid);
+        if (difference.abs().compareTo(BigDecimal.ONE) < 0) return;
+
+        BigDecimal balance = (order.getBalanceDue() == null ? BigDecimal.ZERO : order.getBalanceDue()).add(difference);
+        order.setBalanceDue(balance.signum() == 0 ? null : balance);
+        log.warn("[Webhook] Amount mismatch on order {}: expected {} {}, paid {} {} (MP payment {}). balanceDue={}",
+                order.getId(), expected, currency, mpPayment.getTransactionAmount(), mpPayment.getCurrencyId(),
+                externalPaymentId, order.getBalanceDue());
+        alertAdmins("Pago con monto distinto - pedido #" + order.getId(),
+                "<p>Mercado Pago aprobó un pago que no coincide con el total del pedido <b>#" + order.getId() + "</b>.</p>"
+                + "<p>Total del pedido: " + expected + " " + currency + "<br>"
+                + "Pagado: " + mpPayment.getTransactionAmount() + " " + HtmlUtils.htmlEscape(String.valueOf(mpPayment.getCurrencyId())) + "<br>"
+                + "Pago de Mercado Pago: " + HtmlUtils.htmlEscape(externalPaymentId) + "</p>"
+                + "<p>El pedido quedó pagado con saldo pendiente de <b>" + order.getBalanceDue() + "</b>"
+                + " (positivo: lo debe el comprador; negativo: se le debe devolver). Revisalo antes de despachar.</p>");
+    }
+
+    private void alertAdmins(String subject, String html) {
+        for (String email : adminEmails) {
+            emailSender.sendEmail(email, subject, html).exceptionally(t -> {
+                log.warn("[Webhook] Failed to send alert to {}: {}", email, t.getMessage());
+                return null;
+            });
+        }
+    }
 
     private void transitionGroupsToPreparing(Long orderId) {
         java.time.LocalDateTime now = java.time.LocalDateTime.now();

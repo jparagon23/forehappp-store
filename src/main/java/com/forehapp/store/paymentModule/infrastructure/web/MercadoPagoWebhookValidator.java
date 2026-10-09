@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.HexFormat;
 
 @Component
@@ -19,9 +20,10 @@ public class MercadoPagoWebhookValidator {
     private String webhookSecret;
 
     public boolean isValid(String xSignature, String xRequestId, String dataId) {
+        // Without the secret nothing can be verified, so nothing is accepted
         if (webhookSecret == null || webhookSecret.isBlank()) {
-            log.warn("[Webhook] No webhook secret configured — skipping signature validation");
-            return true;
+            log.error("[Webhook] MERCADOPAGO_WEBHOOK_SECRET is not configured — rejecting notification");
+            return false;
         }
 
         if (xSignature == null || xSignature.isBlank()) {
@@ -58,7 +60,9 @@ public class MercadoPagoWebhookValidator {
 
         for (int i = 0; i < variants.length; i++) {
             String computed = hmacSHA256(variants[i], secret);
-            if (v1.equals(computed)) return true;
+            if (MessageDigest.isEqual(v1.getBytes(StandardCharsets.UTF_8), computed.getBytes(StandardCharsets.UTF_8))) {
+                return true;
+            }
             log.debug("[Webhook] variant[{}] no match. computed={}", i, computed);
         }
 

@@ -19,8 +19,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class MercadoPagoService {
@@ -64,9 +67,11 @@ public class MercadoPagoService {
 
     /**
      * New checkout link for an unpaid order whose items changed. The order keeps a single payment record:
-     * it is pointed at the new preference. The old link stays valid at Mercado Pago (it cannot be revoked here).
+     * it is pointed at the new preference, and the old link is expired so it cannot be paid at the old amount
+     * (if expiring fails, the webhook still records any difference in the amount paid).
      */
     public String refreshPreference(Order order, Payment pendingPayment) {
+        expirePreference(pendingPayment.getReference());
         Preference preference = newPreference(order);
         pendingPayment.setAmount(order.getTotal());
         pendingPayment.setReference(preference.getId());
@@ -74,34 +79,41 @@ public class MercadoPagoService {
         return preference.getInitPoint();
     }
 
-    private Preference newPreference(Order order) {
-        List<PreferenceItemRequest> items = order.getSellerGroups().stream()
+    /** What the checkout link charges: the order total in whole pesos (COP has no cents; rounded up). */
+    public static BigDecimal chargeAmount(Order order) {
+        return order.getTotal().setScale(0, RoundingMode.UP);
+    }
+
+    private static String itemsSummary(Order order) {
+        String summary = order.getSellerGroups().stream()
                 .flatMap(group -> group.getItems().stream())
-                .map(item -> PreferenceItemRequest.builder()
-                        .title(item.getVariant().getProduct().getTitle())
-                        .quantity(item.getQuantity())
-                        // COP has no cents — round up to avoid MP rejecting fractional values
-                        .unitPrice(item.getUnitPrice().setScale(0, RoundingMode.UP))
-                        .currencyId(currency)
-                        .build())
-                .toList();
+                .map(i -> i.getQuantity() + " x " + i.getVariant().getProduct().getTitle())
+                .collect(Collectors.joining(", "));
+        return summary.length() > 250 ? summary.substring(0, 247) + "..." : summary;
+    }
 
-        PreferenceRequest.PreferenceRequestBuilder builder = PreferenceRequest.builder()
-                .items(items)
-                .backUrls(PreferenceBackUrlsRequest.builder()
-                        .success(successUrl + "?order_id=" + order.getId())
-                        .failure(failureUrl + "?order_id=" + order.getId())
-                        .pending(pendingUrl + "?order_id=" + order.getId())
-                        .build())
-                .externalReference(order.getId().toString())
-                .autoReturn("approved");
-
-        if (notificationUrl != null && !notificationUrl.isBlank()) {
-            builder.notificationUrl(notificationUrl);
-        }
-
+    /** Best effort: a link that can no longer be paid. Failing here must not block the new link. */
+    private void expirePreference(String preferenceId) {
+        if (preferenceId == null || preferenceId.isBlank()) return;
+        OffsetDateTime now = OffsetDateTime.now();
         try {
-            return new PreferenceClient().create(builder.build());
+            new PreferenceClient().update(preferenceId, PreferenceRequest.builder()
+                    .expires(true)
+                    .expirationDateFrom(now.minusYears(1))
+                    .expirationDateTo(now)
+                    .build());
+            log.info("[MP] Expired old preference {}", preferenceId);
+        } catch (MPApiException e) {
+            log.warn("[MP] Could not expire preference {}. status={} response={}", preferenceId,
+                    e.getStatusCode(), e.getApiResponse() != null ? e.getApiResponse().getContent() : "null");
+        } catch (MPException e) {
+            log.warn("[MP] Could not expire preference {}: {}", preferenceId, e.getMessage());
+        }
+    }
+
+    private Preference newPreference(Order order) {
+        try {
+            return new PreferenceClient().create(preferenceRequest(order));
         } catch (MPApiException e) {
             log.error("[MP] API error creating preference. status={} response={}",
                     e.getStatusCode(), e.getApiResponse() != null ? e.getApiResponse().getContent() : "null");
@@ -113,5 +125,33 @@ public class MercadoPagoService {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                     "Error creating payment preference: " + e.getMessage());
         }
+    }
+
+    PreferenceRequest preferenceRequest(Order order) {
+        // One line for the whole order: its total already has shipping, the coupon discount and the
+        // Mercado Pago surcharge, which per-product lines cannot express (no negative prices).
+        PreferenceItemRequest item = PreferenceItemRequest.builder()
+                .id(order.getId().toString())
+                .title("Pedido #" + order.getId() + " - ForehApp Store")
+                .description(itemsSummary(order))
+                .quantity(1)
+                .unitPrice(chargeAmount(order))
+                .currencyId(currency)
+                .build();
+
+        PreferenceRequest.PreferenceRequestBuilder builder = PreferenceRequest.builder()
+                .items(List.of(item))
+                .backUrls(PreferenceBackUrlsRequest.builder()
+                        .success(successUrl + "?order_id=" + order.getId())
+                        .failure(failureUrl + "?order_id=" + order.getId())
+                        .pending(pendingUrl + "?order_id=" + order.getId())
+                        .build())
+                .externalReference(order.getId().toString())
+                .autoReturn("approved");
+
+        if (notificationUrl != null && !notificationUrl.isBlank()) {
+            builder.notificationUrl(notificationUrl);
+        }
+        return builder.build();
     }
 }

@@ -2,6 +2,7 @@ package com.forehapp.store.security.jwt;
 
 import tools.jackson.databind.ObjectMapper;
 import com.forehapp.store.authModule.application.dto.LoginRequestDto;
+import com.forehapp.store.authModule.application.services.AuthSessionService;
 import com.forehapp.store.security.config.UserDetailsImpl;
 import com.forehapp.store.userModule.domain.model.StoreProfile;
 import com.forehapp.store.userModule.domain.model.StoreRole;
@@ -29,9 +30,11 @@ public class JwtAuthenticationFilter extends UsernamePasswordAuthenticationFilte
     private static final Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
     private final IStoreProfileDao storeProfileDao;
+    private final AuthSessionService authSessionService;
 
-    public JwtAuthenticationFilter(IStoreProfileDao storeProfileDao) {
+    public JwtAuthenticationFilter(IStoreProfileDao storeProfileDao, AuthSessionService authSessionService) {
         this.storeProfileDao = storeProfileDao;
+        this.authSessionService = authSessionService;
     }
 
     @Override
@@ -68,8 +71,7 @@ public class JwtAuthenticationFilter extends UsernamePasswordAuthenticationFilte
             return saved;
         });
 
-        String accessToken = JwtUtil.createToken(userDetails.getUsername(), userDetails.getAuthorities());
-        String refreshToken = JwtUtil.createRefreshToken(userDetails.getUsername(), userDetails.getAuthorities());
+        AuthSessionService.Tokens tokens = authSessionService.open(userDetails.getUser());
 
         List<String> storeRoles = storeProfile.getRoles().stream()
                 .map(Enum::name)
@@ -77,8 +79,8 @@ public class JwtAuthenticationFilter extends UsernamePasswordAuthenticationFilte
 
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.getWriter().write(new ObjectMapper().writeValueAsString(Map.of(
-                "access_token", accessToken,
-                "refresh_token", refreshToken,
+                "access_token", tokens.accessToken(),
+                "refresh_token", tokens.refreshToken(),
                 "userId", userDetails.getUser().getId(),
                 "name", userDetails.getUser().getName(),
                 "email", userDetails.getUser().getEmail(),

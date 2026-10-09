@@ -1,5 +1,6 @@
 package com.forehapp.store.security.jwt;
 
+import com.forehapp.store.authModule.application.services.AuthSessionService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -18,6 +19,12 @@ public class JwtAuthorizationFilter extends OncePerRequestFilter {
 
     private static final Logger logger = LoggerFactory.getLogger(JwtAuthorizationFilter.class);
 
+    private final AuthSessionService authSessionService;
+
+    public JwtAuthorizationFilter(AuthSessionService authSessionService) {
+        this.authSessionService = authSessionService;
+    }
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
@@ -27,7 +34,9 @@ public class JwtAuthorizationFilter extends OncePerRequestFilter {
             String token = bearer.replace("Bearer ", "");
             try {
                 UsernamePasswordAuthenticationToken auth = JwtUtil.getAuthentication(token);
-                if (auth == null) {
+                // Tokens issued before sessions existed carry no session id and run until they expire
+                if (auth == null
+                        || (auth.getDetails() instanceof String sessionId && !authSessionService.isActive(sessionId))) {
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                     return;
                 }

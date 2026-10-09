@@ -1,6 +1,7 @@
 package com.forehapp.store.authModule.application.usecases;
 
 import com.forehapp.store.authModule.application.dto.*;
+import com.forehapp.store.authModule.application.services.AuthSessionService;
 import com.forehapp.store.authModule.application.services.ConfirmationTokenService;
 import com.forehapp.store.authModule.application.services.GoogleAuthService;
 import com.forehapp.store.authModule.domain.model.ConfirmationToken;
@@ -14,8 +15,6 @@ import com.forehapp.store.general.exceptions.BadRequestException;
 import com.forehapp.store.general.exceptions.ErrorCode;
 import com.forehapp.store.mail.EmailSender;
 import com.forehapp.store.orderModule.domain.ports.in.IGuestOrderLinkService;
-import com.forehapp.store.security.config.UserDetailsImpl;
-import com.forehapp.store.security.jwt.JwtUtil;
 import com.forehapp.store.userModule.domain.model.Role;
 import com.forehapp.store.userModule.domain.model.StoreProfile;
 import com.forehapp.store.userModule.domain.model.StoreRole;
@@ -49,6 +48,7 @@ public class AuthUseCasesImpl implements RegisterUseCase, VerifyCodeUseCase, Res
     private final IStoreProfileDao storeProfileDao;
     private final GoogleAuthService googleAuthService;
     private final IGuestOrderLinkService guestOrderLinkService;
+    private final AuthSessionService authSessionService;
 
     public AuthUseCasesImpl(UserRepository userRepository,
                             RoleRepository roleRepository,
@@ -57,7 +57,8 @@ public class AuthUseCasesImpl implements RegisterUseCase, VerifyCodeUseCase, Res
                             EmailSender emailSender,
                             IStoreProfileDao storeProfileDao,
                             GoogleAuthService googleAuthService,
-                            IGuestOrderLinkService guestOrderLinkService) {
+                            IGuestOrderLinkService guestOrderLinkService,
+                            AuthSessionService authSessionService) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
@@ -66,6 +67,7 @@ public class AuthUseCasesImpl implements RegisterUseCase, VerifyCodeUseCase, Res
         this.storeProfileDao = storeProfileDao;
         this.googleAuthService = googleAuthService;
         this.guestOrderLinkService = guestOrderLinkService;
+        this.authSessionService = authSessionService;
     }
 
     @Override
@@ -126,11 +128,9 @@ public class AuthUseCasesImpl implements RegisterUseCase, VerifyCodeUseCase, Res
         logger.info("StoreProfile created for user {} with CUSTOMER role", user.getId());
         guestOrderLinkService.linkGuestOrders(profile);
 
-        UserDetailsImpl userDetails = new UserDetailsImpl(user);
-        String accessToken = JwtUtil.createToken(String.valueOf(user.getId()), userDetails.getAuthorities());
-        String refreshToken = JwtUtil.createRefreshToken(String.valueOf(user.getId()), userDetails.getAuthorities());
+        AuthSessionService.Tokens tokens = authSessionService.open(user);
 
-        return new LoginResponseDto(accessToken, refreshToken, user.getId(), user.getName(), user.getEmail(), profile.getRoles());
+        return new LoginResponseDto(tokens.accessToken(), tokens.refreshToken(), user.getId(), user.getName(), user.getEmail(), profile.getRoles());
     }
 
     @Override
@@ -175,10 +175,8 @@ public class AuthUseCasesImpl implements RegisterUseCase, VerifyCodeUseCase, Res
 
         logger.info("Google login for user {}", user.getId());
         guestOrderLinkService.linkGuestOrders(profile);
-        UserDetailsImpl userDetails = new UserDetailsImpl(user);
-        String accessToken = JwtUtil.createToken(String.valueOf(user.getId()), userDetails.getAuthorities());
-        String refreshToken = JwtUtil.createRefreshToken(String.valueOf(user.getId()), userDetails.getAuthorities());
-        return new LoginResponseDto(accessToken, refreshToken, user.getId(), user.getName(), user.getEmail(), profile.getRoles());
+        AuthSessionService.Tokens tokens = authSessionService.open(user);
+        return new LoginResponseDto(tokens.accessToken(), tokens.refreshToken(), user.getId(), user.getName(), user.getEmail(), profile.getRoles());
     }
 
     @Override
@@ -217,10 +215,8 @@ public class AuthUseCasesImpl implements RegisterUseCase, VerifyCodeUseCase, Res
         storeProfileDao.save(profile);
         guestOrderLinkService.linkGuestOrders(profile);
 
-        UserDetailsImpl userDetails = new UserDetailsImpl(saved);
-        String accessToken = JwtUtil.createToken(String.valueOf(saved.getId()), userDetails.getAuthorities());
-        String refreshToken = JwtUtil.createRefreshToken(String.valueOf(saved.getId()), userDetails.getAuthorities());
-        return new LoginResponseDto(accessToken, refreshToken, saved.getId(), saved.getName(), saved.getEmail(), profile.getRoles());
+        AuthSessionService.Tokens tokens = authSessionService.open(saved);
+        return new LoginResponseDto(tokens.accessToken(), tokens.refreshToken(), saved.getId(), saved.getName(), saved.getEmail(), profile.getRoles());
     }
 
     private void sendVerificationCode(User user) {

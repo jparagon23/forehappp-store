@@ -30,7 +30,7 @@ public class JwtUtil {
     @Value("${store.jwt.secret}")
     private String jwtSecret;
 
-    @Value("${access.token.validity.seconds:86400}")
+    @Value("${access.token.validity.seconds:1800}")
     private Long accessTokenValiditySeconds;
 
     @Value("${refresh.token.validity.seconds:604800}")
@@ -47,87 +47,77 @@ public class JwtUtil {
         staticRefreshValidity = refreshTokenValiditySeconds;
     }
 
-    public static String createToken(String userId, java.util.Collection<? extends GrantedAuthority> authorities) {
+    /** Session id claim: lets a login be closed before its tokens expire. */
+    public static final String SESSION_CLAIM = "sid";
+
+    public static String createToken(String userId, java.util.Collection<? extends GrantedAuthority> authorities,
+                                     String sessionId) {
+        return build(userId, authorities, sessionId, "access", staticAccessValidity);
+    }
+
+    public static String createRefreshToken(String userId, java.util.Collection<? extends GrantedAuthority> authorities,
+                                            String sessionId) {
+        return build(userId, authorities, sessionId, "refresh", staticRefreshValidity);
+    }
+
+    public static long refreshValiditySeconds() {
+        return staticRefreshValidity;
+    }
+
+    private static String build(String userId, java.util.Collection<? extends GrantedAuthority> authorities,
+                                String sessionId, String type, long validitySeconds) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
         claims.put("roles", authorities.stream()
                 .map(GrantedAuthority::getAuthority)
                 .collect(Collectors.joining(",")));
-        claims.put("type", "access");
+        claims.put("type", type);
+        claims.put(SESSION_CLAIM, sessionId);
         return Jwts.builder()
                 .setClaims(claims)
                 .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + staticAccessValidity * 1_000))
+                .setExpiration(new Date(System.currentTimeMillis() + validitySeconds * 1_000))
                 .signWith(Keys.hmacShaKeyFor(secretBytes), SignatureAlgorithm.HS256)
                 .compact();
     }
 
-    public static String createRefreshToken(String userId, java.util.Collection<? extends GrantedAuthority> authorities) {
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("userId", userId);
-        claims.put("roles", authorities.stream()
-                .map(GrantedAuthority::getAuthority)
-                .collect(Collectors.joining(",")));
-        claims.put("type", "refresh");
-        return Jwts.builder()
-                .setClaims(claims)
-                .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + staticRefreshValidity * 1_000))
-                .signWith(Keys.hmacShaKeyFor(secretBytes), SignatureAlgorithm.HS256)
-                .compact();
-    }
-
+    /**
+     * Valid access token → authentication whose details hold the session id (null for tokens issued
+     * before sessions existed). Whether the session is still open is checked by the caller.
+     */
     public static UsernamePasswordAuthenticationToken getAuthentication(String token) {
+        Claims claims = parse(token, "access");
+        if (claims == null) return null;
+
+        String rolesStr = claims.get("roles", String.class);
+        List<SimpleGrantedAuthority> auths = rolesStr != null
+                ? Arrays.stream(rolesStr.split(","))
+                        .filter(s -> !s.isBlank())
+                        .map(SimpleGrantedAuthority::new)
+                        .collect(Collectors.toList())
+                : Collections.emptyList();
+
+        UsernamePasswordAuthenticationToken auth =
+                new UsernamePasswordAuthenticationToken(claims.get("userId", String.class), null, auths);
+        auth.setDetails(claims.get(SESSION_CLAIM, String.class));
+        return auth;
+    }
+
+    /** Claims of a valid refresh token, or null. */
+    public static Claims parseRefreshToken(String token) {
+        return parse(token, "refresh");
+    }
+
+    private static Claims parse(String token, String type) {
         try {
             Claims claims = Jwts.parserBuilder()
                     .setSigningKey(secretBytes)
                     .build()
                     .parseClaimsJws(token)
                     .getBody();
-
-            if (!"access".equals(claims.get("type", String.class))) return null;
-
-            String userId = claims.get("userId", String.class);
-            String rolesStr = claims.get("roles", String.class);
-            List<SimpleGrantedAuthority> auths = rolesStr != null
-                    ? Arrays.stream(rolesStr.split(","))
-                            .filter(s -> !s.isBlank())
-                            .map(SimpleGrantedAuthority::new)
-                            .collect(Collectors.toList())
-                    : Collections.emptyList();
-
-            return new UsernamePasswordAuthenticationToken(userId, null, auths);
-        } catch (JwtException e) {
-            logger.warn("Invalid JWT token: {}", e.getMessage());
-            return null;
-        }
-    }
-
-    public static Map<String, String> refreshToken(String refreshToken) {
-        try {
-            Claims claims = Jwts.parserBuilder()
-                    .setSigningKey(secretBytes)
-                    .build()
-                    .parseClaimsJws(refreshToken)
-                    .getBody();
-
-            if (!"refresh".equals(claims.get("type", String.class))) return null;
-
-            String userId = claims.get("userId", String.class);
-            String rolesStr = claims.get("roles", String.class);
-            List<SimpleGrantedAuthority> auths = rolesStr != null
-                    ? Arrays.stream(rolesStr.split(","))
-                            .filter(s -> !s.isBlank())
-                            .map(SimpleGrantedAuthority::new)
-                            .collect(Collectors.toList())
-                    : Collections.emptyList();
-
-            Map<String, String> tokens = new HashMap<>();
-            tokens.put("access_token", createToken(userId, auths));
-            tokens.put("refresh_token", createRefreshToken(userId, auths));
-            return tokens;
-        } catch (JwtException e) {
-            logger.warn("Invalid refresh token: {}", e.getMessage());
+            return type.equals(claims.get("type", String.class)) ? claims : null;
+        } catch (JwtException | IllegalArgumentException e) {
+            logger.warn("Invalid {} token: {}", type, e.getMessage());
             return null;
         }
     }
