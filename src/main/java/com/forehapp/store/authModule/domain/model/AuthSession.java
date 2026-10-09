@@ -31,6 +31,13 @@ public class AuthSession {
 
     private LocalDateTime revokedAt;
 
+    /**
+     * Hash of the user's password hash when the session opened. The password can also change in ForehApp
+     * (same users table); a different value means it changed, and the session ends. Null = not recorded yet.
+     */
+    @Column(length = 64)
+    private String passwordFingerprint;
+
     public boolean isActive(LocalDateTime now) {
         return revokedAt == null && expiresAt.isAfter(now);
     }

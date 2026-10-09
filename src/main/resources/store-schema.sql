@@ -1233,3 +1233,10 @@ CREATE TABLE IF NOT EXISTS store_auth_sessions (
     INDEX idx_auth_sessions_user (user_id),
     CONSTRAINT store_fk_auth_session_user FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
+
+-- Session ends when the password changes (it can also change in ForehApp, same users table)
+SET @s = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE store_auth_sessions ADD COLUMN password_fingerprint VARCHAR(64) NULL',
+  'SELECT 1')
+  FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_auth_sessions' AND COLUMN_NAME = 'password_fingerprint');
+PREPARE _stmt FROM @s; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
