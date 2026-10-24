@@ -2,6 +2,7 @@ package com.forehapp.store.userModule.domain.ports.out;
 
 import com.forehapp.store.userModule.domain.model.User;
 import com.forehapp.store.userModule.domain.model.UserRegistrationSummary;
+import com.forehapp.store.userModule.domain.model.UserSearchResult;
 import com.forehapp.store.userModule.domain.model.RegistrationTrendPoint;
 
 import java.time.LocalDateTime;
@@ -19,4 +20,7 @@ public interface UserRepository {
     long countActive();
     List<UserRegistrationSummary> findRecentRegistrations(int limit);
     List<RegistrationTrendPoint> findRegistrationTrend(LocalDateTime from);
+
+    /** Users whose name, lastname, email or store phone contain every term (case-insensitive). */
+    List<UserSearchResult> search(List<String> terms, int limit);
 }
