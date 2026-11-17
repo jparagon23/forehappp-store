@@ -112,6 +112,24 @@ class SessionsAndPaymentsTest {
     }
 
     @Test
+    void webhookSignedWithHexLookingSecretIsAccepted() throws Exception {
+        // Mercado Pago secrets are 64 hex chars, and they sign with that text as the key (not hex-decoded)
+        String secret = "a3f1c2d4e5b6978877665544332211ffeeddccbbaa99887766554433221100aa";
+        MercadoPagoWebhookValidator validator = new MercadoPagoWebhookValidator();
+        ReflectionTestUtils.setField(validator, "webhookSecret", secret);
+
+        String manifest = "id:189096407147;request-id:req-1;ts:1763407543;";
+        javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+        mac.init(new javax.crypto.spec.SecretKeySpec(
+                secret.getBytes(java.nio.charset.StandardCharsets.UTF_8), "HmacSHA256"));
+        String v1 = java.util.HexFormat.of().formatHex(
+                mac.doFinal(manifest.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+
+        assertTrue(validator.isValid("ts=1763407543,v1=" + v1, "req-1", "189096407147"));
+        assertFalse(validator.isValid("ts=1763407543,v1=" + v1, "req-1", "999"));
+    }
+
+    @Test
     void checkoutLinkChargesTheOrderTotal() {
         Order order = new Order();
         // products + shipping - coupon + 3.5% surcharge, with cents
