@@ -70,22 +70,15 @@ public class MercadoPagoWebhookValidator {
         return false;
     }
 
+    /**
+     * Mercado Pago signs with the secret as plain text. The secret looks like hex (64 chars), but decoding it
+     * as hex gives a different key, so no signature ever matches.
+     */
     private String hmacSHA256(String data, String secret) {
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
-            byte[] keyBytes = HexFormat.of().parseHex(secret);
-            SecretKeySpec keySpec = new SecretKeySpec(keyBytes, "HmacSHA256");
-            mac.init(keySpec);
+            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
             return HexFormat.of().formatHex(mac.doFinal(data.getBytes(StandardCharsets.UTF_8)));
-        } catch (IllegalArgumentException e) {
-            try {
-                Mac mac2 = Mac.getInstance("HmacSHA256");
-                SecretKeySpec keySpec = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
-                mac2.init(keySpec);
-                return HexFormat.of().formatHex(mac2.doFinal(data.getBytes(StandardCharsets.UTF_8)));
-            } catch (Exception ex) {
-                throw new RuntimeException("Error computing HMAC-SHA256", ex);
-            }
         } catch (Exception e) {
             throw new RuntimeException("Error computing HMAC-SHA256", e);
         }
