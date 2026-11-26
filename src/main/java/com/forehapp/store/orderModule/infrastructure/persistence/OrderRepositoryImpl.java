@@ -4,6 +4,8 @@ import com.forehapp.store.orderModule.domain.model.Order;
 import com.forehapp.store.orderModule.domain.ports.out.IOrderDao;
 import org.springframework.stereotype.Repository;
 
+import org.springframework.data.domain.PageRequest;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -39,6 +41,11 @@ public class OrderRepositoryImpl implements IOrderDao {
     @Override
     public List<Order> findGuestOrdersByEmail(String email) {
         return jpaRepository.findGuestOrdersByEmail(email);
+    }
+
+    @Override
+    public Optional<Order> findLatestByEmailInStore(String email, Long storeId) {
+        return jpaRepository.findByEmailInStore(email, storeId, PageRequest.of(0, 1)).stream().findFirst();
     }
 
     @Override

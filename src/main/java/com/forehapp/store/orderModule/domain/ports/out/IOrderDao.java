@@ -11,5 +11,7 @@ public interface IOrderDao {
     Optional<Order> findBasicById(Long orderId);
     List<Order> findAllByBuyerIdOrderByCreatedAtDesc(Long buyerId);
     List<Order> findGuestOrdersByEmail(String email);
+    /** Latest order with this email (lowercase) that has items of the store. */
+    Optional<Order> findLatestByEmailInStore(String email, Long storeId);
     long countDistinctBuyers();
 }

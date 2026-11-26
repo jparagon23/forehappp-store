@@ -5,10 +5,14 @@ import com.forehapp.store.general.exceptions.BadRequestException;
 import com.forehapp.store.general.exceptions.ErrorCode;
 import com.forehapp.store.general.exceptions.ForbiddenException;
 import com.forehapp.store.general.exceptions.NotFoundException;
+import com.forehapp.store.locationModule.domain.model.City;
+import com.forehapp.store.locationModule.domain.ports.out.ICityDao;
 import com.forehapp.store.orderModule.application.dto.PlaceOrderCommand;
+import com.forehapp.store.orderModule.domain.model.Order;
 import com.forehapp.store.orderModule.domain.model.OrderChannel;
 import com.forehapp.store.orderModule.domain.ports.in.IAssistedOrderService;
 import com.forehapp.store.orderModule.domain.ports.in.IGuestCheckoutService;
+import com.forehapp.store.orderModule.domain.ports.out.IOrderDao;
 import com.forehapp.store.orderModule.infrastructure.web.dto.AssistedCouponValidateDto;
 import com.forehapp.store.orderModule.infrastructure.web.dto.AssistedCustomerResponse;
 import com.forehapp.store.orderModule.infrastructure.web.dto.AssistedOrderRequestDto;
@@ -50,6 +54,8 @@ public class AssistedOrderServiceImpl implements IAssistedOrderService {
     private final UserRepository userRepository;
     private final IStoreProfileDao storeProfileDao;
     private final IPromotionService promotionService;
+    private final IOrderDao orderDao;
+    private final ICityDao cityDao;
 
     public AssistedOrderServiceImpl(IGuestCheckoutService checkoutService,
                                     IStoreMembershipDao membershipDao,
@@ -57,7 +63,9 @@ public class AssistedOrderServiceImpl implements IAssistedOrderService {
                                     IProductVariantDao variantDao,
                                     UserRepository userRepository,
                                     IStoreProfileDao storeProfileDao,
-                                    IPromotionService promotionService) {
+                                    IPromotionService promotionService,
+                                    IOrderDao orderDao,
+                                    ICityDao cityDao) {
         this.checkoutService = checkoutService;
         this.membershipDao = membershipDao;
         this.storeDao = storeDao;
@@ -65,15 +73,37 @@ public class AssistedOrderServiceImpl implements IAssistedOrderService {
         this.userRepository = userRepository;
         this.storeProfileDao = storeProfileDao;
         this.promotionService = promotionService;
+        this.orderDao = orderDao;
+        this.cityDao = cityDao;
     }
 
     @Override
     @Transactional(readOnly = true)
     public AssistedCustomerResponse lookupCustomer(Long storeId, String email, Long userId) {
         requireStoreManager(storeId, userId);
-        return findActiveUser(email)
-                .map(u -> new AssistedCustomerResponse(true, shortName(u)))
-                .orElse(new AssistedCustomerResponse(false, null));
+        Optional<User> account = findActiveUser(email);
+        AssistedCustomerResponse.LastOrderData lastOrder = email == null || email.isBlank() ? null
+                : orderDao.findLatestByEmailInStore(email.trim().toLowerCase(Locale.ROOT), storeId)
+                        .map(this::toLastOrderData)
+                        .orElse(null);
+        return new AssistedCustomerResponse(account.isPresent(), account.map(AssistedOrderServiceImpl::shortName).orElse(null),
+                lastOrder);
+    }
+
+    /** Only orders with items of the seller's own store: the seller already sees this data in their orders. */
+    private AssistedCustomerResponse.LastOrderData toLastOrderData(Order order) {
+        User account = order.getBuyer() != null ? order.getBuyer().getUser() : null;
+        String name = order.getGuestName() != null ? order.getGuestName() : account != null ? account.getName() : null;
+        String lastname = order.getGuestLastname() != null ? order.getGuestLastname() : account != null ? account.getLastname() : null;
+
+        Optional<City> city = order.getShippingCityId() == null ? Optional.empty() : cityDao.findById(order.getShippingCityId());
+        Long stateId = city.map(c -> c.getState().getId()).orElse(null);
+        Long countryId = city.map(c -> c.getState().getCountry().getId()).orElse(null);
+
+        return new AssistedCustomerResponse.LastOrderData(
+                order.getId(), order.getCreatedAt(), name, lastname, order.getBuyerPhone(),
+                order.getShippingAddress(), order.getShippingComplement(), order.getShippingReference(),
+                countryId, stateId, city.map(City::getId).orElse(null));
     }
 
     @Override

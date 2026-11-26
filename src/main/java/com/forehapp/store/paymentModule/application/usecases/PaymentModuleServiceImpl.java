@@ -10,6 +10,7 @@ import com.forehapp.store.general.exceptions.NotFoundException;
 import com.forehapp.store.orderModule.domain.events.OrderCreatedEvent;
 import com.forehapp.store.orderModule.domain.events.OrderPaidEvent;
 import com.forehapp.store.orderModule.domain.model.Order;
+import com.forehapp.store.orderModule.domain.model.OrderChannel;
 import com.forehapp.store.orderModule.domain.model.OrderSellerGroup;
 import com.forehapp.store.orderModule.domain.model.OrderSellerGroupStatus;
 import com.forehapp.store.orderModule.domain.model.OrderStatus;
@@ -139,7 +140,7 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
 
                     eventPublisher.publishEvent(new OrderPaidEvent(
                             order.getId(), buyerEmail, buyerName, order.getTotal(), order.getCreatedAt()
-                    ));
+                    ).withBuyerContext(order.getBuyer() == null, registeredByStore(order)));
 
                     eventPublisher.publishEvent(buildSellerNotificationEvent(order, buyerName, buyerEmail));
                 }
@@ -211,6 +212,15 @@ public class PaymentModuleServiceImpl implements IPaymentModuleService {
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────
+
+    /** Store that registered an ASSISTED order for the buyer (those orders hold only that store's items). */
+    private static String registeredByStore(Order order) {
+        if (order.getChannel() != OrderChannel.ASSISTED) return null;
+        return order.getSellerGroups().stream()
+                .map(group -> group.getStore().getName())
+                .findFirst()
+                .orElse(null);
+    }
 
     /**
      * The payment is approved, but it may not cover the order: an old link paid after the order changed,

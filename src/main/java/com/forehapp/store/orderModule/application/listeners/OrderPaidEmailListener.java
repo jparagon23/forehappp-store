@@ -4,6 +4,7 @@ import com.forehapp.store.mail.EmailSender;
 import com.forehapp.store.orderModule.domain.events.OrderPaidEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.HtmlUtils;
@@ -23,9 +24,12 @@ public class OrderPaidEmailListener {
     private static final NumberFormat CURRENCY_FMT = NumberFormat.getNumberInstance(new Locale("es", "CO"));
 
     private final EmailSender emailSender;
+    private final String frontendUrl;
 
-    public OrderPaidEmailListener(EmailSender emailSender) {
+    public OrderPaidEmailListener(EmailSender emailSender,
+                                  @Value("${app.frontend.url}") String frontendUrl) {
         this.emailSender = emailSender;
+        this.frontendUrl = BuyerEmailBlocks.normalizeBaseUrl(frontendUrl);
     }
 
     @Async
@@ -92,9 +96,8 @@ public class OrderPaidEmailListener {
                             </tr>
                           </table>
 
-                          <p style="margin:0;font-size:13px;color:#888;text-align:center;">
-                            Puedes revisar el estado de tu orden en tu perfil en cualquier momento.
-                          </p>
+                          %s
+                          %s
 
                         </td>
                       </tr>
@@ -114,7 +117,13 @@ public class OrderPaidEmailListener {
                 event.getOrderId(),
                 esc(event.getBuyerName()),
                 event.getCreatedAt() != null ? event.getCreatedAt().format(DATE_FMT) : "-",
-                formatAmount(event.getTotal())
+                formatAmount(event.getTotal()),
+                event.isGuestBuyer() ? "" : """
+                          <p style="margin:0;font-size:13px;color:#888;text-align:center;">
+                            Puedes revisar el estado de tu orden en tu perfil en cualquier momento.
+                          </p>""",
+                BuyerEmailBlocks.assistedNotice(event.getRegisteredByStore())
+                        + BuyerEmailBlocks.createAccountInvite(event.isGuestBuyer(), frontendUrl, event.getBuyerEmail())
         );
     }
 
