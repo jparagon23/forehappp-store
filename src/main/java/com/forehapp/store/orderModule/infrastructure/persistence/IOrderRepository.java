@@ -1,6 +1,7 @@
 package com.forehapp.store.orderModule.infrastructure.persistence;
 
 import com.forehapp.store.orderModule.domain.model.Order;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -20,6 +21,11 @@ public interface IOrderRepository extends JpaRepository<Order, Long> {
 
     @Query("SELECT o FROM Order o WHERE o.buyerEmail = :email AND o.buyer IS NULL ORDER BY o.createdAt DESC")
     List<Order> findGuestOrdersByEmail(@Param("email") String email);
+
+    @Query("SELECT o FROM Order o WHERE LOWER(o.buyerEmail) = :email " +
+           "AND EXISTS (SELECT g FROM OrderSellerGroup g WHERE g.order = o AND g.store.id = :storeId) " +
+           "ORDER BY o.createdAt DESC")
+    List<Order> findByEmailInStore(@Param("email") String email, @Param("storeId") Long storeId, Pageable pageable);
 
     @Query(value = "SELECT COUNT(DISTINCT buyer_id) FROM store_orders", nativeQuery = true)
     long countDistinctBuyers();

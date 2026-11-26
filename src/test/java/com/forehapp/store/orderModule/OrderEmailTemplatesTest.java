@@ -28,11 +28,27 @@ class OrderEmailTemplatesTest {
 
     @Test
     void paidEmailRenders() {
-        new OrderPaidEmailListener(sender).onOrderPaid(
+        new OrderPaidEmailListener(sender, "https://forehapp.store").onOrderPaid(
                 new OrderPaidEvent(11L, "buyer@mail.com", "Ana Pérez", new BigDecimal("65000"), LocalDateTime.now()));
 
         assertEquals(1, sent.size());
-        assertTrue(sent.get(0)[2].contains("#11"));
+        String html = sent.get(0)[2];
+        assertTrue(html.contains("#11"));
+        assertTrue(html.contains("en tu perfil"));
+        assertFalse(html.contains("Crear mi cuenta"));
+        assertFalse(html.contains("lo registró"));
+    }
+
+    @Test
+    void assistedGuestPaidEmailShowsStoreNoticeAndAccountInvite() {
+        new OrderPaidEmailListener(sender, "https://forehapp.store/").onOrderPaid(
+                new OrderPaidEvent(12L, "buyer@mail.com", "Ana Pérez", new BigDecimal("65000"), LocalDateTime.now())
+                        .withBuyerContext(true, "Forehapp <Store>"));
+
+        String html = sent.get(0)[2];
+        assertTrue(html.contains("Forehapp &lt;Store&gt;"), "store name is HTML-escaped");
+        assertTrue(html.contains("https://forehapp.store/register?email=buyer%40mail.com"));
+        assertFalse(html.contains("en tu perfil"), "a guest has no profile yet");
     }
 
     @Test
